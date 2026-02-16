@@ -6,14 +6,68 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4682565F2F28331400839A1A /* libEndpointSecurity.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4682565E2F28331400839A1A /* libEndpointSecurity.tbd */; };
+		468256672F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		468256652F28331400839A1A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 468256342F2832C400839A1A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4682565B2F28331400839A1A;
+			remoteInfo = opfilter;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4682566C2F28331400839A1A /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				468256672F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		4682563C2F2832C400839A1A /* clearancekit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearancekit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = uk.craigbass.clearancekit.opfilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		4682565E2F28331400839A1A /* libEndpointSecurity.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libEndpointSecurity.tbd; path = usr/lib/libEndpointSecurity.tbd; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		468256682F28331400839A1A /* Exceptions for "opfilter" folder in "opfilter" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4682565B2F28331400839A1A /* opfilter */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4682563E2F2832C400839A1A /* clearancekit */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = clearancekit;
+			sourceTree = "<group>";
+		};
+		468256602F28331400839A1A /* opfilter */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				468256682F28331400839A1A /* Exceptions for "opfilter" folder in "opfilter" target */,
+			);
+			path = opfilter;
+			sourceTree = "<group>";
+		};
+		468256722F28500000000003 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +80,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		468256592F28331400839A1A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4682565F2F28331400839A1A /* libEndpointSecurity.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +95,9 @@
 			isa = PBXGroup;
 			children = (
 				4682563E2F2832C400839A1A /* clearancekit */,
+				468256602F28331400839A1A /* opfilter */,
+				468256722F28500000000003 /* Shared */,
+				4682565D2F28331400839A1A /* Frameworks */,
 				4682563D2F2832C400839A1A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +106,17 @@
 			isa = PBXGroup;
 			children = (
 				4682563C2F2832C400839A1A /* clearancekit.app */,
+				4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		4682565D2F28331400839A1A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				4682565E2F28331400839A1A /* libEndpointSecurity.tbd */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,13 +129,16 @@
 				468256382F2832C400839A1A /* Sources */,
 				468256392F2832C400839A1A /* Frameworks */,
 				4682563A2F2832C400839A1A /* Resources */,
+				4682566C2F28331400839A1A /* Embed System Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				468256662F28331400839A1A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4682563E2F2832C400839A1A /* clearancekit */,
+				468256722F28500000000003 /* Shared */,
 			);
 			name = clearancekit;
 			packageProductDependencies = (
@@ -69,6 +146,29 @@
 			productName = clearancekit;
 			productReference = 4682563C2F2832C400839A1A /* clearancekit.app */;
 			productType = "com.apple.product-type.application";
+		};
+		4682565B2F28331400839A1A /* opfilter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 468256692F28331400839A1A /* Build configuration list for PBXNativeTarget "opfilter" */;
+			buildPhases = (
+				468256582F28331400839A1A /* Sources */,
+				468256592F28331400839A1A /* Frameworks */,
+				4682565A2F28331400839A1A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				468256602F28331400839A1A /* opfilter */,
+				468256722F28500000000003 /* Shared */,
+			);
+			name = opfilter;
+			packageProductDependencies = (
+			);
+			productName = opfilter;
+			productReference = 4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */;
+			productType = "com.apple.product-type.system-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +181,9 @@
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					4682563B2F2832C400839A1A = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					4682565B2F28331400839A1A = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -100,12 +203,20 @@
 			projectRoot = "";
 			targets = (
 				4682563B2F2832C400839A1A /* clearancekit */,
+				4682565B2F28331400839A1A /* opfilter */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		4682563A2F2832C400839A1A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4682565A2F28331400839A1A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +233,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		468256582F28331400839A1A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		468256662F28331400839A1A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4682565B2F28331400839A1A /* opfilter */;
+			targetProxy = 468256652F28331400839A1A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		468256452F2832C500839A1A /* Debug */ = {
@@ -248,8 +374,10 @@
 		468256482F2832C500839A1A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = clearancekit;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -280,8 +408,10 @@
 		468256492F2832C500839A1A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = clearancekit;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -309,6 +439,66 @@
 			};
 			name = Release;
 		};
+		4682566A2F28331400839A1A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = opfilter/opfilter.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = opfilter/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = opfilter;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.opfilter;
+				PRODUCT_NAME = "$(inherited)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4682566B2F28331400839A1A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = opfilter/opfilter.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = opfilter/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = opfilter;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.opfilter;
+				PRODUCT_NAME = "$(inherited)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -326,6 +516,15 @@
 			buildConfigurations = (
 				468256482F2832C500839A1A /* Debug */,
 				468256492F2832C500839A1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		468256692F28331400839A1A /* Build configuration list for PBXNativeTarget "opfilter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4682566A2F28331400839A1A /* Debug */,
+				4682566B2F28331400839A1A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
