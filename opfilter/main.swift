@@ -53,12 +53,33 @@ let res = es_new_client(&client) { (client, message) in
             }
 
             // Check FAA policy
-            let allowed = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID)
+            let denyReason = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID)
+            let allowed = denyReason == nil
 
             if allowed {
                 NSLog("FAA ALLOW: %@ accessed by %@ (team: %@, signing: %@)", path, processPath, teamID, signingID)
             } else {
                 NSLog("FAA DENY: %@ accessed by %@ (team: %@, signing: %@)", path, processPath, teamID, signingID)
+
+                // Write denial reason to the process's TTY
+                if let tty = process.tty {
+                    if let ttyData = tty.pointee.path.data {
+                        let ttyPath = String(bytes: Data(bytes: ttyData, count: tty.pointee.path.length), encoding: .utf8) ?? ""
+                        if !ttyPath.isEmpty, let fh = FileHandle(forWritingAtPath: ttyPath) {
+                            let msg = "\n[clearancekit] Access denied: \(path)\n  \(denyReason!)\n"
+                            if let data = msg.data(using: .utf8) {
+                                fh.write(data)
+                            }
+                            // Send SIGWINCH to the foreground process group to trigger a shell prompt redraw
+                            let fd = fh.fileDescriptor
+                            let pgrp = tcgetpgrp(fd)
+                            if pgrp > 0 {
+                                killpg(pgrp, SIGWINCH)
+                            }
+                            fh.closeFile()
+                        }
+                    }
+                }
             }
 
             // Respond with allow or deny

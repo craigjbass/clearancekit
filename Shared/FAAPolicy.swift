@@ -32,21 +32,32 @@ let faaPolicy: [FAARule] = [
     ),
 ]
 
-func checkFAAPolicy(path: String, processPath: String, teamID: String, signingID: String) -> Bool {
+/// Returns `nil` if access is allowed, or a denial reason string if blocked.
+func checkFAAPolicy(path: String, processPath: String, teamID: String, signingID: String) -> String? {
     for rule in faaPolicy {
         if path.hasPrefix(rule.protectedPathPrefix) {
             if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-                return true
+                return nil
             }
             if !rule.allowedTeamIDs.isEmpty && rule.allowedTeamIDs.contains(teamID) {
-                return true
+                return nil
             }
             if !rule.allowedSigningIDs.isEmpty && rule.allowedSigningIDs.contains(signingID) {
-                return true
+                return nil
             }
-            return false
+            var criteria: [String] = []
+            if !rule.allowedProcessPaths.isEmpty {
+                criteria.append("paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
+            }
+            if !rule.allowedTeamIDs.isEmpty {
+                criteria.append("team IDs: \(rule.allowedTeamIDs.joined(separator: ", "))")
+            }
+            if !rule.allowedSigningIDs.isEmpty {
+                criteria.append("signing IDs: \(rule.allowedSigningIDs.joined(separator: ", "))")
+            }
+            return "Protected by rule \"\(rule.protectedPathPrefix)\" — allowed: \(criteria.joined(separator: "; "))"
         }
     }
     // No rule matched — allow by default
-    return true
+    return nil
 }
