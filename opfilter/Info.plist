@@ -2,7 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSSystemExtensionUsageDescription</key>
-	<string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
+    <key>NSSystemExtensionUsageDescription</key>
+    <string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.system-extension.endpoint-security</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>NSEndpointSecurityMachServiceName</key>
+			<string>uk.craigbass.clearancekit.opfilter</string>
+		</dict>
+	</dict>
 </dict>
 </plist>
