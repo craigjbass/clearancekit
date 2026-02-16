@@ -94,9 +94,9 @@ struct ContentView: View {
             if xpcClient.events.isEmpty {
                 VStack {
                     Spacer()
-                    Text("No folder open events yet")
+                    Text("No file access events yet")
                         .foregroundColor(.secondary)
-                    Text("Open a folder in /opt/clearancekit to see events")
+                    Text("Access a file in /opt/clearancekit to see FAA events")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -124,12 +124,16 @@ struct EventRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Image(systemName: "folder.fill")
-                    .foregroundColor(.blue)
+                Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
+                    .foregroundColor(event.accessAllowed ? .green : .red)
                 Text(event.path)
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(1)
                 Spacer()
+                Text(event.accessAllowed ? "Allowed" : "Denied")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(event.accessAllowed ? .green : .red)
                 Text(formattedTime)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -145,8 +149,27 @@ struct EventRow: View {
                         .lineLimit(1)
                 }
             }
+            if !event.teamID.isEmpty || !event.signingID.isEmpty {
+                HStack {
+                    if !event.teamID.isEmpty {
+                        Text("Team: \(event.teamID)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if !event.signingID.isEmpty {
+                        Text("Signing: \(event.signingID)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
         }
         .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(event.accessAllowed ? Color.green.opacity(0.05) : Color.red.opacity(0.1))
+        )
     }
 }
 

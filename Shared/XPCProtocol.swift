@@ -23,12 +23,18 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let timestamp: Date
     @objc public let processID: Int32
     @objc public let processPath: String
+    @objc public let teamID: String
+    @objc public let signingID: String
+    @objc public let accessAllowed: Bool
 
-    public init(path: String, timestamp: Date, processID: Int32, processPath: String) {
+    public init(path: String, timestamp: Date, processID: Int32, processPath: String, teamID: String = "", signingID: String = "", accessAllowed: Bool = true) {
         self.path = path
         self.timestamp = timestamp
         self.processID = processID
         self.processPath = processPath
+        self.teamID = teamID
+        self.signingID = signingID
+        self.accessAllowed = accessAllowed
         super.init()
     }
 
@@ -42,6 +48,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.timestamp = timestamp
         self.processID = coder.decodeInt32(forKey: "processID")
         self.processPath = processPath
+        self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
+        self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
+        self.accessAllowed = coder.decodeBool(forKey: "accessAllowed")
         super.init()
     }
 
@@ -50,10 +59,13 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(timestamp as NSDate, forKey: "timestamp")
         coder.encode(processID, forKey: "processID")
         coder.encode(processPath as NSString, forKey: "processPath")
+        coder.encode(teamID as NSString, forKey: "teamID")
+        coder.encode(signingID as NSString, forKey: "signingID")
+        coder.encode(accessAllowed, forKey: "accessAllowed")
     }
 
     public override var description: String {
-        "FolderOpenEvent(path: \(path), pid: \(processID), processPath: \(processPath))"
+        "FolderOpenEvent(path: \(path), pid: \(processID), processPath: \(processPath), teamID: \(teamID), signingID: \(signingID), allowed: \(accessAllowed))"
     }
 }
 

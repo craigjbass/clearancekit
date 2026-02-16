@@ -31,15 +31,9 @@ let res = es_new_client(&client) { (client, message) in
         }
         let path = String(bytes: Data(bytes: pathData, count: pathLength), encoding: .utf8) ?? ""
 
-        // Check if this is a directory within our monitored path
-        let isDirectory = (file.stat.st_mode & S_IFMT) == S_IFDIR
-
-        if isDirectory && path.hasPrefix(monitoredPath) {
-            NSLog("Folder opened in monitored path: %@", path)
-
+        if path.hasPrefix(monitoredPath) {
             // Extract process information
             let process = message.pointee.process.pointee
-            // PID is at index 5 in the audit token
             let processID = Int32(bitPattern: process.audit_token.val.5)
 
             var processPath = ""
@@ -48,21 +42,45 @@ let res = es_new_client(&client) { (client, message) in
                 processPath = String(bytes: Data(bytes: execPathData, count: execPathLength), encoding: .utf8) ?? ""
             }
 
-            // Create and broadcast the event
+            var teamID = ""
+            if let teamIDData = process.team_id.data {
+                teamID = String(bytes: Data(bytes: teamIDData, count: process.team_id.length), encoding: .utf8) ?? ""
+            }
+
+            var signingID = ""
+            if let signingIDData = process.signing_id.data {
+                signingID = String(bytes: Data(bytes: signingIDData, count: process.signing_id.length), encoding: .utf8) ?? ""
+            }
+
+            // Check FAA policy
+            let allowed = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID)
+
+            if allowed {
+                NSLog("FAA ALLOW: %@ accessed by %@ (team: %@, signing: %@)", path, processPath, teamID, signingID)
+            } else {
+                NSLog("FAA DENY: %@ accessed by %@ (team: %@, signing: %@)", path, processPath, teamID, signingID)
+            }
+
+            // Respond with allow or deny
+            es_respond_auth_result(client, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, false)
+
+            // Broadcast the event to the UI
             let event = FolderOpenEvent(
                 path: path,
                 timestamp: Date(),
                 processID: processID,
-                processPath: processPath
+                processPath: processPath,
+                teamID: teamID,
+                signingID: signingID,
+                accessAllowed: allowed
             )
 
             DispatchQueue.main.async {
                 XPCServer.shared.broadcastEvent(event)
             }
+        } else {
+            es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
         }
-
-        // Allow the operation
-        es_respond_auth_result(client, message, ES_AUTH_RESULT_ALLOW, false)
     }
 }
 
