@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Constants
 
 public enum XPCConstants {
-    public static let machServiceName = "uk.craigbass.clearancekit.opfilter"
+    public static let daemonServiceName = "uk.craigbass.clearancekit.daemon"
 }
 
 // MARK: - FolderOpenEvent
@@ -69,19 +69,24 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     }
 }
 
-// MARK: - Server Protocol
+// MARK: - Daemon Service Protocol (exposed by the LaunchDaemon)
+//
+// Called by the GUI app: registerClient / unregisterClient / isMonitoringActive
+// Called by opfilter:    reportEvent / reportMonitoringStatus
 
-@objc(OpFilterServiceProtocol)
-public protocol OpFilterServiceProtocol {
+@objc(DaemonServiceProtocol)
+public protocol DaemonServiceProtocol {
     func registerClient(withReply reply: @escaping (Bool) -> Void)
     func unregisterClient(withReply reply: @escaping (Bool) -> Void)
     func isMonitoringActive(withReply reply: @escaping (Bool) -> Void)
+    func reportEvent(_ event: FolderOpenEvent)
+    func reportMonitoringStatus(_ isActive: Bool)
 }
 
-// MARK: - Client Protocol
+// MARK: - Daemon Client Protocol (exported by the GUI app for daemon callbacks)
 
-@objc(OpFilterClientProtocol)
-public protocol OpFilterClientProtocol {
+@objc(DaemonClientProtocol)
+public protocol DaemonClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
     func monitoringStatusChanged(_ isActive: Bool)
 }

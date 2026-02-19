@@ -13,8 +13,8 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 let monitoredPath = "/opt/clearancekit"
 
-// Start XPC server before ES client
-XPCServer.shared.start()
+// Connect to the LaunchDaemon before starting the ES client
+XPCClient.shared.start()
 
 var client: OpaquePointer?
 
@@ -98,7 +98,7 @@ let res = es_new_client(&client) { (client, message) in
     )
 
     DispatchQueue.main.async {
-        XPCServer.shared.broadcastEvent(event)
+        XPCClient.shared.reportEvent(event)
     }
 }
 
@@ -122,7 +122,7 @@ if subscribeResult != ES_RETURN_SUCCESS {
 
 logger.log("opfilter started, monitoring: \(monitoredPath)")
 
-// Broadcast that monitoring is now active
-XPCServer.shared.broadcastMonitoringStatus(true)
+// Notify daemon that monitoring is now active
+XPCClient.shared.reportMonitoringStatus(true)
 
 dispatchMain()

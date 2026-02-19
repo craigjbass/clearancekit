@@ -17,7 +17,6 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var events: [FolderOpenEvent] = []
 
     private var connection: NSXPCConnection?
-    private var clientListener: NSXPCListener?
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 5.0
 
@@ -28,18 +27,18 @@ final class XPCClient: NSObject, ObservableObject {
     func connect() {
         guard connection == nil else { return }
 
-        NSLog("XPCClient: Connecting to %@", XPCConstants.machServiceName)
+        NSLog("XPCClient: Connecting to %@", XPCConstants.daemonServiceName)
 
-        let conn = NSXPCConnection(machServiceName: XPCConstants.machServiceName, options: [])
-        conn.remoteObjectInterface = NSXPCInterface(with: OpFilterServiceProtocol.self)
+        let conn = NSXPCConnection(machServiceName: XPCConstants.daemonServiceName, options: [])
+        conn.remoteObjectInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
 
-        conn.exportedInterface = NSXPCInterface(with: OpFilterClientProtocol.self)
+        conn.exportedInterface = NSXPCInterface(with: DaemonClientProtocol.self)
         conn.exportedObject = self
 
         let allowedClasses = NSSet(array: [FolderOpenEvent.self, NSDate.self, NSString.self]) as! Set<AnyHashable>
         conn.exportedInterface?.setClasses(
             allowedClasses,
-            for: #selector(OpFilterClientProtocol.folderOpened(_:)),
+            for: #selector(DaemonClientProtocol.folderOpened(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -65,7 +64,7 @@ final class XPCClient: NSObject, ObservableObject {
             Task { @MainActor in
                 self?.handleDisconnection()
             }
-        }) as? OpFilterServiceProtocol else {
+        }) as? DaemonServiceProtocol else {
             NSLog("XPCClient: Failed to get remote object proxy")
             handleDisconnection()
             return
@@ -74,12 +73,12 @@ final class XPCClient: NSObject, ObservableObject {
         service.registerClient { [weak self] success in
             Task { @MainActor in
                 if success {
-                    NSLog("XPCClient: Successfully registered with server")
+                    NSLog("XPCClient: Successfully registered with daemon")
                     self?.isConnected = true
                     self?.stopReconnectTimer()
                     self?.checkMonitoringStatus()
                 } else {
-                    NSLog("XPCClient: Failed to register with server")
+                    NSLog("XPCClient: Failed to register with daemon")
                     self?.handleDisconnection()
                 }
             }
@@ -90,7 +89,7 @@ final class XPCClient: NSObject, ObservableObject {
         stopReconnectTimer()
 
         if let conn = connection,
-           let service = conn.remoteObjectProxy as? OpFilterServiceProtocol {
+           let service = conn.remoteObjectProxy as? DaemonServiceProtocol {
             service.unregisterClient { _ in }
         }
 
@@ -127,7 +126,7 @@ final class XPCClient: NSObject, ObservableObject {
 
     private func checkMonitoringStatus() {
         guard let conn = connection,
-              let service = conn.remoteObjectProxy as? OpFilterServiceProtocol else {
+              let service = conn.remoteObjectProxy as? DaemonServiceProtocol else {
             return
         }
 
@@ -143,9 +142,9 @@ final class XPCClient: NSObject, ObservableObject {
     }
 }
 
-// MARK: - OpFilterClientProtocol
+// MARK: - DaemonClientProtocol
 
-extension XPCClient: OpFilterClientProtocol {
+extension XPCClient: DaemonClientProtocol {
     nonisolated func folderOpened(_ event: FolderOpenEvent) {
         NSLog("XPCClient: Received folder open event: %@", event.path)
         Task { @MainActor in

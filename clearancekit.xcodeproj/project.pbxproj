@@ -39,6 +39,7 @@
 		4682563C2F2832C400839A1A /* clearancekit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearancekit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = uk.craigbass.clearancekit.opfilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565E2F28331400839A1A /* libEndpointSecurity.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libEndpointSecurity.tbd; path = usr/lib/libEndpointSecurity.tbd; sourceTree = SDKROOT; };
+		BBBB001111111111BBBB0001 /* uk.craigbass.clearancekit.daemon */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "uk.craigbass.clearancekit.daemon"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -48,6 +49,13 @@
 				Info.plist,
 			);
 			target = 4682565B2F28331400839A1A /* opfilter */;
+		};
+		BBBB001111111111BBBB000E /* Exceptions for "Daemon" folder in "clearancekit-daemon" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"uk.craigbass.clearancekit.daemon.plist",
+			);
+			target = BBBB001111111111BBBB0002 /* clearancekit-daemon */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -70,6 +78,14 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		BBBB001111111111BBBB0006 /* Daemon */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BBBB001111111111BBBB000E /* Exceptions for "Daemon" folder in "clearancekit-daemon" target */,
+			);
+			path = Daemon;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +104,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BBBB001111111111BBBB0004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -96,6 +119,7 @@
 			children = (
 				4682563E2F2832C400839A1A /* clearancekit */,
 				468256602F28331400839A1A /* opfilter */,
+				BBBB001111111111BBBB0006 /* Daemon */,
 				468256722F28500000000003 /* Shared */,
 				4682565D2F28331400839A1A /* Frameworks */,
 				4682563D2F2832C400839A1A /* Products */,
@@ -107,6 +131,7 @@
 			children = (
 				4682563C2F2832C400839A1A /* clearancekit.app */,
 				4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */,
+				BBBB001111111111BBBB0001 /* uk.craigbass.clearancekit.daemon */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -170,6 +195,28 @@
 			productReference = 4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */;
 			productType = "com.apple.product-type.system-extension";
 		};
+		BBBB001111111111BBBB0002 /* clearancekit-daemon */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBBB001111111111BBBB0009 /* Build configuration list for PBXNativeTarget "clearancekit-daemon" */;
+			buildPhases = (
+				BBBB001111111111BBBB0003 /* Sources */,
+				BBBB001111111111BBBB0004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BBBB001111111111BBBB0006 /* Daemon */,
+				468256722F28500000000003 /* Shared */,
+			);
+			name = "clearancekit-daemon";
+			packageProductDependencies = (
+			);
+			productName = "clearancekit-daemon";
+			productReference = BBBB001111111111BBBB0001 /* uk.craigbass.clearancekit.daemon */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +231,9 @@
 						CreatedOnToolsVersion = 26.2;
 					};
 					4682565B2F28331400839A1A = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					BBBB001111111111BBBB0002 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -204,6 +254,7 @@
 			targets = (
 				4682563B2F2832C400839A1A /* clearancekit */,
 				4682565B2F28331400839A1A /* opfilter */,
+				BBBB001111111111BBBB0002 /* clearancekit-daemon */,
 			);
 		};
 /* End PBXProject section */
@@ -234,6 +285,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		468256582F28331400839A1A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBBB001111111111BBBB0003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -499,6 +557,50 @@
 			};
 			name = Release;
 		};
+		BBBB001111111111BBBB0007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Daemon/daemon.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "uk.craigbass.clearancekit.daemon";
+				PRODUCT_NAME = "uk.craigbass.clearancekit.daemon";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BBBB001111111111BBBB0008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Daemon/daemon.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "uk.craigbass.clearancekit.daemon";
+				PRODUCT_NAME = "uk.craigbass.clearancekit.daemon";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -525,6 +627,15 @@
 			buildConfigurations = (
 				4682566A2F28331400839A1A /* Debug */,
 				4682566B2F28331400839A1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBBB001111111111BBBB0009 /* Build configuration list for PBXNativeTarget "clearancekit-daemon" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBBB001111111111BBBB0007 /* Debug */,
+				BBBB001111111111BBBB0008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
