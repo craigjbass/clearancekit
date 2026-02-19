@@ -11,9 +11,12 @@ import AppKit
 struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
+    @StateObject private var daemonManager = DaemonManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
+            daemonStatusBar
+            Divider()
             extensionStatusBar
             Divider()
             connectionStatusBar
@@ -22,7 +25,42 @@ struct ContentView: View {
         }
         .frame(minWidth: 400, minHeight: 300)
         .onAppear {
+            daemonManager.refreshStatus()
             xpcClient.connect()
+        }
+    }
+
+    private var daemonStatusBar: some View {
+        HStack {
+            Text("Daemon:")
+                .font(.headline)
+            Text(daemonManager.statusMessage)
+                .foregroundColor(daemonStatusColor)
+            Spacer()
+            switch daemonManager.status {
+            case .notRegistered, .failed, .unknown:
+                Button("Register") {
+                    daemonManager.registerDaemon()
+                }
+            case .requiresApproval:
+                Button("Open System Settings") {
+                    daemonManager.openSystemSettings()
+                }
+            case .enabled:
+                Button("Unregister") {
+                    daemonManager.unregisterDaemon()
+                }
+            }
+        }
+        .padding()
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private var daemonStatusColor: Color {
+        switch daemonManager.status {
+        case .enabled: return .green
+        case .requiresApproval: return .yellow
+        case .notRegistered, .unknown, .failed: return .red
         }
     }
 

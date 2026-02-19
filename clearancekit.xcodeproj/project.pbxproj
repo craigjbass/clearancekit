@@ -19,6 +19,13 @@
 			remoteGlobalIDString = 4682565B2F28331400839A1A;
 			remoteInfo = opfilter;
 		};
+		BBBB001111111111BBBB000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 468256342F2832C400839A1A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BBBB001111111111BBBB0002;
+			remoteInfo = "clearancekit-daemon";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -35,11 +42,36 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		BBBB001111111111BBBB0012 /* Embed LaunchDaemon */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/uk.craigbass.clearancekit.daemon",
+				"$(SRCROOT)/Daemon/uk.craigbass.clearancekit.daemon.plist",
+			);
+			name = "Embed LaunchDaemon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "LAUNCH_DAEMONS_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons\"\nmkdir -p \"${LAUNCH_DAEMONS_DIR}\"\ncp \"${BUILT_PRODUCTS_DIR}/uk.craigbass.clearancekit.daemon\" \"${LAUNCH_DAEMONS_DIR}/\"\ncp \"${SRCROOT}/Daemon/uk.craigbass.clearancekit.daemon.plist\" \"${LAUNCH_DAEMONS_DIR}/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXFileReference section */
 		4682563C2F2832C400839A1A /* clearancekit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearancekit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = uk.craigbass.clearancekit.opfilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565E2F28331400839A1A /* libEndpointSecurity.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libEndpointSecurity.tbd; path = usr/lib/libEndpointSecurity.tbd; sourceTree = SDKROOT; };
-		BBBB001111111111BBBB0001 /* uk.craigbass.clearancekit.daemon */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "uk.craigbass.clearancekit.daemon"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBBB001111111111BBBB0001 /* uk.craigbass.clearancekit.daemon */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = uk.craigbass.clearancekit.daemon; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -49,13 +81,6 @@
 				Info.plist,
 			);
 			target = 4682565B2F28331400839A1A /* opfilter */;
-		};
-		BBBB001111111111BBBB000E /* Exceptions for "Daemon" folder in "clearancekit-daemon" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"uk.craigbass.clearancekit.daemon.plist",
-			);
-			target = BBBB001111111111BBBB0002 /* clearancekit-daemon */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -80,9 +105,6 @@
 		};
 		BBBB001111111111BBBB0006 /* Daemon */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				BBBB001111111111BBBB000E /* Exceptions for "Daemon" folder in "clearancekit-daemon" target */,
-			);
 			path = Daemon;
 			sourceTree = "<group>";
 		};
@@ -155,11 +177,13 @@
 				468256392F2832C400839A1A /* Frameworks */,
 				4682563A2F2832C400839A1A /* Resources */,
 				4682566C2F28331400839A1A /* Embed System Extensions */,
+				BBBB001111111111BBBB0012 /* Embed LaunchDaemon */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				468256662F28331400839A1A /* PBXTargetDependency */,
+				BBBB001111111111BBBB000B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4682563E2F2832C400839A1A /* clearancekit */,
@@ -207,8 +231,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				BBBB001111111111BBBB0006 /* Daemon */,
 				468256722F28500000000003 /* Shared */,
+				BBBB001111111111BBBB0006 /* Daemon */,
 			);
 			name = "clearancekit-daemon";
 			packageProductDependencies = (
@@ -305,6 +329,11 @@
 			isa = PBXTargetDependency;
 			target = 4682565B2F28331400839A1A /* opfilter */;
 			targetProxy = 468256652F28331400839A1A /* PBXContainerItemProxy */;
+		};
+		BBBB001111111111BBBB000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BBBB001111111111BBBB0002 /* clearancekit-daemon */;
+			targetProxy = BBBB001111111111BBBB000A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -440,10 +469,9 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37KMK6XFTT;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -474,10 +502,9 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37KMK6XFTT;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -567,8 +594,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.craigbass.clearancekit.daemon";
-				PRODUCT_NAME = "uk.craigbass.clearancekit.daemon";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.daemon;
+				PRODUCT_NAME = uk.craigbass.clearancekit.daemon;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -589,8 +616,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "uk.craigbass.clearancekit.daemon";
-				PRODUCT_NAME = "uk.craigbass.clearancekit.daemon";
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.daemon;
+				PRODUCT_NAME = uk.craigbass.clearancekit.daemon;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

@@ -9,8 +9,8 @@
 		<key>uk.craigbass.clearancekit.daemon</key>
 		<true/>
 	</dict>
-	<key>Program</key>
-	<string>/Library/PrivilegedHelperTools/uk.craigbass.clearancekit.daemon</string>
+	<key>BundleProgram</key>
+	<string>Contents/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon</string>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>KeepAlive</key>
