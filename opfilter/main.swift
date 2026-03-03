@@ -165,10 +165,12 @@ let res = es_new_client(&client) { (client, message) in
     // change to allow is reflected immediately without requiring es_clear_cache.
     es_respond_flags_result(client, message, allowed ? UInt32(openEvent.fflag) : 0, allowed)
 
+    let ancestryDescription = ancestors.isEmpty ? "none" : ancestors.map { "\($0.path) (team: \($0.teamID), signing: \($0.signingID))" }.joined(separator: " -> ")
+
     if allowed {
-        logger.info("FAA ALLOW: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID))")
+        logger.info("FAA ALLOW: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID)) ancestry: \(ancestryDescription)")
     } else {
-        logger.error("FAA DENY: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID))")
+        logger.error("FAA DENY: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID)) ancestry: \(ancestryDescription)")
 
         // Write denial reason to the process's TTY
         if let tty = process.tty {
