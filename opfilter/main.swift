@@ -159,7 +159,11 @@ let res = es_new_client(&client) { (client, message) in
 
     // Respond immediately — the ES deadline is strict and all work after
     // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
-    es_respond_flags_result(client, message, allowed ? UInt32(openEvent.fflag) : 0, false)
+    // Cache allow results: the kernel will skip the callback for the same
+    // (process audit token, file vnode) pair on subsequent opens, avoiding
+    // redundant policy evaluation. Denials are never cached so that a policy
+    // change to allow is reflected immediately without requiring es_clear_cache.
+    es_respond_flags_result(client, message, allowed ? UInt32(openEvent.fflag) : 0, allowed)
 
     if allowed {
         logger.info("FAA ALLOW: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID))")
