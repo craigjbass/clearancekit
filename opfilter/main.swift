@@ -168,9 +168,9 @@ let res = es_new_client(&client) { (client, message) in
     let ancestryDescription = ancestors.isEmpty ? "none" : ancestors.map { "\($0.path) (team: \($0.teamID), signing: \($0.signingID))" }.joined(separator: " -> ")
 
     if allowed {
-        logger.info("FAA ALLOW: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID)) ancestry: \(ancestryDescription)")
+        logger.info("FAA ALLOW: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public)")
     } else {
-        logger.error("FAA DENY: \(path) accessed by \(processPath) (team: \(teamID), signing: \(signingID)) ancestry: \(ancestryDescription)")
+        logger.error("FAA DENY: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public)")
 
         // Write denial reason to the process's TTY
         if let tty = process.tty {
