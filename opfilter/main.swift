@@ -159,11 +159,14 @@ let res = es_new_client(&client) { (client, message) in
 
     // Respond immediately — the ES deadline is strict and all work after
     // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
-    // Cache allow results: the kernel will skip the callback for the same
-    // (process audit token, file vnode) pair on subsequent opens, avoiding
-    // redundant policy evaluation. Denials are never cached so that a policy
-    // change to allow is reflected immediately without requiring es_clear_cache.
-    es_respond_flags_result(client, message, allowed ? UInt32(openEvent.fflag) : 0, allowed)
+    // Use UINT32_MAX for allow, not the event's fflag value. The SDK documents
+    // this explicitly: cached authorized_flags are compared as a superset check
+    // against future cache hits, so caching a specific fflag value will deny
+    // any subsequent open on the same (process, file) pair that requests flags
+    // not present in the cached value — even if our policy would allow it.
+    // Denials are never cached so that a policy change to allow takes effect
+    // immediately without needing es_clear_cache.
+    es_respond_flags_result(client, message, allowed ? UInt32.max : 0, allowed)
 
     let ancestryDescription = ancestors.isEmpty ? "none" : ancestors.map { "\($0.path) (team: \($0.teamID), signing: \($0.signingID))" }.joined(separator: " -> ")
 
