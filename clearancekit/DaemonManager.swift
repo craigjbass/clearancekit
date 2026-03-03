@@ -5,9 +5,10 @@
 //  Created by Craig J. Bass on 19/02/2026.
 //
 
+import AppKit
 import Foundation
 import Combine
-import ServiceManagement
+@preconcurrency import ServiceManagement
 
 @MainActor
 final class DaemonManager: NSObject, ObservableObject {
@@ -36,14 +37,29 @@ final class DaemonManager: NSObject, ObservableObject {
     }
 
     func registerDaemon() {
-        do {
-            try service.register()
-            updateFromServiceStatus()
-            NSLog("DaemonManager: Registered successfully, status: %d", service.status.rawValue)
-        } catch {
-            status = .failed
-            statusMessage = "Failed: \(error.localizedDescription)"
-            NSLog("DaemonManager: Registration failed: %@", error.localizedDescription)
+        Task {
+            let svc = service
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            do {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        do {
+                            try svc.register()
+                            continuation.resume()
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    }
+                }
+                NSApp.setActivationPolicy(.accessory)
+                updateFromServiceStatus()
+                NSLog("DaemonManager: Registered successfully, status: %d", service.status.rawValue)
+            } catch {
+                status = .failed
+                statusMessage = "Failed: \(error.localizedDescription)"
+                NSLog("DaemonManager: Registration failed: %@", error.localizedDescription)
+            }
         }
     }
 

@@ -154,8 +154,8 @@ let res = es_new_client(&client) { (client, message) in
         processAuditToken: process.audit_token,
         parentAuditToken: process.parent_audit_token
     )
-    let denyReason = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
-    let allowed = denyReason == nil
+    let decision = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    let allowed = decision.isAllowed
 
     // Respond immediately — the ES deadline is strict and all work after
     // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
@@ -171,16 +171,16 @@ let res = es_new_client(&client) { (client, message) in
     let ancestryDescription = ancestors.isEmpty ? "none" : ancestors.map { "\($0.path) (team: \($0.teamID), signing: \($0.signingID))" }.joined(separator: " -> ")
 
     if allowed {
-        logger.info("FAA ALLOW: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public)")
+        logger.info("FAA ALLOW: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public) reason: \(decision.reason, privacy: .public)")
     } else {
-        logger.error("FAA DENY: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public)")
+        logger.error("FAA DENY: \(path, privacy: .public) accessed by \(processPath, privacy: .public) (team: \(teamID, privacy: .public), signing: \(signingID, privacy: .public)) ancestry: \(ancestryDescription, privacy: .public) reason: \(decision.reason, privacy: .public)")
 
         // Write denial reason to the process's TTY
         if let tty = process.tty {
             if let ttyData = tty.pointee.path.data {
                 let ttyPath = String(bytes: Data(bytes: ttyData, count: tty.pointee.path.length), encoding: .utf8) ?? ""
                 if !ttyPath.isEmpty, let fh = FileHandle(forWritingAtPath: ttyPath) {
-                    let msg = "\n[clearancekit] Access denied: \(path)\n  \(denyReason!)\n"
+                    let msg = "\n[clearancekit] Access denied: \(path)\n  \(decision.reason)\n"
                     if let data = msg.data(using: .utf8) {
                         fh.write(data)
                     }
@@ -204,7 +204,9 @@ let res = es_new_client(&client) { (client, message) in
         processPath: processPath,
         teamID: teamID,
         signingID: signingID,
-        accessAllowed: allowed
+        accessAllowed: allowed,
+        decisionReason: decision.reason,
+        ancestors: ancestors
     )
 
     DispatchQueue.main.async {

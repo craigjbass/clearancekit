@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @StateObject private var daemonManager = DaemonManager.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,6 +97,10 @@ struct ContentView: View {
             Text(statusText)
                 .font(.headline)
             Spacer()
+            Button("Events") {
+                openWindow(id: "events")
+            }
+            .buttonStyle(.borderless)
             if !xpcClient.events.isEmpty {
                 Button("Clear") {
                     xpcClient.clearEvents()
@@ -140,7 +145,7 @@ struct ContentView: View {
                     Spacer()
                 }
             } else {
-                List(xpcClient.events, id: \.timestamp) { event in
+                List(xpcClient.events, id: \.eventID) { event in
                     EventRow(event: event)
                 }
                 .listStyle(.inset)
@@ -161,6 +166,7 @@ struct EventRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // Path + verdict + time
             HStack {
                 Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
                     .foregroundColor(event.accessAllowed ? .green : .red)
@@ -176,6 +182,8 @@ struct EventRow: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            // Process identity
             HStack {
                 Text("PID: \(event.processID)")
                     .font(.caption)
@@ -198,6 +206,37 @@ struct EventRow: View {
                         Text("Signing: \(event.signingID)")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            // Decision reason
+            if !event.decisionReason.isEmpty {
+                Text(event.decisionReason)
+                    .font(.caption)
+                    .foregroundColor(event.accessAllowed ? .secondary : Color.red.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Process ancestry chain
+            if !event.ancestors.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(event.ancestors.enumerated()), id: \.offset) { index, ancestor in
+                        HStack(spacing: 4) {
+                            Text(String(repeating: "  ", count: index) + "↳")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(ancestor.path)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            if !ancestor.signingID.isEmpty {
+                                Text("(\(ancestor.signingID))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
                 }
             }

@@ -5,9 +5,10 @@
 //  Created by Craig J. Bass on 26/01/2026.
 //
 
+import AppKit
 import Foundation
 import Combine
-import SystemExtensions
+@preconcurrency import SystemExtensions
 
 @MainActor
 final class SystemExtensionManager: NSObject, ObservableObject {
@@ -39,7 +40,11 @@ final class SystemExtensionManager: NSObject, ObservableObject {
             queue: .main
         )
         request.delegate = self
-        OSSystemExtensionManager.shared.submitRequest(request)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            OSSystemExtensionManager.shared.submitRequest(request)
+        }
         NSLog("SystemExtensionManager: Submitted activation request for %@", Self.extensionBundleIdentifier)
     }
 
@@ -52,7 +57,11 @@ final class SystemExtensionManager: NSObject, ObservableObject {
             queue: .main
         )
         request.delegate = self
-        OSSystemExtensionManager.shared.submitRequest(request)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            OSSystemExtensionManager.shared.submitRequest(request)
+        }
         NSLog("SystemExtensionManager: Submitted deactivation request for %@", Self.extensionBundleIdentifier)
     }
 }

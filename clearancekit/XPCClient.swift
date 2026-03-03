@@ -30,14 +30,22 @@ final class XPCClient: NSObject, ObservableObject {
         NSLog("XPCClient: Connecting to %@", XPCConstants.daemonServiceName)
 
         let conn = NSXPCConnection(machServiceName: XPCConstants.daemonServiceName, options: [])
-        conn.remoteObjectInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
+        let eventClasses = NSSet(array: [FolderOpenEvent.self, AncestorInfo.self, NSArray.self, NSDate.self, NSString.self, NSUUID.self]) as! Set<AnyHashable>
+
+        let remoteInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
+        remoteInterface.setClasses(
+            eventClasses,
+            for: #selector(DaemonServiceProtocol.fetchRecentEvents(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
+        conn.remoteObjectInterface = remoteInterface
 
         conn.exportedInterface = NSXPCInterface(with: DaemonClientProtocol.self)
         conn.exportedObject = self
 
-        let allowedClasses = NSSet(array: [FolderOpenEvent.self, NSDate.self, NSString.self]) as! Set<AnyHashable>
         conn.exportedInterface?.setClasses(
-            allowedClasses,
+            eventClasses,
             for: #selector(DaemonClientProtocol.folderOpened(_:)),
             argumentIndex: 0,
             ofReply: false
@@ -139,6 +147,24 @@ final class XPCClient: NSObject, ObservableObject {
 
     func clearEvents() {
         events.removeAll()
+    }
+
+    func fetchHistoricEvents() {
+        guard let conn = connection,
+              let service = conn.remoteObjectProxyWithErrorHandler({ error in
+                  NSLog("XPCClient: fetchHistoricEvents error: %@", error.localizedDescription)
+              }) as? DaemonServiceProtocol else {
+            return
+        }
+        service.fetchRecentEvents { [weak self] historicEvents in
+            Task { @MainActor in
+                guard let self = self else { return }
+                let existingIDs = Set(self.events.map(\.eventID))
+                let newEvents = historicEvents.filter { !existingIDs.contains($0.eventID) }
+                self.events.append(contentsOf: newEvents)
+                self.events.sort { $0.timestamp > $1.timestamp }
+            }
+        }
     }
 }
 

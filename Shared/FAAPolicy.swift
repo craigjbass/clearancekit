@@ -7,28 +7,53 @@
 
 import Foundation
 
-struct AncestorInfo {
-    let path: String
-    let teamID: String
-    let signingID: String
+// MARK: - PolicyDecision
+
+public enum PolicyDecision {
+    /// Path not covered by any rule — default allow.
+    case noRuleApplies
+    /// Covered by a rule and a specific criterion matched.
+    case allowed(matchedCriterion: String)
+    /// Covered by a rule but no criterion matched — denied.
+    case denied(rule: String, allowedCriteria: String)
+
+    public var isAllowed: Bool {
+        if case .denied = self { return false }
+        return true
+    }
+
+    public var reason: String {
+        switch self {
+        case .noRuleApplies:
+            return "No rule applies — default allow"
+        case .allowed(let criterion):
+            return "Allowed: matched \(criterion)"
+        case .denied(let rule, let criteria):
+            return "Denied by rule \"\(rule)\" — allowed: \(criteria)"
+        }
+    }
 }
 
-struct FAARule {
-    let protectedPathPrefix: String
-    let allowedProcessPaths: [String]
-    let allowedTeamIDs: [String]
-    let allowedSigningIDs: [String]
-    let allowedAncestorProcessPaths: [String]
-    let allowedAncestorTeamIDs: [String]
-    let allowedAncestorSigningIDs: [String]
+// MARK: - FAARule
 
-    init(protectedPathPrefix: String,
-         allowedProcessPaths: [String] = [],
-         allowedTeamIDs: [String] = [],
-         allowedSigningIDs: [String] = [],
-         allowedAncestorProcessPaths: [String] = [],
-         allowedAncestorTeamIDs: [String] = [],
-         allowedAncestorSigningIDs: [String] = []) {
+public struct FAARule {
+    public let protectedPathPrefix: String
+    public let allowedProcessPaths: [String]
+    public let allowedTeamIDs: [String]
+    public let allowedSigningIDs: [String]
+    public let allowedAncestorProcessPaths: [String]
+    public let allowedAncestorTeamIDs: [String]
+    public let allowedAncestorSigningIDs: [String]
+
+    public init(
+        protectedPathPrefix: String,
+        allowedProcessPaths: [String] = [],
+        allowedTeamIDs: [String] = [],
+        allowedSigningIDs: [String] = [],
+        allowedAncestorProcessPaths: [String] = [],
+        allowedAncestorTeamIDs: [String] = [],
+        allowedAncestorSigningIDs: [String] = []
+    ) {
         self.protectedPathPrefix = protectedPathPrefix
         self.allowedProcessPaths = allowedProcessPaths
         self.allowedTeamIDs = allowedTeamIDs
@@ -39,61 +64,75 @@ struct FAARule {
     }
 }
 
-let faaPolicy: [FAARule] = [
+// MARK: - Policy
+
+public let faaPolicy: [FAARule] = [
     // Example: only Finder and Terminal may access secrets
     FAARule(
         protectedPathPrefix: "/opt/clearancekit/secrets",
         allowedProcessPaths: [
             "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
             "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
-        ]
+        ],
+        allowedTeamIDs: [""],
+        allowedAncestorSigningIDs: ["com.apple.Terminal"]
     ),
 ]
 
-/// Returns `nil` if access is allowed, or a denial reason string if blocked.
-func checkFAAPolicy(path: String, processPath: String, teamID: String, signingID: String, ancestors: [AncestorInfo] = []) -> String? {
+// MARK: - Policy evaluation
+
+public func checkFAAPolicy(
+    path: String,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    ancestors: [AncestorInfo] = []
+) -> PolicyDecision {
     for rule in faaPolicy {
-        if path.hasPrefix(rule.protectedPathPrefix) {
-            if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-                return nil
-            }
-            if !rule.allowedTeamIDs.isEmpty && rule.allowedTeamIDs.contains(teamID) {
-                return nil
-            }
-            if !rule.allowedSigningIDs.isEmpty && rule.allowedSigningIDs.contains(signingID) {
-                return nil
-            }
-            if !rule.allowedAncestorProcessPaths.isEmpty && ancestors.contains(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-                return nil
-            }
-            if !rule.allowedAncestorTeamIDs.isEmpty && ancestors.contains(where: { rule.allowedAncestorTeamIDs.contains($0.teamID) }) {
-                return nil
-            }
-            if !rule.allowedAncestorSigningIDs.isEmpty && ancestors.contains(where: { rule.allowedAncestorSigningIDs.contains($0.signingID) }) {
-                return nil
-            }
-            var criteria: [String] = []
-            if !rule.allowedProcessPaths.isEmpty {
-                criteria.append("paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
-            }
-            if !rule.allowedTeamIDs.isEmpty {
-                criteria.append("team IDs: \(rule.allowedTeamIDs.joined(separator: ", "))")
-            }
-            if !rule.allowedSigningIDs.isEmpty {
-                criteria.append("signing IDs: \(rule.allowedSigningIDs.joined(separator: ", "))")
-            }
-            if !rule.allowedAncestorProcessPaths.isEmpty {
-                criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
-            }
-            if !rule.allowedAncestorTeamIDs.isEmpty {
-                criteria.append("ancestor team IDs: \(rule.allowedAncestorTeamIDs.joined(separator: ", "))")
-            }
-            if !rule.allowedAncestorSigningIDs.isEmpty {
-                criteria.append("ancestor signing IDs: \(rule.allowedAncestorSigningIDs.joined(separator: ", "))")
-            }
-            return "Protected by rule \"\(rule.protectedPathPrefix)\" — allowed: \(criteria.joined(separator: "; "))"
+        guard path.hasPrefix(rule.protectedPathPrefix) else { continue }
+
+        if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
+            return .allowed(matchedCriterion: "process path \(processPath)")
         }
+        if !rule.allowedTeamIDs.isEmpty && rule.allowedTeamIDs.contains(teamID) {
+            return .allowed(matchedCriterion: "team ID \(teamID)")
+        }
+        if !rule.allowedSigningIDs.isEmpty && rule.allowedSigningIDs.contains(signingID) {
+            return .allowed(matchedCriterion: "signing ID \(signingID)")
+        }
+        if !rule.allowedAncestorProcessPaths.isEmpty,
+           let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
+            return .allowed(matchedCriterion: "ancestor process path \(match.path)")
+        }
+        if !rule.allowedAncestorTeamIDs.isEmpty,
+           let match = ancestors.first(where: { rule.allowedAncestorTeamIDs.contains($0.teamID) }) {
+            return .allowed(matchedCriterion: "ancestor team ID \(match.teamID) (\(match.path))")
+        }
+        if !rule.allowedAncestorSigningIDs.isEmpty,
+           let match = ancestors.first(where: { rule.allowedAncestorSigningIDs.contains($0.signingID) }) {
+            return .allowed(matchedCriterion: "ancestor signing ID \(match.signingID) (\(match.path))")
+        }
+
+        var criteria: [String] = []
+        if !rule.allowedProcessPaths.isEmpty {
+            criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
+        }
+        if !rule.allowedTeamIDs.isEmpty {
+            criteria.append("team IDs: \(rule.allowedTeamIDs.joined(separator: ", "))")
+        }
+        if !rule.allowedSigningIDs.isEmpty {
+            criteria.append("signing IDs: \(rule.allowedSigningIDs.joined(separator: ", "))")
+        }
+        if !rule.allowedAncestorProcessPaths.isEmpty {
+            criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
+        }
+        if !rule.allowedAncestorTeamIDs.isEmpty {
+            criteria.append("ancestor team IDs: \(rule.allowedAncestorTeamIDs.joined(separator: ", "))")
+        }
+        if !rule.allowedAncestorSigningIDs.isEmpty {
+            criteria.append("ancestor signing IDs: \(rule.allowedAncestorSigningIDs.joined(separator: ", "))")
+        }
+        return .denied(rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
     }
-    // No rule matched — allow by default
-    return nil
+    return .noRuleApplies
 }

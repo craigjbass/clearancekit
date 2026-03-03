@@ -14,6 +14,8 @@ final class DaemonXPCServer: NSObject {
     private let lock = NSLock()
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var monitoringActive = false
+    private var recentEvents: [FolderOpenEvent] = []
+    private let maxHistoryCount = 1000
 
     private override init() {
         super.init()
@@ -44,11 +46,21 @@ final class DaemonXPCServer: NSObject {
 
     fileprivate func broadcastEvent(_ event: FolderOpenEvent) {
         lock.lock()
+        recentEvents.append(event)
+        if recentEvents.count > maxHistoryCount {
+            recentEvents.removeFirst(recentEvents.count - maxHistoryCount)
+        }
         let clients = Array(guiClients.values)
         lock.unlock()
         for conn in clients {
             (conn.remoteObjectProxy as? DaemonClientProtocol)?.folderOpened(event)
         }
+    }
+
+    fileprivate func getRecentEvents() -> [FolderOpenEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recentEvents
     }
 
     fileprivate func broadcastMonitoringStatus(_ isActive: Bool) {
@@ -71,20 +83,25 @@ final class DaemonXPCServer: NSObject {
 extension DaemonXPCServer: NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         let exportedInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
-        let allowedClasses = NSSet(array: [FolderOpenEvent.self, NSDate.self, NSString.self]) as! Set<AnyHashable>
+        let eventClasses = NSSet(array: [FolderOpenEvent.self, AncestorInfo.self, NSArray.self, NSDate.self, NSString.self, NSUUID.self]) as! Set<AnyHashable>
         exportedInterface.setClasses(
-            allowedClasses,
+            eventClasses,
             for: #selector(DaemonServiceProtocol.reportEvent(_:)),
             argumentIndex: 0,
             ofReply: false
+        )
+        exportedInterface.setClasses(
+            eventClasses,
+            for: #selector(DaemonServiceProtocol.fetchRecentEvents(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
         )
         newConnection.exportedInterface = exportedInterface
         newConnection.exportedObject = ConnectionHandler(server: self, connection: newConnection)
 
         newConnection.remoteObjectInterface = NSXPCInterface(with: DaemonClientProtocol.self)
-        let callbackAllowedClasses = NSSet(array: [FolderOpenEvent.self, NSDate.self, NSString.self]) as! Set<AnyHashable>
         newConnection.remoteObjectInterface?.setClasses(
-            callbackAllowedClasses,
+            eventClasses,
             for: #selector(DaemonClientProtocol.folderOpened(_:)),
             argumentIndex: 0,
             ofReply: false
@@ -152,5 +169,9 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
     func reportMonitoringStatus(_ isActive: Bool) {
         NSLog("DaemonXPCServer: Monitoring status from opfilter: %@", isActive ? "active" : "inactive")
         server?.broadcastMonitoringStatus(isActive)
+    }
+
+    func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
+        reply(server?.getRecentEvents() ?? [])
     }
 }
