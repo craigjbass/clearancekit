@@ -7,11 +7,108 @@
 
 import Foundation
 import EndpointSecurity
+import Security
 import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "faa")
 
 let monitoredPath = "/opt/clearancekit"
+
+// MARK: - Process ancestry
+
+/// Returns a SecCode for a process identified by audit token.
+/// Using an audit token (rather than a bare PID) prevents TOCTOU races
+/// from PID recycling, as the token encodes both the PID and its version.
+private func secCode(forAuditToken token: audit_token_t) -> SecCode? {
+    var mutableToken = token
+    let data = Data(bytes: &mutableToken, count: MemoryLayout<audit_token_t>.size)
+    let attrs = [kSecGuestAttributeAudit: data] as CFDictionary
+    var code: SecCode?
+    guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(rawValue: 0), &code) == errSecSuccess else { return nil }
+    return code
+}
+
+/// Returns a SecCode for a process identified by PID alone.
+/// Only use this when an audit token is unavailable (grandparent and above).
+private func secCode(forPID pid: pid_t) -> SecCode? {
+    let attrs = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
+    var code: SecCode?
+    guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(rawValue: 0), &code) == errSecSuccess else { return nil }
+    return code
+}
+
+/// Extracts team ID and signing ID from a SecCode.
+private func codeSigningInfo(for code: SecCode) -> (teamID: String, signingID: String) {
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(code, SecCSFlags(rawValue: 0), &staticCode) == errSecSuccess,
+          let staticCode else { return ("", "") }
+    var dict: CFDictionary?
+    // kSecCSSigningInformation = 2: request team ID, signing identifier, etc.
+    guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: 2), &dict) == errSecSuccess,
+          let info = dict as? [CFString: Any] else { return ("", "") }
+    let teamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
+    let signingID = info[kSecCodeInfoIdentifier] as? String ?? ""
+    return (teamID, signingID)
+}
+
+/// Walks the process tree upward from the given process, returning an AncestorInfo
+/// for each ancestor up to (but not including) launchd.
+///
+/// - The direct parent uses the ES-provided audit token, which is immune to PID
+///   recycling because it encodes both PID and a per-instance version counter.
+/// - Grandparent and above are located via proc_pidinfo PIDs. Audit tokens are
+///   unavailable for those levels from the ES event, so PID recycling is
+///   theoretically possible beyond the first ancestor — though very unlikely for
+///   long-lived processes (shells, IDEs) that are typical ancestors of interest.
+private func getProcessAncestors(processAuditToken: audit_token_t, parentAuditToken: audit_token_t) -> [AncestorInfo] {
+    var ancestors: [AncestorInfo] = []
+
+    // Direct parent: use audit token from the ES event.
+    let parentPID = pid_t(parentAuditToken.val.5)
+    guard parentPID > 1 else { return ancestors }
+
+    var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+    let pathLen = proc_pidpath(parentPID, &pathBuffer, UInt32(MAXPATHLEN))
+    let parentPath = pathLen > 0 ? String(cString: pathBuffer) : ""
+
+    var parentTeamID = ""
+    var parentSigningID = ""
+    if let code = secCode(forAuditToken: parentAuditToken) {
+        (parentTeamID, parentSigningID) = codeSigningInfo(for: code)
+    }
+    ancestors.append(AncestorInfo(path: parentPath, teamID: parentTeamID, signingID: parentSigningID))
+
+    // Grandparent and above: walk via proc_pidinfo.
+    var seen: Set<pid_t> = [pid_t(processAuditToken.val.5), parentPID]
+    var currentPID = parentPID
+
+    while true {
+        var bsdInfo = proc_bsdinfo()
+        let ret = proc_pidinfo(currentPID, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size))
+        guard ret > 0 else { break }
+
+        let ancestorPID = pid_t(bsdInfo.pbi_ppid)
+        guard ancestorPID > 1, !seen.contains(ancestorPID) else { break }
+        seen.insert(ancestorPID)
+
+        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let len = proc_pidpath(ancestorPID, &buf, UInt32(MAXPATHLEN))
+        let ancestorPath = len > 0 ? String(cString: buf) : ""
+
+        var ancestorTeamID = ""
+        var ancestorSigningID = ""
+        if let code = secCode(forPID: ancestorPID) {
+            (ancestorTeamID, ancestorSigningID) = codeSigningInfo(for: code)
+        }
+        ancestors.append(AncestorInfo(path: ancestorPath, teamID: ancestorTeamID, signingID: ancestorSigningID))
+
+        currentPID = ancestorPID
+    }
+
+    return ancestors
+}
+
+// MARK: - ES client
 
 // Connect to the LaunchDaemon before starting the ES client
 XPCClient.shared.start()
@@ -53,7 +150,11 @@ let res = es_new_client(&client) { (client, message) in
     }
 
     // Check FAA policy
-    let denyReason = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID)
+    let ancestors = getProcessAncestors(
+        processAuditToken: process.audit_token,
+        parentAuditToken: process.parent_audit_token
+    )
+    let denyReason = checkFAAPolicy(path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
     let allowed = denyReason == nil
 
     // Respond immediately — the ES deadline is strict and all work after
