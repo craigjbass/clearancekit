@@ -94,23 +94,33 @@ public func checkFAAPolicy(
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
             return .allowed(matchedCriterion: "process path \(processPath)")
         }
-        if !rule.allowedTeamIDs.isEmpty && rule.allowedTeamIDs.contains(teamID) {
-            return .allowed(matchedCriterion: "team ID \(teamID)")
+
+        // teamID and signingID are AND: both specified constraints must be satisfied.
+        let teamOK    = rule.allowedTeamIDs.isEmpty    || rule.allowedTeamIDs.contains(teamID)
+        let signingOK = rule.allowedSigningIDs.isEmpty || rule.allowedSigningIDs.contains(signingID)
+        if (!rule.allowedTeamIDs.isEmpty || !rule.allowedSigningIDs.isEmpty) && teamOK && signingOK {
+            var parts: [String] = []
+            if !rule.allowedTeamIDs.isEmpty    { parts.append("team ID \(teamID)") }
+            if !rule.allowedSigningIDs.isEmpty { parts.append("signing ID \(signingID)") }
+            return .allowed(matchedCriterion: parts.joined(separator: " and "))
         }
-        if !rule.allowedSigningIDs.isEmpty && rule.allowedSigningIDs.contains(signingID) {
-            return .allowed(matchedCriterion: "signing ID \(signingID)")
-        }
+
         if !rule.allowedAncestorProcessPaths.isEmpty,
            let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
             return .allowed(matchedCriterion: "ancestor process path \(match.path)")
         }
-        if !rule.allowedAncestorTeamIDs.isEmpty,
-           let match = ancestors.first(where: { rule.allowedAncestorTeamIDs.contains($0.teamID) }) {
-            return .allowed(matchedCriterion: "ancestor team ID \(match.teamID) (\(match.path))")
-        }
-        if !rule.allowedAncestorSigningIDs.isEmpty,
-           let match = ancestors.first(where: { rule.allowedAncestorSigningIDs.contains($0.signingID) }) {
-            return .allowed(matchedCriterion: "ancestor signing ID \(match.signingID) (\(match.path))")
+
+        // Ancestor teamID and signingID are also AND across both constraints.
+        for ancestor in ancestors {
+            let aTeamOK    = rule.allowedAncestorTeamIDs.isEmpty    || rule.allowedAncestorTeamIDs.contains(ancestor.teamID)
+            let aSigningOK = rule.allowedAncestorSigningIDs.isEmpty || rule.allowedAncestorSigningIDs.contains(ancestor.signingID)
+            if (!rule.allowedAncestorTeamIDs.isEmpty || !rule.allowedAncestorSigningIDs.isEmpty) && aTeamOK && aSigningOK {
+                var parts: [String] = []
+                if !rule.allowedAncestorTeamIDs.isEmpty    { parts.append("ancestor team ID \(ancestor.teamID)") }
+                if !rule.allowedAncestorSigningIDs.isEmpty { parts.append("ancestor signing ID \(ancestor.signingID)") }
+                parts.append("(\(ancestor.path))")
+                return .allowed(matchedCriterion: parts.joined(separator: " and "))
+            }
         }
 
         var criteria: [String] = []
