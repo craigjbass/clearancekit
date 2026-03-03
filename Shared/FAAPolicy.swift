@@ -74,7 +74,6 @@ public let faaPolicy: [FAARule] = [
             "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
             "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
         ],
-        allowedTeamIDs: [""],
         allowedAncestorSigningIDs: ["com.apple.Terminal"]
     ),
 ]

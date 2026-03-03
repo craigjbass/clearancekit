@@ -42,31 +42,6 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		BBBB001111111111BBBB0012 /* Embed LaunchDaemon */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/uk.craigbass.clearancekit.daemon",
-				"$(SRCROOT)/Daemon/uk.craigbass.clearancekit.daemon.plist",
-			);
-			name = "Embed LaunchDaemon";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon",
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon.plist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "LAUNCH_DAEMONS_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons\"\nmkdir -p \"${LAUNCH_DAEMONS_DIR}\"\ncp \"${BUILT_PRODUCTS_DIR}/uk.craigbass.clearancekit.daemon\" \"${LAUNCH_DAEMONS_DIR}/\"\ncp \"${SRCROOT}/Daemon/uk.craigbass.clearancekit.daemon.plist\" \"${LAUNCH_DAEMONS_DIR}/\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXFileReference section */
 		4682563C2F2832C400839A1A /* clearancekit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = clearancekit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = uk.craigbass.clearancekit.opfilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -299,6 +274,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		BBBB001111111111BBBB0012 /* Embed LaunchDaemon */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/uk.craigbass.clearancekit.daemon",
+				"$(SRCROOT)/Daemon/uk.craigbass.clearancekit.daemon.plist",
+			);
+			name = "Embed LaunchDaemon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "LAUNCH_DAEMONS_DIR=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons\"\nmkdir -p \"${LAUNCH_DAEMONS_DIR}\"\ncp \"${BUILT_PRODUCTS_DIR}/uk.craigbass.clearancekit.daemon\" \"${LAUNCH_DAEMONS_DIR}/\"\ncp \"${SRCROOT}/Daemon/uk.craigbass.clearancekit.daemon.plist\" \"${LAUNCH_DAEMONS_DIR}/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		468256382F2832C400839A1A /* Sources */ = {
