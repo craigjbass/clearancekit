@@ -149,19 +149,22 @@ struct ProcessPickerView: View {
         }.value
     }
 
-    private nonisolated func codeSigningIDs(forPID pid: pid_t) -> (teamID: String, signingID: String) {
-        let attrs = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
-        var code: SecCode?
-        guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(rawValue: 0), &code) == errSecSuccess,
-              let code else { return ("", "") }
-        var staticCode: SecStaticCode?
-        guard SecCodeCopyStaticCode(code, SecCSFlags(rawValue: 0), &staticCode) == errSecSuccess,
-              let staticCode else { return ("", "") }
-        var dict: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: 2), &dict) == errSecSuccess,
-              let info = dict as? [CFString: Any] else { return ("", "") }
-        let teamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
-        let signingID = info[kSecCodeInfoIdentifier] as? String ?? ""
-        return (teamID, signingID)
-    }
+}
+
+// MARK: - Code signing helper
+
+nonisolated func codeSigningIDs(forPID pid: pid_t) -> (teamID: String, signingID: String) {
+    let attrs = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
+    var code: SecCode?
+    guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(rawValue: 0), &code) == errSecSuccess,
+          let code else { return ("", "") }
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(code, SecCSFlags(rawValue: 0), &staticCode) == errSecSuccess,
+          let staticCode else { return ("", "") }
+    var dict: CFDictionary?
+    guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: 2), &dict) == errSecSuccess,
+          let info = dict as? [CFString: Any] else { return ("", "") }
+    let teamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
+    let signingID = info[kSecCodeInfoIdentifier] as? String ?? ""
+    return (teamID, signingID)
 }

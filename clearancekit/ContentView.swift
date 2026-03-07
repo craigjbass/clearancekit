@@ -19,6 +19,8 @@ struct ContentView: View {
                 .tabItem { Label("Events", systemImage: "list.bullet") }
             PolicyView()
                 .tabItem { Label("Policy", systemImage: "shield") }
+            ProcessesView()
+                .tabItem { Label("Processes", systemImage: "cpu") }
             setupTab
                 .tabItem { Label("Setup", systemImage: "gearshape") }
         }
