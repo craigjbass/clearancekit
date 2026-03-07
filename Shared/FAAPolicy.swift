@@ -36,7 +36,7 @@ public enum PolicyDecision {
 
 // MARK: - FAARule
 
-public struct FAARule: Identifiable {
+public struct FAARule: Identifiable, Codable {
     public let id: UUID
     public let protectedPathPrefix: String
     public let allowedProcessPaths: [String]

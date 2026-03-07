@@ -7,8 +7,44 @@ import SwiftUI
 
 struct PolicyView: View {
     @StateObject private var policyStore = PolicyStore.shared
+    @State private var editingRule: FAARule? = nil
+    @State private var isAddingRule = false
 
     var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            Divider()
+            ruleList
+        }
+        .sheet(item: $editingRule) { rule in
+            RuleEditView(editing: rule) {
+                policyStore.update($0)
+                editingRule = nil
+            } onCancel: {
+                editingRule = nil
+            }
+        }
+        .sheet(isPresented: $isAddingRule) {
+            RuleEditView {
+                policyStore.add($0)
+                isAddingRule = false
+            } onCancel: {
+                isAddingRule = false
+            }
+        }
+    }
+
+    private var toolbar: some View {
+        HStack {
+            Spacer()
+            Button("Add Rule") { isAddingRule = true }
+        }
+        .padding()
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    @ViewBuilder
+    private var ruleList: some View {
         if policyStore.rules.isEmpty {
             VStack {
                 Spacer()
@@ -18,8 +54,12 @@ struct PolicyView: View {
             }
         } else {
             List(policyStore.rules) { rule in
-                RuleRow(rule: rule)
-                    .padding(.vertical, 4)
+                RuleRow(rule: rule) {
+                    editingRule = rule
+                } onDelete: {
+                    policyStore.remove(rule)
+                }
+                .padding(.vertical, 4)
             }
             .listStyle(.inset)
         }
@@ -30,12 +70,26 @@ struct PolicyView: View {
 
 private struct RuleRow: View {
     let rule: FAARule
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(rule.protectedPathPrefix)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.semibold)
+            HStack {
+                Text(rule.protectedPathPrefix)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.semibold)
+                Spacer()
+                Button { onEdit() } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
+                Button { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.borderless)
+            }
 
             criterionGroup("Allowed process paths", rule.allowedProcessPaths)
             criterionGroup("Allowed team IDs", rule.allowedTeamIDs)

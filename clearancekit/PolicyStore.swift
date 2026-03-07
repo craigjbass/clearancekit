@@ -6,16 +6,52 @@
 import Foundation
 import Combine
 
-/// Vends the active FAA rules to the UI.
+/// Vends and persists the active FAA rules.
 ///
-/// Currently backed by the hardcoded `faaPolicy` constant. Designed so that
-/// future dynamic sources (file-based config, XPC delivery from the daemon, etc.)
-/// can be wired in by updating `rules` here without touching any views.
+/// Currently seeded from the compile-time `faaPolicy` constant on first launch,
+/// then persisted to JSON in Application Support. Future dynamic sources
+/// (XPC delivery, remote config) slot in here without touching any views.
 @MainActor
 final class PolicyStore: ObservableObject {
     static let shared = PolicyStore()
 
-    @Published private(set) var rules: [FAARule] = faaPolicy
+    @Published private(set) var rules: [FAARule]
 
-    private init() {}
+    private let storageURL: URL
+
+    private init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = appSupport.appendingPathComponent("clearancekit")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("policy.json")
+        self.storageURL = url
+
+        if let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([FAARule].self, from: data) {
+            self.rules = decoded
+        } else {
+            self.rules = faaPolicy
+        }
+    }
+
+    func add(_ rule: FAARule) {
+        rules.append(rule)
+        save()
+    }
+
+    func update(_ rule: FAARule) {
+        guard let index = rules.firstIndex(where: { $0.id == rule.id }) else { return }
+        rules[index] = rule
+        save()
+    }
+
+    func remove(_ rule: FAARule) {
+        rules.removeAll { $0.id == rule.id }
+        save()
+    }
+
+    private func save() {
+        guard let data = try? JSONEncoder().encode(rules) else { return }
+        try? data.write(to: storageURL, options: .atomic)
+    }
 }
