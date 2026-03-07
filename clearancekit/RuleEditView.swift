@@ -7,9 +7,13 @@ import SwiftUI
 
 // MARK: - RuleEditView
 
-private enum ProcessPickerTarget: Identifiable {
+private enum ProcessPickerTarget: Identifiable, Hashable {
     case process
+    case teamID
+    case signingID
     case ancestor
+    case ancestorTeamID
+    case ancestorSigningID
     var id: Self { self }
 }
 
@@ -50,22 +54,30 @@ struct RuleEditView: View {
                 } header: {
                     pickerSectionHeader("Allowed Process Paths", target: .process)
                 }
-                Section("Allowed Team IDs") {
+                Section {
                     StringListEditor(values: $draft.allowedTeamIDs)
+                } header: {
+                    pickerSectionHeader("Allowed Team IDs", target: .teamID)
                 }
-                Section("Allowed Signing IDs") {
+                Section {
                     StringListEditor(values: $draft.allowedSigningIDs)
+                } header: {
+                    pickerSectionHeader("Allowed Signing IDs", target: .signingID)
                 }
                 Section {
                     StringListEditor(values: $draft.allowedAncestorProcessPaths)
                 } header: {
                     pickerSectionHeader("Allowed Ancestor Process Paths", target: .ancestor)
                 }
-                Section("Allowed Ancestor Team IDs") {
+                Section {
                     StringListEditor(values: $draft.allowedAncestorTeamIDs)
+                } header: {
+                    pickerSectionHeader("Allowed Ancestor Team IDs", target: .ancestorTeamID)
                 }
-                Section("Allowed Ancestor Signing IDs") {
+                Section {
                     StringListEditor(values: $draft.allowedAncestorSigningIDs)
+                } header: {
+                    pickerSectionHeader("Allowed Ancestor Signing IDs", target: .ancestorSigningID)
                 }
             }
             .formStyle(.grouped)
@@ -91,9 +103,17 @@ struct RuleEditView: View {
                     if !process.path.isEmpty { draft.allowedProcessPaths.append(process.path) }
                     if !process.teamID.isEmpty { draft.allowedTeamIDs.append(process.teamID) }
                     if !process.signingID.isEmpty { draft.allowedSigningIDs.append(process.signingID) }
+                case .teamID:
+                    if !process.teamID.isEmpty { draft.allowedTeamIDs.append(process.teamID) }
+                case .signingID:
+                    if !process.signingID.isEmpty { draft.allowedSigningIDs.append(process.signingID) }
                 case .ancestor:
                     if !process.path.isEmpty { draft.allowedAncestorProcessPaths.append(process.path) }
                     if !process.teamID.isEmpty { draft.allowedAncestorTeamIDs.append(process.teamID) }
+                    if !process.signingID.isEmpty { draft.allowedAncestorSigningIDs.append(process.signingID) }
+                case .ancestorTeamID:
+                    if !process.teamID.isEmpty { draft.allowedAncestorTeamIDs.append(process.teamID) }
+                case .ancestorSigningID:
                     if !process.signingID.isEmpty { draft.allowedAncestorSigningIDs.append(process.signingID) }
                 }
                 processPicker = nil

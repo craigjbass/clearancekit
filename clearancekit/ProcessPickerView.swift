@@ -13,14 +13,16 @@ struct RunningProcess: Identifiable {
     let path: String
     let teamID: String
     let signingID: String
+    let uid: uid_t
 
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
 
-    init(path: String, teamID: String, signingID: String) {
+    init(path: String, teamID: String, signingID: String, uid: uid_t) {
         self.id = UUID()
         self.path = path
         self.teamID = teamID
         self.signingID = signingID
+        self.uid = uid
     }
 }
 
@@ -108,6 +110,8 @@ struct ProcessPickerView: View {
 
     private func enumerateRunningProcesses() async -> [RunningProcess] {
         await Task.detached(priority: .userInitiated) {
+            let currentUID = getuid()
+
             let estimated = proc_listallpids(nil, 0)
             guard estimated > 0 else { return [] }
             var pids = [pid_t](repeating: 0, count: Int(estimated) + 64)
@@ -118,6 +122,10 @@ struct ProcessPickerView: View {
             var result: [RunningProcess] = []
 
             for pid in pids.prefix(count) where pid > 0 {
+                var bsdInfo = proc_bsdinfo()
+                guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { continue }
+                let uid = bsdInfo.pbi_uid
+
                 var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
                 guard proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN)) > 0 else { continue }
                 let path = String(cString: pathBuffer)
@@ -129,10 +137,15 @@ struct ProcessPickerView: View {
                 guard !seen.contains(key) else { continue }
                 seen.insert(key)
 
-                result.append(RunningProcess(path: path, teamID: teamID, signingID: signingID))
+                result.append(RunningProcess(path: path, teamID: teamID, signingID: signingID, uid: uid))
             }
 
-            return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            return result.sorted {
+                let aIsOwn = $0.uid == currentUID
+                let bIsOwn = $1.uid == currentUID
+                if aIsOwn != bIsOwn { return aIsOwn }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
         }.value
     }
 
