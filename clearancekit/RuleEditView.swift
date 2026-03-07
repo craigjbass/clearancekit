@@ -45,9 +45,14 @@ struct RuleEditView: View {
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section("Protected Path Prefix") {
-                    TextField("/opt/example", text: $draft.protectedPathPrefix)
+                Section {
+                    TextField("/opt/example  or  /Users/*/Documents", text: $draft.protectedPathPrefix)
                         .font(.system(.body, design: .monospaced))
+                } header: {
+                    Text("Protected Path")
+                } footer: {
+                    Text("Protects all files and subdirectories within the specified directory. Use * to match any single path component, ** to match any number of levels.")
+                        .foregroundStyle(.secondary)
                 }
                 Section {
                     StringListEditor(values: $draft.allowedProcessPaths)

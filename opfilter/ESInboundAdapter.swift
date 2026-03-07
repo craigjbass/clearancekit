@@ -63,7 +63,7 @@ final class ESInboundAdapter {
     func updatePolicy(_ rules: [FAARule]) {
         guard let client else { return }
 
-        let newPrefixes = Set(rules.map { $0.protectedPathPrefix })
+        let newPrefixes = Set(rules.map { $0.esMutePath })
         for prefix in mutedPrefixes.subtracting(newPrefixes) {
             es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
             logger.log("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
@@ -81,7 +81,7 @@ final class ESInboundAdapter {
 
     private func applyMutedPrefixes(from rules: [FAARule]) {
         guard let client else { return }
-        let prefixes = Set(rules.map { $0.protectedPathPrefix })
+        let prefixes = Set(rules.map { $0.esMutePath })
         for prefix in prefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
