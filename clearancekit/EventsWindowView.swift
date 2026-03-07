@@ -166,13 +166,13 @@ struct EventRow: View {
                     }
                 }
             }
-            if !event.accessAllowed {
+            if !event.accessAllowed, let ruleID = event.matchedRuleID {
                 Spacer()
                 allowButton(itemKey: "process") {
                     PolicyStore.shared.allowProcess(
                         teamID: event.teamID,
                         signingID: event.signingID,
-                        inRuleMatching: event.path
+                        inRule: ruleID
                     )
                 }
             }
@@ -204,13 +204,13 @@ struct EventRow: View {
                             }
                         }
                     }
-                    if !event.accessAllowed {
+                    if !event.accessAllowed, let ruleID = event.matchedRuleID {
                         Spacer()
                         allowButton(itemKey: "ancestor-\(index)") {
                             PolicyStore.shared.allowAncestor(
                                 teamID: ancestor.teamID,
                                 signingID: ancestor.signingID,
-                                inRuleMatching: event.path
+                                inRule: ruleID
                             )
                         }
                     }

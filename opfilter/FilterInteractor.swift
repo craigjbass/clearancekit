@@ -87,7 +87,8 @@ final class FilterInteractor {
             signingID: fileEvent.signingID,
             accessAllowed: allowed,
             decisionReason: decision.reason,
-            ancestors: ancestors
+            ancestors: ancestors,
+            matchedRuleID: decision.matchedRuleID
         )
         DispatchQueue.main.async {
             XPCClient.shared.reportEvent(folderOpenEvent)

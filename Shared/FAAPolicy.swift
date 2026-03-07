@@ -22,11 +22,16 @@ public enum PolicyDecision {
     /// Covered by a rule and a specific criterion matched.
     case allowed(matchedCriterion: String)
     /// Covered by a rule but no criterion matched — denied.
-    case denied(rule: String, allowedCriteria: String)
+    case denied(ruleID: UUID, rule: String, allowedCriteria: String)
 
     public var isAllowed: Bool {
         if case .denied = self { return false }
         return true
+    }
+
+    public var matchedRuleID: UUID? {
+        if case .denied(let ruleID, _, _) = self { return ruleID }
+        return nil
     }
 
     public var reason: String {
@@ -35,7 +40,7 @@ public enum PolicyDecision {
             return "No rule applies — default allow"
         case .allowed(let criterion):
             return "Allowed: matched \(criterion)"
-        case .denied(let rule, let criteria):
+        case .denied(_, let rule, let criteria):
             return "Denied by rule \"\(rule)\" — allowed: \(criteria)"
         }
     }
@@ -232,7 +237,7 @@ public func checkFAAPolicy(
         if !rule.allowedAncestorSigningIDs.isEmpty {
             criteria.append("ancestor signing IDs: \(rule.allowedAncestorSigningIDs.joined(separator: ", "))")
         }
-        return .denied(rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
+        return .denied(ruleID: rule.id, rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
 }

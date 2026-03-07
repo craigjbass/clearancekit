@@ -59,9 +59,9 @@ final class PolicyStore: ObservableObject {
     }
 
     /// Adds the process's team ID and signing ID to the allowedTeamIDs / allowedSigningIDs
-    /// of the most specific rule whose prefix matches `path`.
-    func allowProcess(teamID: String, signingID: String, inRuleMatching path: String) {
-        guard let index = bestMatchingRuleIndex(for: path) else { return }
+    /// of the rule with the given UUID.
+    func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) {
+        guard let index = rules.firstIndex(where: { $0.id == ruleID }) else { return }
         let existing = rules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedTeamIDs
@@ -82,9 +82,9 @@ final class PolicyStore: ObservableObject {
     }
 
     /// Adds the ancestor's team ID and signing ID to the allowedAncestorTeamIDs /
-    /// allowedAncestorSigningIDs of the most specific rule whose prefix matches `path`.
-    func allowAncestor(teamID: String, signingID: String, inRuleMatching path: String) {
-        guard let index = bestMatchingRuleIndex(for: path) else { return }
+    /// allowedAncestorSigningIDs of the rule with the given UUID.
+    func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) {
+        guard let index = rules.firstIndex(where: { $0.id == ruleID }) else { return }
         let existing = rules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedAncestorTeamIDs
@@ -102,12 +102,6 @@ final class PolicyStore: ObservableObject {
             allowedAncestorSigningIDs: newSigningIDs
         )
         save()
-    }
-
-    private func bestMatchingRuleIndex(for path: String) -> Int? {
-        rules.indices
-            .filter { path.hasPrefix(rules[$0].protectedPathPrefix) }
-            .max(by: { rules[$0].protectedPathPrefix.count < rules[$1].protectedPathPrefix.count })
     }
 
     private func save() {

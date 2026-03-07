@@ -61,6 +61,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let accessAllowed: Bool
     @objc public let decisionReason: String
     @objc public let ancestors: [AncestorInfo]
+    public let matchedRuleID: UUID?
 
     public init(
         path: String,
@@ -72,6 +73,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         accessAllowed: Bool = true,
         decisionReason: String = "",
         ancestors: [AncestorInfo] = [],
+        matchedRuleID: UUID? = nil,
         eventID: UUID = UUID()
     ) {
         self.eventID = eventID
@@ -84,6 +86,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.accessAllowed = accessAllowed
         self.decisionReason = decisionReason
         self.ancestors = ancestors
+        self.matchedRuleID = matchedRuleID
         super.init()
     }
 
@@ -104,6 +107,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.decisionReason = (coder.decodeObject(of: NSString.self, forKey: "decisionReason") as String?) ?? ""
         let decoded = coder.decodeObject(of: [NSArray.self, AncestorInfo.self], forKey: "ancestors") as? NSArray
         self.ancestors = decoded?.compactMap { $0 as? AncestorInfo } ?? []
+        self.matchedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "matchedRuleID") as UUID?
         super.init()
     }
 
@@ -118,6 +122,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(accessAllowed, forKey: "accessAllowed")
         coder.encode(decisionReason as NSString, forKey: "decisionReason")
         coder.encode(ancestors as NSArray, forKey: "ancestors")
+        if let matchedRuleID { coder.encode(matchedRuleID as NSUUID, forKey: "matchedRuleID") }
     }
 
     public override var description: String {
