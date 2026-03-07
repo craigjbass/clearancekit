@@ -92,6 +92,7 @@ struct EventsWindowView: View {
 
 struct EventRow: View {
     let event: FolderOpenEvent
+    @State private var allowedItems: Set<String> = []
 
     private var formattedTime: String {
         let formatter = DateFormatter()
@@ -118,31 +119,7 @@ struct EventRow: View {
                     .foregroundColor(.secondary)
             }
 
-            HStack {
-                Text("PID: \(event.processID)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                if !event.processPath.isEmpty {
-                    Text(event.processPath)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            if !event.teamID.isEmpty || !event.signingID.isEmpty {
-                HStack {
-                    if !event.teamID.isEmpty {
-                        Text("Team: \(event.teamID)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    if !event.signingID.isEmpty {
-                        Text("Signing: \(event.signingID)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
+            processSection
 
             if !event.decisionReason.isEmpty {
                 Text(event.decisionReason)
@@ -152,25 +129,7 @@ struct EventRow: View {
             }
 
             if !event.ancestors.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(event.ancestors.enumerated()), id: \.offset) { index, ancestor in
-                        HStack(spacing: 4) {
-                            Text(String(repeating: "  ", count: index) + "↳")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(ancestor.path)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                            if !ancestor.signingID.isEmpty {
-                                Text("(\(ancestor.signingID))")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                }
+                ancestorsSection
             }
         }
         .padding(.vertical, 4)
@@ -179,5 +138,102 @@ struct EventRow: View {
             RoundedRectangle(cornerRadius: 4)
                 .fill(event.accessAllowed ? Color.green.opacity(0.05) : Color.red.opacity(0.1))
         )
+    }
+
+    @ViewBuilder
+    private var processSection: some View {
+        HStack(alignment: .top, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("PID: \(event.processID)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if !event.processPath.isEmpty {
+                        Text(event.processPath)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                HStack {
+                    Text("Team: \(event.teamID.isEmpty ? "Apple" : event.teamID)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if !event.signingID.isEmpty {
+                        Text("Signing: \(event.signingID)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            if !event.accessAllowed {
+                Spacer()
+                allowButton(itemKey: "process") {
+                    PolicyStore.shared.allowProcess(
+                        teamID: event.teamID,
+                        signingID: event.signingID,
+                        inRuleMatching: event.path
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ancestorsSection: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(event.ancestors.enumerated()), id: \.offset) { index, ancestor in
+                HStack(spacing: 4) {
+                    Text(String(repeating: "  ", count: index) + "↳")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ancestor.path)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        HStack {
+                            Text("Team: \(ancestor.teamID.isEmpty ? "Apple" : ancestor.teamID)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            if !ancestor.signingID.isEmpty {
+                                Text("Signing: \(ancestor.signingID)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    if !event.accessAllowed {
+                        Spacer()
+                        allowButton(itemKey: "ancestor-\(index)") {
+                            PolicyStore.shared.allowAncestor(
+                                teamID: ancestor.teamID,
+                                signingID: ancestor.signingID,
+                                inRuleMatching: event.path
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func allowButton(itemKey: String, action: @escaping () -> Void) -> some View {
+        if allowedItems.contains(itemKey) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption)
+        } else {
+            Button {
+                action()
+                allowedItems.insert(itemKey)
+            } label: {
+                Label("Allow", systemImage: "plus.circle")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+        }
     }
 }

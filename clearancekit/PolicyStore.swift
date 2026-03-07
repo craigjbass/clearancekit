@@ -58,6 +58,58 @@ final class PolicyStore: ObservableObject {
         save()
     }
 
+    /// Adds the process's team ID and signing ID to the allowedTeamIDs / allowedSigningIDs
+    /// of the most specific rule whose prefix matches `path`.
+    func allowProcess(teamID: String, signingID: String, inRuleMatching path: String) {
+        guard let index = bestMatchingRuleIndex(for: path) else { return }
+        let existing = rules[index]
+        let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
+        var newTeamIDs = existing.allowedTeamIDs
+        var newSigningIDs = existing.allowedSigningIDs
+        if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
+        if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
+        rules[index] = FAARule(
+            id: existing.id,
+            protectedPathPrefix: existing.protectedPathPrefix,
+            allowedProcessPaths: existing.allowedProcessPaths,
+            allowedTeamIDs: newTeamIDs,
+            allowedSigningIDs: newSigningIDs,
+            allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
+            allowedAncestorTeamIDs: existing.allowedAncestorTeamIDs,
+            allowedAncestorSigningIDs: existing.allowedAncestorSigningIDs
+        )
+        save()
+    }
+
+    /// Adds the ancestor's team ID and signing ID to the allowedAncestorTeamIDs /
+    /// allowedAncestorSigningIDs of the most specific rule whose prefix matches `path`.
+    func allowAncestor(teamID: String, signingID: String, inRuleMatching path: String) {
+        guard let index = bestMatchingRuleIndex(for: path) else { return }
+        let existing = rules[index]
+        let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
+        var newTeamIDs = existing.allowedAncestorTeamIDs
+        var newSigningIDs = existing.allowedAncestorSigningIDs
+        if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
+        if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
+        rules[index] = FAARule(
+            id: existing.id,
+            protectedPathPrefix: existing.protectedPathPrefix,
+            allowedProcessPaths: existing.allowedProcessPaths,
+            allowedTeamIDs: existing.allowedTeamIDs,
+            allowedSigningIDs: existing.allowedSigningIDs,
+            allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
+            allowedAncestorTeamIDs: newTeamIDs,
+            allowedAncestorSigningIDs: newSigningIDs
+        )
+        save()
+    }
+
+    private func bestMatchingRuleIndex(for path: String) -> Int? {
+        rules.indices
+            .filter { path.hasPrefix(rules[$0].protectedPathPrefix) }
+            .max(by: { rules[$0].protectedPathPrefix.count < rules[$1].protectedPathPrefix.count })
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(rules) else { return }
         try? data.write(to: storageURL, options: .atomic)

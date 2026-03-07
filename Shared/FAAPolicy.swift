@@ -7,6 +7,13 @@
 
 import Foundation
 
+// MARK: - Constants
+
+/// Sentinel team ID used to represent Apple platform binaries.
+/// Apple's own binaries carry an empty team ID in the ES audit token;
+/// this identifier lets policy rules reference them explicitly.
+public let appleTeamID = "apple"
+
 // MARK: - PolicyDecision
 
 public enum PolicyDecision {
@@ -99,11 +106,13 @@ public func checkFAAPolicy(
         }
 
         // teamID and signingID are AND: both specified constraints must be satisfied.
-        let teamOK    = rule.allowedTeamIDs.isEmpty    || rule.allowedTeamIDs.contains(teamID)
+        // Apple platform binaries carry an empty team ID; resolve to appleTeamID for matching.
+        let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
+        let teamOK    = rule.allowedTeamIDs.isEmpty    || rule.allowedTeamIDs.contains(resolvedTeamID)
         let signingOK = rule.allowedSigningIDs.isEmpty || rule.allowedSigningIDs.contains(signingID)
         if (!rule.allowedTeamIDs.isEmpty || !rule.allowedSigningIDs.isEmpty) && teamOK && signingOK {
             var parts: [String] = []
-            if !rule.allowedTeamIDs.isEmpty    { parts.append("team ID \(teamID)") }
+            if !rule.allowedTeamIDs.isEmpty    { parts.append("team ID \(resolvedTeamID)") }
             if !rule.allowedSigningIDs.isEmpty { parts.append("signing ID \(signingID)") }
             return .allowed(matchedCriterion: parts.joined(separator: " and "))
         }
@@ -115,11 +124,12 @@ public func checkFAAPolicy(
 
         // Ancestor teamID and signingID are also AND across both constraints.
         for ancestor in ancestors {
-            let aTeamOK    = rule.allowedAncestorTeamIDs.isEmpty    || rule.allowedAncestorTeamIDs.contains(ancestor.teamID)
+            let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
+            let aTeamOK    = rule.allowedAncestorTeamIDs.isEmpty    || rule.allowedAncestorTeamIDs.contains(resolvedAncestorTeamID)
             let aSigningOK = rule.allowedAncestorSigningIDs.isEmpty || rule.allowedAncestorSigningIDs.contains(ancestor.signingID)
             if (!rule.allowedAncestorTeamIDs.isEmpty || !rule.allowedAncestorSigningIDs.isEmpty) && aTeamOK && aSigningOK {
                 var parts: [String] = []
-                if !rule.allowedAncestorTeamIDs.isEmpty    { parts.append("ancestor team ID \(ancestor.teamID)") }
+                if !rule.allowedAncestorTeamIDs.isEmpty    { parts.append("ancestor team ID \(resolvedAncestorTeamID)") }
                 if !rule.allowedAncestorSigningIDs.isEmpty { parts.append("ancestor signing ID \(ancestor.signingID)") }
                 parts.append("(\(ancestor.path))")
                 return .allowed(matchedCriterion: parts.joined(separator: " and "))
