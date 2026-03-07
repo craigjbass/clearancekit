@@ -26,24 +26,22 @@ private struct SnapshotProcess: Identifiable {
     }
 }
 
-private struct FlatProcessNode: Identifiable {
-    let id: pid_t
-    let process: SnapshotProcess
-    let depth: Int
-}
-
-private struct AppBundle: Identifiable {
-    let id: String   // full bundle path, e.g. /Applications/Terminal.app
-    let name: String // display name without .app
-    let processes: [FlatProcessNode]
+private struct ProcessNode: Identifiable {
+    enum Kind {
+        case bundle(name: String)
+        case process(SnapshotProcess)
+    }
+    let id: String
+    let kind: Kind
+    var children: [ProcessNode]?   // nil = leaf; OutlineGroup shows no disclosure for nil
 }
 
 private struct ProcessSnapshot {
     static let empty = ProcessSnapshot(appBundles: [], userProcesses: [], applePlatform: [], other: [])
-    let appBundles: [AppBundle]
-    let userProcesses: [FlatProcessNode]
-    let applePlatform: [FlatProcessNode]
-    let other: [FlatProcessNode]
+    let appBundles: [ProcessNode]    // each is a .bundle node with .process children
+    let userProcesses: [ProcessNode]
+    let applePlatform: [ProcessNode]
+    let other: [ProcessNode]
 }
 
 // MARK: - ProcessesView
@@ -87,42 +85,20 @@ struct ProcessesView: View {
             }
         } else {
             List {
-                processSection("Applications", nodes: nil, bundles: snapshot.appBundles)
-                processSection("User Processes", nodes: snapshot.userProcesses)
-                processSection("Apple Platform", nodes: snapshot.applePlatform)
-                processSection("Other", nodes: snapshot.other)
+                outlineSection("Applications", nodes: snapshot.appBundles)
+                outlineSection("User Processes", nodes: snapshot.userProcesses)
+                outlineSection("Apple Platform", nodes: snapshot.applePlatform)
+                outlineSection("Other", nodes: snapshot.other)
             }
             .listStyle(.inset)
         }
     }
 
     @ViewBuilder
-    private func processSection(
-        _ title: String,
-        nodes: [FlatProcessNode]?,
-        bundles: [AppBundle]? = nil
-    ) -> some View {
-        if let bundles, !bundles.isEmpty {
+    private func outlineSection(_ title: String, nodes: [ProcessNode]) -> some View {
+        if !nodes.isEmpty {
             Section(title) {
-                ForEach(bundles) { bundle in
-                    DisclosureGroup {
-                        ForEach(bundle.processes) { node in
-                            ProcessNodeRow(node: node)
-                        }
-                    } label: {
-                        HStack {
-                            Text(bundle.name)
-                                .fontWeight(.semibold)
-                            Text("(\(bundle.processes.count))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        } else if let nodes, !nodes.isEmpty {
-            Section(title) {
-                ForEach(nodes) { node in
+                OutlineGroup(nodes, children: \.children) { node in
                     ProcessNodeRow(node: node)
                 }
             }
@@ -139,40 +115,43 @@ struct ProcessesView: View {
 // MARK: - ProcessNodeRow
 
 private struct ProcessNodeRow: View {
-    let node: FlatProcessNode
+    let node: ProcessNode
 
     var body: some View {
-        HStack(alignment: .top, spacing: 4) {
-            if node.depth > 0 {
-                Spacer(minLength: CGFloat(node.depth - 1) * 14)
-                Image(systemName: "arrow.turn.down.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 14)
+        switch node.kind {
+        case .bundle(let name):
+            HStack {
+                Text(name)
+                    .fontWeight(.semibold)
+                if let count = node.children?.count {
+                    Text("\(count) processes")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+        case .process(let p):
             VStack(alignment: .leading, spacing: 2) {
-                Text(node.process.name)
-                    .fontWeight(node.depth == 0 ? .medium : .regular)
-                Text(node.process.path)
+                Text(p.name)
+                Text(p.path)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 HStack(spacing: 12) {
-                    Text("Team: \(node.process.displayTeamID)")
+                    Text("Team: \(p.displayTeamID)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if !node.process.signingID.isEmpty {
-                        Text("Signing: \(node.process.signingID)")
+                    if !p.signingID.isEmpty {
+                        Text("Signing: \(p.signingID)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    Text("PID \(node.process.id)")
+                    Text("PID \(p.id)")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
+            .padding(.vertical, 1)
         }
-        .padding(.vertical, 1)
     }
 }
 
@@ -184,38 +163,38 @@ private final class TreeNode {
     init(_ process: SnapshotProcess) { self.process = process }
 }
 
-private func buildFlatNodes(from processes: [SnapshotProcess]) -> [FlatProcessNode] {
+private func buildProcessNodes(from processes: [SnapshotProcess]) -> [ProcessNode] {
     let pids = Set(processes.map { $0.id })
-    var nodes: [pid_t: TreeNode] = [:]
-    for p in processes { nodes[p.id] = TreeNode(p) }
+    var treeNodes: [pid_t: TreeNode] = [:]
+    for p in processes { treeNodes[p.id] = TreeNode(p) }
 
     var roots: [TreeNode] = []
     for p in processes {
-        if pids.contains(p.parentPID), let parent = nodes[p.parentPID] {
-            parent.children.append(nodes[p.id]!)
+        if pids.contains(p.parentPID), let parent = treeNodes[p.parentPID] {
+            parent.children.append(treeNodes[p.id]!)
         } else {
-            roots.append(nodes[p.id]!)
+            roots.append(treeNodes[p.id]!)
         }
     }
 
-    sortChildren(roots)
-    return flatten(roots, depth: 0)
+    sortTreeNodes(&roots)
+    return roots.map(toProcessNode)
 }
 
-private func sortChildren(_ nodes: [TreeNode]) {
-    for node in nodes {
-        node.children.sort {
-            $0.process.name.localizedCaseInsensitiveCompare($1.process.name) == .orderedAscending
-        }
-        sortChildren(node.children)
+private func sortTreeNodes(_ nodes: inout [TreeNode]) {
+    nodes.sort {
+        $0.process.name.localizedCaseInsensitiveCompare($1.process.name) == .orderedAscending
     }
+    for node in nodes { sortTreeNodes(&node.children) }
 }
 
-private func flatten(_ nodes: [TreeNode], depth: Int) -> [FlatProcessNode] {
-    nodes.flatMap { node in
-        [FlatProcessNode(id: node.process.id, process: node.process, depth: depth)]
-        + flatten(node.children, depth: depth + 1)
-    }
+private func toProcessNode(_ tree: TreeNode) -> ProcessNode {
+    let children = tree.children.map(toProcessNode)
+    return ProcessNode(
+        id: "\(tree.process.id)",
+        kind: .process(tree.process),
+        children: children.isEmpty ? nil : children
+    )
 }
 
 // MARK: - Snapshot enumeration
@@ -275,23 +254,27 @@ private func buildSnapshot() async -> ProcessSnapshot {
         }
 
         let appBundles = bundleMap
-            .map { bundlePath, processes -> AppBundle in
+            .map { bundlePath, processes -> ProcessNode in
                 let name = URL(fileURLWithPath: bundlePath)
                     .deletingPathExtension()
                     .lastPathComponent
-                return AppBundle(
+                let children = buildProcessNodes(from: processes)
+                return ProcessNode(
                     id: bundlePath,
-                    name: name,
-                    processes: buildFlatNodes(from: processes)
+                    kind: .bundle(name: name),
+                    children: children.isEmpty ? nil : children
                 )
             }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted { lhs, rhs in
+                guard case .bundle(let a) = lhs.kind, case .bundle(let b) = rhs.kind else { return false }
+                return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+            }
 
         return ProcessSnapshot(
             appBundles: appBundles,
-            userProcesses: buildFlatNodes(from: userProcesses),
-            applePlatform: buildFlatNodes(from: applePlatform),
-            other: buildFlatNodes(from: other)
+            userProcesses: buildProcessNodes(from: userProcesses),
+            applePlatform: buildProcessNodes(from: applePlatform),
+            other: buildProcessNodes(from: other)
         )
     }.value
 }
