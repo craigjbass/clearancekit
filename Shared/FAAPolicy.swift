@@ -36,7 +36,8 @@ public enum PolicyDecision {
 
 // MARK: - FAARule
 
-public struct FAARule {
+public struct FAARule: Identifiable {
+    public let id: UUID
     public let protectedPathPrefix: String
     public let allowedProcessPaths: [String]
     public let allowedTeamIDs: [String]
@@ -46,6 +47,7 @@ public struct FAARule {
     public let allowedAncestorSigningIDs: [String]
 
     public init(
+        id: UUID = UUID(),
         protectedPathPrefix: String,
         allowedProcessPaths: [String] = [],
         allowedTeamIDs: [String] = [],
@@ -54,6 +56,7 @@ public struct FAARule {
         allowedAncestorTeamIDs: [String] = [],
         allowedAncestorSigningIDs: [String] = []
     ) {
+        self.id = id
         self.protectedPathPrefix = protectedPathPrefix
         self.allowedProcessPaths = allowedProcessPaths
         self.allowedTeamIDs = allowedTeamIDs

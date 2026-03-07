@@ -17,6 +17,8 @@ struct ContentView: View {
         TabView {
             EventsWindowView()
                 .tabItem { Label("Events", systemImage: "list.bullet") }
+            PolicyView()
+                .tabItem { Label("Policy", systemImage: "shield") }
             setupTab
                 .tabItem { Label("Setup", systemImage: "gearshape") }
         }
