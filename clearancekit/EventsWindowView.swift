@@ -87,3 +87,97 @@ struct EventsWindowView: View {
         }
     }
 }
+
+// MARK: - EventRow
+
+struct EventRow: View {
+    let event: FolderOpenEvent
+
+    private var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .medium
+        return formatter.string(from: event.timestamp)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
+                    .foregroundColor(event.accessAllowed ? .green : .red)
+                Text(event.path)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1)
+                Spacer()
+                Text(event.accessAllowed ? "Allowed" : "Denied")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(event.accessAllowed ? .green : .red)
+                Text(formattedTime)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Text("PID: \(event.processID)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                if !event.processPath.isEmpty {
+                    Text(event.processPath)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            if !event.teamID.isEmpty || !event.signingID.isEmpty {
+                HStack {
+                    if !event.teamID.isEmpty {
+                        Text("Team: \(event.teamID)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if !event.signingID.isEmpty {
+                        Text("Signing: \(event.signingID)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            if !event.decisionReason.isEmpty {
+                Text(event.decisionReason)
+                    .font(.caption)
+                    .foregroundColor(event.accessAllowed ? .secondary : Color.red.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !event.ancestors.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(event.ancestors.enumerated()), id: \.offset) { index, ancestor in
+                        HStack(spacing: 4) {
+                            Text(String(repeating: "  ", count: index) + "↳")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(ancestor.path)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            if !ancestor.signingID.isEmpty {
+                                Text("(\(ancestor.signingID))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(event.accessAllowed ? Color.green.opacity(0.05) : Color.red.opacity(0.1))
+        )
+    }
+}
