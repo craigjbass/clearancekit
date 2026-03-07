@@ -7,9 +7,16 @@ import SwiftUI
 
 // MARK: - RuleEditView
 
+private enum ProcessPickerTarget: Identifiable {
+    case process
+    case ancestor
+    var id: Self { self }
+}
+
 struct RuleEditView: View {
     private let existingID: UUID?
     @State private var draft: DraftRule
+    @State private var processPicker: ProcessPickerTarget?
     let onSave: (FAARule) -> Void
     let onCancel: () -> Void
 
@@ -38,8 +45,10 @@ struct RuleEditView: View {
                     TextField("/opt/example", text: $draft.protectedPathPrefix)
                         .font(.system(.body, design: .monospaced))
                 }
-                Section("Allowed Process Paths") {
+                Section {
                     StringListEditor(values: $draft.allowedProcessPaths)
+                } header: {
+                    pickerSectionHeader("Allowed Process Paths", target: .process)
                 }
                 Section("Allowed Team IDs") {
                     StringListEditor(values: $draft.allowedTeamIDs)
@@ -47,8 +56,10 @@ struct RuleEditView: View {
                 Section("Allowed Signing IDs") {
                     StringListEditor(values: $draft.allowedSigningIDs)
                 }
-                Section("Allowed Ancestor Process Paths") {
+                Section {
                     StringListEditor(values: $draft.allowedAncestorProcessPaths)
+                } header: {
+                    pickerSectionHeader("Allowed Ancestor Process Paths", target: .ancestor)
                 }
                 Section("Allowed Ancestor Team IDs") {
                     StringListEditor(values: $draft.allowedAncestorTeamIDs)
@@ -73,6 +84,34 @@ struct RuleEditView: View {
             .padding()
         }
         .frame(width: 520, height: 640)
+        .sheet(item: $processPicker) { target in
+            ProcessPickerView { process in
+                switch target {
+                case .process:
+                    if !process.path.isEmpty { draft.allowedProcessPaths.append(process.path) }
+                    if !process.teamID.isEmpty { draft.allowedTeamIDs.append(process.teamID) }
+                    if !process.signingID.isEmpty { draft.allowedSigningIDs.append(process.signingID) }
+                case .ancestor:
+                    if !process.path.isEmpty { draft.allowedAncestorProcessPaths.append(process.path) }
+                    if !process.teamID.isEmpty { draft.allowedAncestorTeamIDs.append(process.teamID) }
+                    if !process.signingID.isEmpty { draft.allowedAncestorSigningIDs.append(process.signingID) }
+                }
+                processPicker = nil
+            } onCancel: {
+                processPicker = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pickerSectionHeader(_ title: String, target: ProcessPickerTarget) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Button("Pick from running processes...") { processPicker = target }
+                .font(.caption)
+                .buttonStyle(.borderless)
+        }
     }
 }
 
