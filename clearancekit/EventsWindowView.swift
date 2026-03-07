@@ -31,7 +31,6 @@ struct EventsWindowView: View {
             Divider()
             eventList
         }
-        .frame(minWidth: 600, minHeight: 400)
         .onAppear {
             xpcClient.fetchHistoricEvents()
         }

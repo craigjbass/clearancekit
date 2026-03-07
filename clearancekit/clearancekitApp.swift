@@ -8,11 +8,8 @@
 import SwiftUI
 import AppKit
 
-
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Stay as accessory (no dock icon) but switch to regular when needed
-        // so ServiceManagement and SystemExtensions APIs work correctly.
         NSApp.setActivationPolicy(.accessory)
     }
 }
@@ -20,19 +17,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct clearancekitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        MenuBarExtra(
-            "App Menu Bar Extra",
-            systemImage: "star",
-            isInserted: $showMenuBarExtra
-        ) {
+        Window("clearancekit", id: "main") {
             ContentView()
         }
 
-        Window("Events", id: "events") {
-            EventsWindowView()
+        MenuBarExtra("clearancekit", systemImage: "star") {
+            Button("Show") {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            Divider()
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 }
