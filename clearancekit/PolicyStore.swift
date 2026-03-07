@@ -18,6 +18,7 @@ final class PolicyStore: ObservableObject {
     @Published private(set) var rules: [FAARule]
 
     private let storageURL: URL
+    private var cancellable: AnyCancellable?
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -32,6 +33,13 @@ final class PolicyStore: ObservableObject {
         } else {
             self.rules = faaPolicy
         }
+
+        cancellable = XPCClient.shared.$isConnected
+            .filter { $0 }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                XPCClient.shared.updatePolicy(rules: self.rules)
+            }
     }
 
     func add(_ rule: FAARule) {
@@ -53,5 +61,6 @@ final class PolicyStore: ObservableObject {
     private func save() {
         guard let data = try? JSONEncoder().encode(rules) else { return }
         try? data.write(to: storageURL, options: .atomic)
+        XPCClient.shared.updatePolicy(rules: rules)
     }
 }

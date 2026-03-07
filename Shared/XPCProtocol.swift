@@ -127,17 +127,29 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
 
 // MARK: - Daemon Service Protocol (exposed by the LaunchDaemon)
 //
-// Called by the GUI app: registerClient / unregisterClient / isMonitoringActive
-// Called by opfilter:    reportEvent / reportMonitoringStatus
+// Called by the GUI app:     registerClient / unregisterClient / isMonitoringActive /
+//                             updatePolicy / fetchCurrentPolicy
+// Called by opfilter:        reportEvent / reportMonitoringStatus / registerFilterClient /
+//                             fetchCurrentPolicy
 
 @objc(DaemonServiceProtocol)
 public protocol DaemonServiceProtocol {
+    // GUI registration
     func registerClient(withReply reply: @escaping (Bool) -> Void)
     func unregisterClient(withReply reply: @escaping (Bool) -> Void)
     func isMonitoringActive(withReply reply: @escaping (Bool) -> Void)
+    func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void)
+
+    // opfilter registration
+    func registerFilterClient(withReply reply: @escaping (Bool) -> Void)
+
+    // Policy management (GUI writes, daemon stores and broadcasts to opfilter)
+    func updatePolicy(_ policyData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func fetchCurrentPolicy(withReply reply: @escaping (NSData) -> Void)
+
+    // Telemetry from opfilter
     func reportEvent(_ event: FolderOpenEvent)
     func reportMonitoringStatus(_ isActive: Bool)
-    func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void)
 }
 
 // MARK: - Daemon Client Protocol (exported by the GUI app for daemon callbacks)
@@ -147,3 +159,19 @@ public protocol DaemonClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
     func monitoringStatusChanged(_ isActive: Bool)
 }
+
+// MARK: - Filter Client Protocol (exported by opfilter for daemon policy-push callbacks)
+
+@objc(FilterClientProtocol)
+public protocol FilterClientProtocol {
+    func policyUpdated(_ policyData: NSData)
+}
+
+// MARK: - Any Client Protocol
+//
+// Combined protocol used as the daemon's remoteObjectInterface so it can call back
+// to both GUI connections (DaemonClientProtocol) and opfilter connections
+// (FilterClientProtocol) through a single interface declaration.
+
+@objc(AnyClientProtocol)
+public protocol AnyClientProtocol: DaemonClientProtocol, FilterClientProtocol {}

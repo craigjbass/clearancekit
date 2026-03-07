@@ -13,8 +13,10 @@ final class DaemonXPCServer: NSObject {
     private var listener: NSXPCListener?
     private let lock = NSLock()
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
+    private var filterClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var monitoringActive = false
     private var recentEvents: [FolderOpenEvent] = []
+    private var currentPolicyData: NSData?
     private let maxHistoryCount = 1000
 
     private override init() {
@@ -36,12 +38,22 @@ final class DaemonXPCServer: NSObject {
         NSLog("DaemonXPCServer: GUI client registered. Active clients: %d", count)
     }
 
-    fileprivate func removeGUIClient(_ connection: NSXPCConnection) {
+    fileprivate func addFilterClient(_ connection: NSXPCConnection) {
+        lock.lock()
+        filterClients[ObjectIdentifier(connection)] = connection
+        let count = filterClients.count
+        lock.unlock()
+        NSLog("DaemonXPCServer: Filter client registered. Active clients: %d", count)
+    }
+
+    fileprivate func removeClient(_ connection: NSXPCConnection) {
         lock.lock()
         guiClients.removeValue(forKey: ObjectIdentifier(connection))
-        let count = guiClients.count
+        filterClients.removeValue(forKey: ObjectIdentifier(connection))
+        let guiCount = guiClients.count
+        let filterCount = filterClients.count
         lock.unlock()
-        NSLog("DaemonXPCServer: GUI client removed. Active clients: %d", count)
+        NSLog("DaemonXPCServer: Client removed. GUI: %d, Filter: %d", guiCount, filterCount)
     }
 
     fileprivate func broadcastEvent(_ event: FolderOpenEvent) {
@@ -76,6 +88,23 @@ final class DaemonXPCServer: NSObject {
     fileprivate func currentMonitoringStatus() -> Bool {
         monitoringActive
     }
+
+    fileprivate func storeAndBroadcastPolicy(_ policyData: NSData) {
+        lock.lock()
+        currentPolicyData = policyData
+        let clients = Array(filterClients.values)
+        lock.unlock()
+        NSLog("DaemonXPCServer: Broadcasting policy to %d filter client(s)", clients.count)
+        for conn in clients {
+            (conn.remoteObjectProxy as? FilterClientProtocol)?.policyUpdated(policyData)
+        }
+    }
+
+    fileprivate func getCurrentPolicy() -> NSData {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentPolicyData ?? NSData()
+    }
 }
 
 // MARK: - NSXPCListenerDelegate
@@ -99,7 +128,10 @@ extension DaemonXPCServer: NSXPCListenerDelegate {
         newConnection.exportedInterface = exportedInterface
         newConnection.exportedObject = ConnectionHandler(server: self, connection: newConnection)
 
-        newConnection.remoteObjectInterface = NSXPCInterface(with: DaemonClientProtocol.self)
+        // remoteObjectInterface must be AnyClientProtocol so the daemon can call back
+        // to both GUI connections (DaemonClientProtocol) and opfilter connections
+        // (FilterClientProtocol) through the same accepted connection.
+        newConnection.remoteObjectInterface = NSXPCInterface(with: AnyClientProtocol.self)
         newConnection.remoteObjectInterface?.setClasses(
             eventClasses,
             for: #selector(DaemonClientProtocol.folderOpened(_:)),
@@ -109,12 +141,12 @@ extension DaemonXPCServer: NSXPCListenerDelegate {
 
         newConnection.invalidationHandler = { [weak self, weak newConnection] in
             guard let conn = newConnection else { return }
-            self?.removeGUIClient(conn)
+            self?.removeClient(conn)
         }
         newConnection.interruptionHandler = { [weak self, weak newConnection] in
             guard let conn = newConnection else { return }
             NSLog("DaemonXPCServer: Connection interrupted")
-            self?.removeGUIClient(conn)
+            self?.removeClient(conn)
         }
 
         newConnection.resume()
@@ -151,7 +183,7 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
             reply(false)
             return
         }
-        server.removeGUIClient(conn)
+        server.removeClient(conn)
         reply(true)
     }
 
@@ -159,7 +191,33 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
         reply(server?.currentMonitoringStatus() ?? false)
     }
 
+    func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
+        reply(server?.getRecentEvents() ?? [])
+    }
+
+    func updatePolicy(_ policyData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server = server else {
+            reply(false)
+            return
+        }
+        server.storeAndBroadcastPolicy(policyData)
+        reply(true)
+    }
+
+    func fetchCurrentPolicy(withReply reply: @escaping (NSData) -> Void) {
+        reply(server?.getCurrentPolicy() ?? NSData())
+    }
+
     // MARK: Called by opfilter
+
+    func registerFilterClient(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server = server else {
+            reply(false)
+            return
+        }
+        server.addFilterClient(conn)
+        reply(true)
+    }
 
     func reportEvent(_ event: FolderOpenEvent) {
         NSLog("DaemonXPCServer: Event from opfilter: %@", event.path)
@@ -169,9 +227,5 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
     func reportMonitoringStatus(_ isActive: Bool) {
         NSLog("DaemonXPCServer: Monitoring status from opfilter: %@", isActive ? "active" : "inactive")
         server?.broadcastMonitoringStatus(isActive)
-    }
-
-    func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
-        reply(server?.getRecentEvents() ?? [])
     }
 }

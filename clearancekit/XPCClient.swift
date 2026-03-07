@@ -145,6 +145,16 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func updatePolicy(rules: [FAARule]) {
+        guard let data = try? JSONEncoder().encode(rules) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: updatePolicy error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+        service.updatePolicy(data as NSData) { success in
+            NSLog("XPCClient: Policy update %@", success ? "succeeded" : "failed")
+        }
+    }
+
     func clearEvents() {
         events.removeAll()
     }

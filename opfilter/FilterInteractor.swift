@@ -32,6 +32,16 @@ enum FilterEvent {
 // MARK: - FilterInteractor
 
 final class FilterInteractor {
+    private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
+
+    init(initialRules: [FAARule] = faaPolicy) {
+        self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
+    }
+
+    func updatePolicy(_ rules: [FAARule]) {
+        rulesStorage.withLock { $0 = rules }
+    }
+
     func handle(_ event: FilterEvent) {
         switch event {
         case .fork(let child):
@@ -46,8 +56,10 @@ final class FilterInteractor {
     }
 
     private func handleOpenFile(_ fileEvent: OpenFileEvent) {
+        let rules = rulesStorage.withLock { $0 }
         let ancestors = ProcessTree.shared.ancestors(ofPID: fileEvent.processID)
         let decision = checkFAAPolicy(
+            rules: rules,
             path: fileEvent.path,
             processPath: fileEvent.processPath,
             teamID: fileEvent.teamID,

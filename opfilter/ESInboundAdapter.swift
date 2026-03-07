@@ -11,15 +11,14 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 final class ESInboundAdapter {
     private let interactor: FilterInteractor
-    private let monitoredPath: String
     private var client: OpaquePointer?
+    private var mutedPrefixes: Set<String> = []
 
-    init(interactor: FilterInteractor, monitoredPath: String) {
+    init(interactor: FilterInteractor) {
         self.interactor = interactor
-        self.monitoredPath = monitoredPath
     }
 
-    func start() {
+    func start(initialRules: [FAARule]) {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
             // If path data is unavailable for an open event, deny at the adapter boundary
@@ -37,11 +36,11 @@ final class ESInboundAdapter {
             exit(EXIT_FAILURE)
         }
 
-        // Invert target-path muting so only muted prefixes generate events,
-        // then mute our monitored path — the kernel now filters out everything
-        // else before it reaches our callback.
+        // Invert target-path muting so only muted prefixes generate events.
+        // We then mute exactly the protected path prefixes from the active policy,
+        // so the kernel delivers events only for files we actually care about.
         es_invert_muting(client!, ES_MUTE_INVERSION_TYPE_TARGET_PATH)
-        es_mute_path(client!, monitoredPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        applyMutedPrefixes(from: initialRules)
 
         let eventTypes: [es_event_type_t] = [
             ES_EVENT_TYPE_AUTH_OPEN,
@@ -54,8 +53,39 @@ final class ESInboundAdapter {
             exit(EXIT_FAILURE)
         }
 
-        logger.log("ESInboundAdapter started, monitoring: \(self.monitoredPath)")
+        logger.log("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
         XPCClient.shared.reportMonitoringStatus(true)
+    }
+
+    /// Applies an updated policy: diffs the protected path prefixes, unmutes removed
+    /// ones, mutes added ones, clears the ES authorization cache, and updates the
+    /// interactor's rule set.
+    func updatePolicy(_ rules: [FAARule]) {
+        guard let client else { return }
+
+        let newPrefixes = Set(rules.map { $0.protectedPathPrefix })
+        for prefix in mutedPrefixes.subtracting(newPrefixes) {
+            es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+            logger.log("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
+        }
+        for prefix in newPrefixes.subtracting(mutedPrefixes) {
+            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+            logger.log("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
+        }
+        mutedPrefixes = newPrefixes
+
+        es_clear_cache(client)
+        interactor.updatePolicy(rules)
+        logger.log("ESInboundAdapter: policy updated — \(rules.count) rule(s), cache cleared")
+    }
+
+    private func applyMutedPrefixes(from rules: [FAARule]) {
+        guard let client else { return }
+        let prefixes = Set(rules.map { $0.protectedPathPrefix })
+        for prefix in prefixes {
+            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        }
+        mutedPrefixes = prefixes
     }
 
     private static func filterEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FilterEvent {

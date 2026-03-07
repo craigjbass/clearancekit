@@ -84,13 +84,14 @@ public let faaPolicy: [FAARule] = [
 // MARK: - Policy evaluation
 
 public func checkFAAPolicy(
+    rules: [FAARule],
     path: String,
     processPath: String,
     teamID: String,
     signingID: String,
     ancestors: [AncestorInfo] = []
 ) -> PolicyDecision {
-    for rule in faaPolicy {
+    for rule in rules {
         guard path.hasPrefix(rule.protectedPathPrefix) else { continue }
 
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {

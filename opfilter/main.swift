@@ -7,13 +7,15 @@
 
 import Foundation
 
-private let monitoredPath = "/opt/clearancekit"
-
 XPCClient.shared.start()
 ProcessTree.shared.buildInitialTree()
 
-let interactor = FilterInteractor()
-let adapter = ESInboundAdapter(interactor: interactor, monitoredPath: monitoredPath)
-adapter.start()
+let interactor = FilterInteractor(initialRules: faaPolicy)
+let adapter = ESInboundAdapter(interactor: interactor)
+adapter.start(initialRules: faaPolicy)
+
+XPCClient.shared.onPolicyUpdate = { rules in
+    adapter.updatePolicy(rules)
+}
 
 dispatchMain()
