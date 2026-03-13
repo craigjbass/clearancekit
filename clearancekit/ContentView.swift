@@ -106,6 +106,10 @@ struct ContentView: View {
             Text(statusText)
                 .font(.headline)
             Spacer()
+            Button("Resync") {
+                xpcClient.requestResync()
+            }
+            .disabled(!xpcClient.isConnected)
         }
         .padding()
     }

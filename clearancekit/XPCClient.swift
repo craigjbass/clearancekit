@@ -84,7 +84,7 @@ final class XPCClient: NSObject, ObservableObject {
                     NSLog("XPCClient: Successfully registered with daemon")
                     self?.isConnected = true
                     self?.stopReconnectTimer()
-                    self?.checkMonitoringStatus()
+                    self?.requestResync()
                 } else {
                     NSLog("XPCClient: Failed to register with daemon")
                     self?.handleDisconnection()
@@ -132,17 +132,12 @@ final class XPCClient: NSObject, ObservableObject {
         reconnectTimer = nil
     }
 
-    private func checkMonitoringStatus() {
-        guard let conn = connection,
-              let service = conn.remoteObjectProxy as? DaemonServiceProtocol else {
-            return
-        }
+    func requestResync() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: requestResync error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
 
-        service.isMonitoringActive { [weak self] isActive in
-            Task { @MainActor in
-                self?.isMonitoringActive = isActive
-            }
-        }
+        service.requestResync { }
     }
 
     func updatePolicy(rules: [FAARule]) {

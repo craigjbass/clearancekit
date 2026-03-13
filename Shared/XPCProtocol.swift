@@ -155,6 +155,9 @@ public protocol DaemonServiceProtocol {
     // Telemetry from opfilter
     func reportEvent(_ event: FolderOpenEvent)
     func reportMonitoringStatus(_ isActive: Bool)
+
+    // GUI requests a full status resync from all connected filter clients
+    func requestResync(withReply reply: @escaping () -> Void)
 }
 
 // MARK: - Daemon Client Protocol (exported by the GUI app for daemon callbacks)
@@ -170,6 +173,7 @@ public protocol DaemonClientProtocol {
 @objc(FilterClientProtocol)
 public protocol FilterClientProtocol {
     func policyUpdated(_ policyData: NSData)
+    func resyncStatus()
 }
 
 // MARK: - Any Client Protocol

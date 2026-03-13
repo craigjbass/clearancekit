@@ -13,12 +13,15 @@ final class XPCClient: NSObject {
     var onPolicyUpdate: (([FAARule]) -> Void)?
 
     private var connection: NSXPCConnection?
+    private let reconnectInterval: TimeInterval = 5.0
 
     private override init() {
         super.init()
     }
 
     func start() {
+        guard connection == nil else { return }
+
         let conn = NSXPCConnection(machServiceName: XPCConstants.daemonServiceName)
 
         let remoteInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
@@ -34,16 +37,18 @@ final class XPCClient: NSObject {
         conn.exportedInterface = NSXPCInterface(with: FilterClientProtocol.self)
         conn.exportedObject = self
 
-        conn.invalidationHandler = {
+        conn.invalidationHandler = { [weak self] in
             NSLog("XPCClient (opfilter): Connection to daemon invalidated")
+            self?.handleDisconnection()
         }
-        conn.interruptionHandler = {
+        conn.interruptionHandler = { [weak self] in
             NSLog("XPCClient (opfilter): Connection to daemon interrupted")
+            self?.handleDisconnection()
         }
 
         conn.resume()
         connection = conn
-        NSLog("XPCClient (opfilter): Connected to daemon at %@", XPCConstants.daemonServiceName)
+        NSLog("XPCClient (opfilter): Connecting to daemon at %@", XPCConstants.daemonServiceName)
 
         registerAndFetchPolicy()
     }
@@ -58,6 +63,19 @@ final class XPCClient: NSObject {
         proxy.reportMonitoringStatus(isActive)
     }
 
+    private func handleDisconnection() {
+        connection?.invalidate()
+        connection = nil
+        NSLog("XPCClient (opfilter): Connection lost, scheduling reconnect")
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectInterval) { [weak self] in
+            self?.start()
+        }
+    }
+
     private func registerAndFetchPolicy() {
         guard let proxy = connection?.remoteObjectProxyWithErrorHandler({
             NSLog("XPCClient (opfilter): registerFilterClient error: %@", $0.localizedDescription)
@@ -70,7 +88,7 @@ final class XPCClient: NSObject {
             }
             self?.fetchCurrentPolicy()
         }
-    }
+    } 
 
     private func fetchCurrentPolicy() {
         guard let proxy = connection?.remoteObjectProxyWithErrorHandler({
@@ -98,5 +116,10 @@ extension XPCClient: FilterClientProtocol {
         }
         NSLog("XPCClient (opfilter): Policy updated — %d rule(s)", rules.count)
         onPolicyUpdate?(rules)
+    }
+
+    func resyncStatus() {
+        NSLog("XPCClient (opfilter): Resync requested — reporting monitoring status")
+        reportMonitoringStatus(true)
     }
 }

@@ -105,6 +105,16 @@ final class DaemonXPCServer: NSObject {
         defer { lock.unlock() }
         return currentPolicyData ?? NSData()
     }
+
+    fileprivate func requestResyncFromFilterClients() {
+        lock.lock()
+        let clients = Array(filterClients.values)
+        lock.unlock()
+        NSLog("DaemonXPCServer: Requesting resync from %d filter client(s)", clients.count)
+        for conn in clients {
+            (conn.remoteObjectProxy as? FilterClientProtocol)?.resyncStatus()
+        }
+    }
 }
 
 // MARK: - NSXPCListenerDelegate
@@ -227,5 +237,10 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
     func reportMonitoringStatus(_ isActive: Bool) {
         NSLog("DaemonXPCServer: Monitoring status from opfilter: %@", isActive ? "active" : "inactive")
         server?.broadcastMonitoringStatus(isActive)
+    }
+
+    func requestResync(withReply reply: @escaping () -> Void) {
+        server?.requestResyncFromFilterClients()
+        reply()
     }
 }
