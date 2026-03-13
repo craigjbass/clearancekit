@@ -4,7 +4,6 @@
 //
 
 import SwiftUI
-import Security
 
 // MARK: - RunningProcess
 
@@ -17,12 +16,12 @@ struct RunningProcess: Identifiable {
 
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
 
-    init(path: String, teamID: String, signingID: String, uid: uid_t) {
+    init(_ info: RunningProcessInfo) {
         self.id = UUID()
-        self.path = path
-        self.teamID = teamID
-        self.signingID = signingID
-        self.uid = uid
+        self.path = info.path
+        self.teamID = info.teamID
+        self.signingID = info.signingID
+        self.uid = info.uid
     }
 }
 
@@ -103,68 +102,23 @@ struct ProcessPickerView: View {
         }
         .frame(width: 560, height: 500)
         .task {
-            processes = await enumerateRunningProcesses()
-            isLoading = false
-        }
-    }
-
-    private func enumerateRunningProcesses() async -> [RunningProcess] {
-        await Task.detached(priority: .userInitiated) {
             let currentUID = getuid()
-
-            let estimated = proc_listallpids(nil, 0)
-            guard estimated > 0 else { return [] }
-            var pids = [pid_t](repeating: 0, count: Int(estimated) + 64)
-            let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
-            guard count > 0 else { return [] }
-
+            let raw = await XPCClient.shared.fetchProcessList()
             var seen: Set<String> = []
             var result: [RunningProcess] = []
-
-            for pid in pids.prefix(count) where pid > 0 {
-                var bsdInfo = proc_bsdinfo()
-                guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { continue }
-                let uid = bsdInfo.pbi_uid
-
-                var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-                guard proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN)) > 0 else { continue }
-                let path = String(cString: pathBuffer)
-                guard !path.isEmpty else { continue }
-
-                let (teamID, signingID) = codeSigningIDs(forPID: pid)
-
-                let key = "\(path)|\(teamID)|\(signingID)"
+            for info in raw {
+                let key = "\(info.path)|\(info.teamID)|\(info.signingID)"
                 guard !seen.contains(key) else { continue }
                 seen.insert(key)
-
-                result.append(RunningProcess(path: path, teamID: teamID, signingID: signingID, uid: uid))
+                result.append(RunningProcess(info))
             }
-
-            return result.sorted {
+            processes = result.sorted {
                 let aIsOwn = $0.uid == currentUID
                 let bIsOwn = $1.uid == currentUID
                 if aIsOwn != bIsOwn { return aIsOwn }
                 return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-        }.value
+            isLoading = false
+        }
     }
-
-}
-
-// MARK: - Code signing helper
-
-nonisolated func codeSigningIDs(forPID pid: pid_t) -> (teamID: String, signingID: String) {
-    let attrs = [kSecGuestAttributePid: NSNumber(value: pid)] as CFDictionary
-    var code: SecCode?
-    guard SecCodeCopyGuestWithAttributes(nil, attrs, SecCSFlags(rawValue: 0), &code) == errSecSuccess,
-          let code else { return ("", "") }
-    var staticCode: SecStaticCode?
-    guard SecCodeCopyStaticCode(code, SecCSFlags(rawValue: 0), &staticCode) == errSecSuccess,
-          let staticCode else { return ("", "") }
-    var dict: CFDictionary?
-    guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: 2), &dict) == errSecSuccess,
-          let info = dict as? [CFString: Any] else { return ("", "") }
-    let teamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
-    let signingID = info[kSecCodeInfoIdentifier] as? String ?? ""
-    return (teamID, signingID)
 }

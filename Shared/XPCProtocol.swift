@@ -133,6 +133,50 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     }
 }
 
+// MARK: - RunningProcessInfo
+
+@objc(RunningProcessInfo)
+public class RunningProcessInfo: NSObject, NSSecureCoding {
+    public static var supportsSecureCoding: Bool { true }
+
+    @objc public let pid: Int32
+    @objc public let parentPID: Int32
+    @objc public let path: String
+    @objc public let teamID: String
+    @objc public let signingID: String
+    @objc public let uid: UInt32
+
+    public init(pid: Int32, parentPID: Int32, path: String, teamID: String, signingID: String, uid: UInt32) {
+        self.pid = pid
+        self.parentPID = parentPID
+        self.path = path
+        self.teamID = teamID
+        self.signingID = signingID
+        self.uid = uid
+        super.init()
+    }
+
+    public required init?(coder: NSCoder) {
+        guard let path = coder.decodeObject(of: NSString.self, forKey: "path") as String? else { return nil }
+        self.pid = coder.decodeInt32(forKey: "pid")
+        self.parentPID = coder.decodeInt32(forKey: "parentPID")
+        self.path = path
+        self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
+        self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
+        self.uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
+        super.init()
+    }
+
+    public func encode(with coder: NSCoder) {
+        coder.encode(pid, forKey: "pid")
+        coder.encode(parentPID, forKey: "parentPID")
+        coder.encode(path as NSString, forKey: "path")
+        coder.encode(teamID as NSString, forKey: "teamID")
+        coder.encode(signingID as NSString, forKey: "signingID")
+        coder.encode(Int32(bitPattern: uid), forKey: "uid")
+    }
+}
+
 // MARK: - Daemon Service Protocol (exposed by the LaunchDaemon)
 //
 // Called by the GUI app:  registerClient / unregisterClient / isMonitoringActive /
@@ -163,6 +207,10 @@ public protocol DaemonServiceProtocol {
     // GUI requests a full status resync. Daemon asks filter clients to re-report
     // monitoring status and pushes the current user-rule snapshot back to the caller.
     func requestResync(withReply reply: @escaping () -> Void)
+
+    // Returns a snapshot of all running processes with code-signing information.
+    // Runs in the daemon (root, unsandboxed) to bypass App Sandbox restrictions.
+    func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
 }
 
 // MARK: - Daemon Client Protocol (exported by the GUI app for daemon callbacks)

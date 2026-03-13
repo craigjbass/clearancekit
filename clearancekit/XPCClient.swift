@@ -39,6 +39,13 @@ final class XPCClient: NSObject, ObservableObject {
             argumentIndex: 0,
             ofReply: true
         )
+        let processInfoClasses = NSSet(array: [NSArray.self, RunningProcessInfo.self]) as! Set<AnyHashable>
+        remoteInterface.setClasses(
+            processInfoClasses,
+            for: #selector(DaemonServiceProtocol.fetchProcessList(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         conn.remoteObjectInterface = remoteInterface
 
         conn.exportedInterface = NSXPCInterface(with: DaemonClientProtocol.self)
@@ -168,6 +175,23 @@ final class XPCClient: NSObject, ObservableObject {
         }) as? DaemonServiceProtocol else { return }
         service.removeRule(ruleID as NSUUID) { success in
             if !success { NSLog("XPCClient: removeRule rejected by daemon") }
+        }
+    }
+
+    // MARK: - Process list
+
+    func fetchProcessList() async -> [RunningProcessInfo] {
+        await withCheckedContinuation { continuation in
+            guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+                NSLog("XPCClient: fetchProcessList error: %@", error.localizedDescription)
+                continuation.resume(returning: [])
+            }) as? DaemonServiceProtocol else {
+                continuation.resume(returning: [])
+                return
+            }
+            service.fetchProcessList { processes in
+                continuation.resume(returning: processes)
+            }
         }
     }
 

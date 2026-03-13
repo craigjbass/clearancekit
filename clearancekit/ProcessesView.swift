@@ -4,7 +4,6 @@
 //
 
 import SwiftUI
-import Security
 
 // MARK: - Data models
 
@@ -23,6 +22,15 @@ private struct SnapshotProcess: Identifiable {
         let parts = path.components(separatedBy: "/")
         guard let appIdx = parts.firstIndex(where: { $0.hasSuffix(".app") }) else { return nil }
         return "/" + parts[1...appIdx].joined(separator: "/")
+    }
+
+    init(_ info: RunningProcessInfo) {
+        self.id = info.pid
+        self.parentPID = info.parentPID
+        self.path = info.path
+        self.teamID = info.teamID
+        self.signingID = info.signingID
+        self.uid = info.uid
     }
 }
 
@@ -107,7 +115,8 @@ struct ProcessesView: View {
 
     private func load() async {
         isLoading = true
-        snapshot = await buildSnapshot()
+        let rawProcesses = await XPCClient.shared.fetchProcessList()
+        snapshot = buildSnapshot(from: rawProcesses.map(SnapshotProcess.init))
         isLoading = false
     }
 }
@@ -197,84 +206,49 @@ private func toProcessNode(_ tree: TreeNode) -> ProcessNode {
     )
 }
 
-// MARK: - Snapshot enumeration
+// MARK: - Snapshot building
 
-private func buildSnapshot() async -> ProcessSnapshot {
-    await Task.detached(priority: .userInitiated) {
-        let currentUID = getuid()
+private func buildSnapshot(from processes: [SnapshotProcess]) -> ProcessSnapshot {
+    let currentUID = getuid()
 
-        let estimated = proc_listallpids(nil, 0)
-        guard estimated > 0 else { return .empty }
-        var pids = [pid_t](repeating: 0, count: Int(estimated) + 64)
-        let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
-        guard count > 0 else { return .empty }
+    var bundleMap: [String: [SnapshotProcess]] = [:]
+    var userProcesses: [SnapshotProcess] = []
+    var applePlatform: [SnapshotProcess] = []
+    var other: [SnapshotProcess] = []
 
-        var all: [pid_t: SnapshotProcess] = [:]
-        all.reserveCapacity(count)
+    for process in processes {
+        if let bundlePath = process.appBundlePath {
+            bundleMap[bundlePath, default: []].append(process)
+        } else if process.uid == currentUID {
+            userProcesses.append(process)
+        } else if process.teamID.isEmpty {
+            applePlatform.append(process)
+        } else {
+            other.append(process)
+        }
+    }
 
-        for pid in pids.prefix(count) where pid > 0 {
-            var bsdInfo = proc_bsdinfo()
-            guard proc_pidinfo(
-                pid, PROC_PIDTBSDINFO, 0,
-                &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)
-            ) > 0 else { continue }
-
-            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-            guard proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN)) > 0 else { continue }
-            let path = String(cString: pathBuffer)
-            guard !path.isEmpty else { continue }
-
-            let (teamID, signingID) = codeSigningIDs(forPID: pid)
-
-            all[pid] = SnapshotProcess(
-                id: pid,
-                parentPID: pid_t(bsdInfo.pbi_ppid),
-                path: path,
-                teamID: teamID,
-                signingID: signingID,
-                uid: bsdInfo.pbi_uid
+    let appBundles = bundleMap
+        .map { bundlePath, procs -> ProcessNode in
+            let name = URL(fileURLWithPath: bundlePath)
+                .deletingPathExtension()
+                .lastPathComponent
+            let children = buildProcessNodes(from: procs)
+            return ProcessNode(
+                id: bundlePath,
+                kind: .bundle(name: name),
+                children: children.isEmpty ? nil : children
             )
         }
-
-        var bundleMap: [String: [SnapshotProcess]] = [:]
-        var userProcesses: [SnapshotProcess] = []
-        var applePlatform: [SnapshotProcess] = []
-        var other: [SnapshotProcess] = []
-
-        for process in all.values {
-            if let bundlePath = process.appBundlePath {
-                bundleMap[bundlePath, default: []].append(process)
-            } else if process.uid == currentUID {
-                userProcesses.append(process)
-            } else if process.teamID.isEmpty {
-                applePlatform.append(process)
-            } else {
-                other.append(process)
-            }
+        .sorted { lhs, rhs in
+            guard case .bundle(let a) = lhs.kind, case .bundle(let b) = rhs.kind else { return false }
+            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
         }
 
-        let appBundles = bundleMap
-            .map { bundlePath, processes -> ProcessNode in
-                let name = URL(fileURLWithPath: bundlePath)
-                    .deletingPathExtension()
-                    .lastPathComponent
-                let children = buildProcessNodes(from: processes)
-                return ProcessNode(
-                    id: bundlePath,
-                    kind: .bundle(name: name),
-                    children: children.isEmpty ? nil : children
-                )
-            }
-            .sorted { lhs, rhs in
-                guard case .bundle(let a) = lhs.kind, case .bundle(let b) = rhs.kind else { return false }
-                return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
-            }
-
-        return ProcessSnapshot(
-            appBundles: appBundles,
-            userProcesses: buildProcessNodes(from: userProcesses),
-            applePlatform: buildProcessNodes(from: applePlatform),
-            other: buildProcessNodes(from: other)
-        )
-    }.value
+    return ProcessSnapshot(
+        appBundles: appBundles,
+        userProcesses: buildProcessNodes(from: userProcesses),
+        applePlatform: buildProcessNodes(from: applePlatform),
+        other: buildProcessNodes(from: other)
+    )
 }

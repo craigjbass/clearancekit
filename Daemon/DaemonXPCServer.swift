@@ -239,6 +239,13 @@ extension DaemonXPCServer: NSXPCListenerDelegate {
             argumentIndex: 0,
             ofReply: true
         )
+        let processInfoClasses = NSSet(array: [NSArray.self, RunningProcessInfo.self]) as! Set<AnyHashable>
+        exportedInterface.setClasses(
+            processInfoClasses,
+            for: #selector(DaemonServiceProtocol.fetchProcessList(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         newConnection.exportedInterface = exportedInterface
         newConnection.exportedObject = ConnectionHandler(server: self, connection: newConnection)
 
@@ -335,6 +342,12 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
         guard let server, let conn = connection else { reply(); return }
         server.requestResyncFromFilterClients(requestingConnection: conn)
         reply()
+    }
+
+    func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            reply(ProcessEnumerator.enumerateAll())
+        }
     }
 
     // MARK: Called by opfilter
