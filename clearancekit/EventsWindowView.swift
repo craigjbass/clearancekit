@@ -149,38 +149,34 @@ struct EventRow: View {
 
     @ViewBuilder
     private var processSection: some View {
-        HStack(alignment: .top, spacing: 4) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text("PID: \(event.processID)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    if !event.processPath.isEmpty {
-                        Text(event.processPath)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                HStack {
-                    Text("Team: \(event.teamID.isEmpty ? "Apple" : event.teamID)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    if !event.signingID.isEmpty {
-                        Text("Signing: \(event.signingID)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
+        HStack {
+            Text("PID: \(event.processID)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if !event.processPath.isEmpty {
+                Text(event.processPath)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
-            if !event.accessAllowed, let ruleID = event.matchedRuleID {
-                Spacer()
-                allowButton(itemKey: "process") {
-                    PolicyStore.shared.allowProcess(
-                        teamID: event.teamID,
-                        signingID: event.signingID,
-                        inRule: ruleID
-                    )
+        }
+        HStack {
+            Text("Team: \(event.teamID.isEmpty ? "Apple" : event.teamID)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if !event.signingID.isEmpty {
+                if !event.accessAllowed, let ruleID = event.matchedRuleID {
+                    allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
+                        PolicyStore.shared.allowProcess(
+                            teamID: event.teamID,
+                            signingID: event.signingID,
+                            inRule: ruleID
+                        )
+                    }
+                } else {
+                    Text("Signing: \(event.signingID)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -204,21 +200,22 @@ struct EventRow: View {
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             if !ancestor.signingID.isEmpty {
-                                Text("Signing: \(ancestor.signingID)")
+                                if !event.accessAllowed, let ruleID = event.matchedRuleID {
+                                    allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
+                                        PolicyStore.shared.allowAncestor(
+                                            teamID: ancestor.teamID,
+                                            signingID: ancestor.signingID,
+                                            inRule: ruleID
+                                        )
+                                    }
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
+                                } else {
+                                    Text("Signing: \(ancestor.signingID)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
                             }
-                        }
-                    }
-                    if !event.accessAllowed, let ruleID = event.matchedRuleID {
-                        Spacer()
-                        allowButton(itemKey: "ancestor-\(index)") {
-                            PolicyStore.shared.allowAncestor(
-                                teamID: ancestor.teamID,
-                                signingID: ancestor.signingID,
-                                inRule: ruleID
-                            )
                         }
                     }
                 }
@@ -227,18 +224,19 @@ struct EventRow: View {
     }
 
     @ViewBuilder
-    private func allowButton(itemKey: String, action: @escaping () -> Void) -> some View {
+    private func allowButton(label: String, itemKey: String, action: @escaping () -> Void) -> some View {
         if allowedItems.contains(itemKey) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.caption)
+            Text(label)
+                .strikethrough()
+                .foregroundColor(.secondary)
         } else {
             Button {
                 action()
                 allowedItems.insert(itemKey)
             } label: {
-                Label("Allow", systemImage: "plus.circle")
-                    .font(.caption)
+                Text(label)
+                    .underline()
+                    .foregroundColor(.red.opacity(0.8))
             }
             .buttonStyle(.borderless)
         }
