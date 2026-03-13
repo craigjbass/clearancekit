@@ -62,6 +62,14 @@ struct PolicyView: View {
                         }
                     }
                 }
+                if !policyStore.managedRules.isEmpty {
+                    Section("Managed Profile Rules") {
+                        ForEach(policyStore.managedRules) { rule in
+                            RuleRow(rule: rule, isEditable: false) { } onDelete: { }
+                                .padding(.vertical, 4)
+                        }
+                    }
+                }
                 if !policyStore.userRules.isEmpty {
                     Section("User Rules") {
                         ForEach(policyStore.userRules) { rule in

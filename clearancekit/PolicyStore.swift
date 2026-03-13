@@ -19,6 +19,10 @@ final class PolicyStore: ObservableObject {
     /// cannot be modified through the GUI.
     @Published private(set) var baselineRules: [FAARule] = faaPolicy
 
+    /// Rules delivered via MDM or a .mobileconfig profile. Read-only in the GUI;
+    /// the authoritative snapshot is pushed by the daemon via `receivedManagedRules(_:)`.
+    @Published private(set) var managedRules: [FAARule] = []
+
     /// User-configurable rules managed by the daemon. Mutations are sent over XPC;
     /// the authoritative snapshot is pushed back via `receivedUserRules(_:)`.
     @Published private(set) var userRules: [FAARule] = []
@@ -26,6 +30,10 @@ final class PolicyStore: ObservableObject {
     private init() {}
 
     // MARK: - Daemon push
+
+    func receivedManagedRules(_ rules: [FAARule]) {
+        managedRules = rules
+    }
 
     func receivedUserRules(_ rules: [FAARule]) {
         userRules = rules

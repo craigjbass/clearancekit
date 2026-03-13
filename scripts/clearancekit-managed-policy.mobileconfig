@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadDisplayName</key>
+    <string>clearancekit Managed Policy</string>
+    <key>PayloadDescription</key>
+    <string>Restricts access to /opt/ur-mum to processes signed by team 37KMK6XFTT.</string>
+    <key>PayloadIdentifier</key>
+    <string>uk.craigbass.clearancekit.managed-policy</string>
+    <key>PayloadUUID</key>
+    <string>4F8A2C1E-3B7D-4E90-A5F6-8C2D1B9E0347</string>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+    <key>PayloadOrganization</key>
+    <string>Craig J. Bass</string>
+    <key>PayloadScope</key>
+    <string>System</string>
+
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <!--
+                PayloadType must be com.apple.ManagedClient.preferences for
+                cfprefsd to write the values to
+                /Library/Managed Preferences/uk.craigbass.clearancekit.plist,
+                which is where CFPreferences(kCFPreferencesAnyUser,
+                kCFPreferencesAnyHost) reads from.
+            -->
+            <key>PayloadType</key>
+            <string>com.apple.ManagedClient.preferences</string>
+            <key>PayloadDisplayName</key>
+            <string>clearancekit FAA Policy</string>
+            <key>PayloadIdentifier</key>
+            <string>uk.craigbass.clearancekit.managed-policy.preferences</string>
+            <key>PayloadUUID</key>
+            <string>7D3F1A8B-C2E4-4690-B8A1-5E9F2C4D7038</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+
+            <key>PayloadContent</key>
+            <dict>
+                <key>uk.craigbass.clearancekit</key>
+                <dict>
+                    <!--
+                        "Forced" means the value is locked — the user / app
+                        cannot override it. Use "Set-Once" if you want the
+                        app to be able to change the value after first boot.
+                    -->
+                    <key>Forced</key>
+                    <array>
+                        <dict>
+                            <key>mcx_preference_settings</key>
+                            <dict>
+                                <key>FAAPolicy</key>
+                                <array>
+                                    <dict>
+                                        <key>ID</key>
+                                        <string>B6E2F9A1-4C3D-5E8F-A071-2B94C6D3E507</string>
+                                        <key>ProtectedPathPrefix</key>
+                                        <string>/opt/ur-mum</string>
+                                        <key>AllowedTeamIDs</key>
+                                        <array>
+                                            <string>37KMK6XFTT</string>
+                                        </array>
+                                    </dict>
+                                </array>
+                            </dict>
+                        </dict>
+                    </array>
+                </dict>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>

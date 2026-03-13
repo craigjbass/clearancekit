@@ -109,7 +109,15 @@ struct EventRow: View {
         return Self.baselineRuleIDs.contains(ruleID)
     }
 
-    private var canAllowDeny: Bool { !event.accessAllowed && !isBaselineEvent }
+    private var isManagedEvent: Bool {
+        guard let ruleID = event.matchedRuleID else { return false }
+        return PolicyStore.shared.managedRules.contains { $0.id == ruleID }
+    }
+
+    /// True for any event matched by a read-only policy tier (baseline or managed).
+    private var isReadOnlyEvent: Bool { isBaselineEvent || isManagedEvent }
+
+    private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
 
     private var formattedTime: String {
         let formatter = DateFormatter()
@@ -119,16 +127,16 @@ struct EventRow: View {
     }
 
     var body: some View {
-        if isBaselineEvent {
-            baselineRow
+        if isReadOnlyEvent {
+            compactRow
         } else {
             fullRow
         }
     }
 
-    // MARK: - Baseline (compact + expandable)
+    // MARK: - Compact read-only row (baseline + managed, expandable)
 
-    private var baselineRow: some View {
+    private var compactRow: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
@@ -139,7 +147,7 @@ struct EventRow: View {
                     Text(event.path)
                         .font(.system(.caption, design: .monospaced))
                         .lineLimit(1)
-                    Text("baseline")
+                    Text(isBaselineEvent ? "baseline" : "managed")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)

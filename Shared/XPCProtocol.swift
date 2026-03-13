@@ -219,8 +219,9 @@ public protocol DaemonServiceProtocol {
 public protocol DaemonClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
     func monitoringStatusChanged(_ isActive: Bool)
-    // Daemon pushes the authoritative user-rule snapshot whenever it changes,
-    // and once on connect (via requestResync).
+    // Daemon pushes the authoritative rule snapshots on connect (via requestResync)
+    // and whenever the respective tier changes.
+    func managedRulesUpdated(_ rulesData: NSData)
     func userRulesUpdated(_ rulesData: NSData)
 }
 

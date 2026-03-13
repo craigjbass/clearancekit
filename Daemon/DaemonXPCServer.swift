@@ -17,6 +17,7 @@ final class DaemonXPCServer: NSObject {
     private var filterClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var monitoringActive = false
     private var recentEvents: [FolderOpenEvent] = []
+    private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
     private let maxHistoryCount = 1000
 
@@ -26,6 +27,9 @@ final class DaemonXPCServer: NSObject {
 
     func start() {
         userRules = loadUserRulesFromDisk()
+        managedRules = ManagedPolicyLoader.load()
+        // Both rule tiers must be loaded before the listener resumes so that
+        // mergedPolicyData() is complete the moment the first filter client connects.
         listener = NSXPCListener(machServiceName: XPCConstants.daemonServiceName)
         listener?.delegate = self
         listener?.resume()
@@ -134,6 +138,15 @@ final class DaemonXPCServer: NSObject {
     // MARK: - Resync
 
     fileprivate func requestResyncFromFilterClients(requestingConnection: NSXPCConnection) {
+        // Reload managed rules — picks up any MDM profile changes since last resync.
+        let reloaded = ManagedPolicyLoader.loadWithSync()
+        lock.lock()
+        managedRules = reloaded
+        lock.unlock()
+
+        // Re-broadcast merged policy (now includes fresh managed rules) to filter clients.
+        broadcastMergedPolicyToFilterClients()
+
         lock.lock()
         let clients = Array(filterClients.values)
         lock.unlock()
@@ -141,21 +154,40 @@ final class DaemonXPCServer: NSObject {
         for conn in clients {
             (conn.remoteObjectProxy as? FilterClientProtocol)?.resyncStatus()
         }
-        pushUserRulesToGUIClient(requestingConnection)
+
+        pushPolicySnapshotToGUIClient(requestingConnection)
     }
 
     // MARK: - Policy helpers
 
     fileprivate func mergedPolicyData() -> NSData {
-        // Baseline rules (faaPolicy) are evaluated first and cannot be displaced by user rules.
-        guard let data = try? JSONEncoder().encode(faaPolicy + userRules) else {
+        // Evaluation order: baseline → managed → user. First match wins, so higher
+        // tiers always take precedence for any overlapping path prefix.
+        lock.lock()
+        let managed = managedRules
+        let user = userRules
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(faaPolicy + managed + user) else {
             fatalError("DaemonXPCServer: Failed to encode merged policy — this is a bug")
         }
         return data as NSData
     }
 
+    private func encodedManagedRules() -> NSData {
+        lock.lock()
+        let rules = managedRules
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(rules) else {
+            fatalError("DaemonXPCServer: Failed to encode managed rules — this is a bug")
+        }
+        return data as NSData
+    }
+
     private func encodedUserRules() -> NSData {
-        guard let data = try? JSONEncoder().encode(userRules) else {
+        lock.lock()
+        let rules = userRules
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(rules) else {
             fatalError("DaemonXPCServer: Failed to encode user rules — this is a bug")
         }
         return data as NSData
@@ -182,8 +214,13 @@ final class DaemonXPCServer: NSObject {
         }
     }
 
-    fileprivate func pushUserRulesToGUIClient(_ connection: NSXPCConnection) {
-        (connection.remoteObjectProxy as? DaemonClientProtocol)?.userRulesUpdated(encodedUserRules())
+    /// Pushes the managed- and user-rule snapshots to a single GUI client.
+    /// Called on connect (via requestResync) so the GUI always has a complete
+    /// picture of both editable tiers immediately after connecting.
+    fileprivate func pushPolicySnapshotToGUIClient(_ connection: NSXPCConnection) {
+        let proxy = connection.remoteObjectProxy as? DaemonClientProtocol
+        proxy?.managedRulesUpdated(encodedManagedRules())
+        proxy?.userRulesUpdated(encodedUserRules())
     }
 
     // MARK: - Disk I/O

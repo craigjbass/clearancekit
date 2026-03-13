@@ -237,6 +237,15 @@ extension XPCClient: DaemonClientProtocol {
         }
     }
 
+    nonisolated func managedRulesUpdated(_ rulesData: NSData) {
+        guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
+            fatalError("XPCClient: Failed to decode managed rules from daemon — binary version mismatch")
+        }
+        Task { @MainActor in
+            PolicyStore.shared.receivedManagedRules(rules)
+        }
+    }
+
     nonisolated func userRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
             fatalError("XPCClient: Failed to decode user rules from daemon — binary version mismatch")
