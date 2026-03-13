@@ -16,13 +16,17 @@ enum EventFilter: String, CaseIterable {
 struct EventsWindowView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @State private var filter: EventFilter = .all
+    @State private var showDefaultAllows = false
 
     private var filteredEvents: [FolderOpenEvent] {
+        let base: [FolderOpenEvent]
         switch filter {
-        case .all:   return xpcClient.events
-        case .allow: return xpcClient.events.filter { $0.accessAllowed }
-        case .deny:  return xpcClient.events.filter { !$0.accessAllowed }
+        case .all:   base = xpcClient.events
+        case .allow: base = xpcClient.events.filter { $0.accessAllowed }
+        case .deny:  base = xpcClient.events.filter { !$0.accessAllowed }
         }
+        guard showDefaultAllows else { return base.filter { !$0.accessAllowed || $0.matchedRuleID != nil } }
+        return base
     }
 
     var body: some View {
@@ -45,6 +49,9 @@ struct EventsWindowView: View {
             }
             .pickerStyle(.segmented)
             .fixedSize()
+
+            Toggle("Show default allows", isOn: $showDefaultAllows)
+                .toggleStyle(.checkbox)
 
             Spacer()
 
