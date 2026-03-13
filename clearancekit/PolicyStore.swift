@@ -39,26 +39,30 @@ final class PolicyStore: ObservableObject {
         userRules = rules
     }
 
-    // MARK: - Mutations (optimistic local update + XPC)
+    // MARK: - Mutations (Touch ID required, then optimistic local update + XPC)
 
-    func add(_ rule: FAARule) {
+    func add(_ rule: FAARule) async throws {
+        try await BiometricAuth.authenticate(reason: "Add a policy rule")
         userRules.append(rule)
         XPCClient.shared.addRule(rule)
     }
 
-    func update(_ rule: FAARule) {
+    func update(_ rule: FAARule) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else { return }
+        try await BiometricAuth.authenticate(reason: "Update a policy rule")
         userRules[index] = rule
         XPCClient.shared.updateRule(rule)
     }
 
-    func remove(_ rule: FAARule) {
+    func remove(_ rule: FAARule) async throws {
+        try await BiometricAuth.authenticate(reason: "Remove a policy rule")
         userRules.removeAll { $0.id == rule.id }
         XPCClient.shared.removeRule(ruleID: rule.id)
     }
 
-    func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) {
+    func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        try await BiometricAuth.authenticate(reason: "Allow this process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedTeamIDs
@@ -79,8 +83,9 @@ final class PolicyStore: ObservableObject {
         XPCClient.shared.updateRule(updated)
     }
 
-    func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) {
+    func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        try await BiometricAuth.authenticate(reason: "Allow this ancestor process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedAncestorTeamIDs

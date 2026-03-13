@@ -252,7 +252,7 @@ struct EventRow: View {
             if !event.signingID.isEmpty {
                 if canAllowDeny, let ruleID = event.matchedRuleID {
                     allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
-                        PolicyStore.shared.allowProcess(
+                        try await PolicyStore.shared.allowProcess(
                             teamID: event.teamID,
                             signingID: event.signingID,
                             inRule: ruleID
@@ -287,7 +287,7 @@ struct EventRow: View {
                             if !ancestor.signingID.isEmpty {
                                 if canAllowDeny, let ruleID = event.matchedRuleID {
                                     allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
-                                        PolicyStore.shared.allowAncestor(
+                                        try await PolicyStore.shared.allowAncestor(
                                             teamID: ancestor.teamID,
                                             signingID: ancestor.signingID,
                                             inRule: ruleID
@@ -309,15 +309,19 @@ struct EventRow: View {
     }
 
     @ViewBuilder
-    private func allowButton(label: String, itemKey: String, action: @escaping () -> Void) -> some View {
+    private func allowButton(label: String, itemKey: String, action: @escaping () async throws -> Void) -> some View {
         if allowedItems.contains(itemKey) {
             Text(label)
                 .strikethrough()
                 .foregroundColor(.secondary)
         } else {
             Button {
-                action()
-                allowedItems.insert(itemKey)
+                Task {
+                    do {
+                        try await action()
+                        allowedItems.insert(itemKey)
+                    } catch {}
+                }
             } label: {
                 Text(label)
                     .underline()

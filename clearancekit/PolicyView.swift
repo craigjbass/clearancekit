@@ -17,17 +17,25 @@ struct PolicyView: View {
             ruleList
         }
         .sheet(item: $editingRule) { rule in
-            RuleEditView(editing: rule) {
-                policyStore.update($0)
-                editingRule = nil
+            RuleEditView(editing: rule) { updated in
+                Task {
+                    do {
+                        try await policyStore.update(updated)
+                        editingRule = nil
+                    } catch {}
+                }
             } onCancel: {
                 editingRule = nil
             }
         }
         .sheet(isPresented: $isAddingRule) {
-            RuleEditView {
-                policyStore.add($0)
-                isAddingRule = false
+            RuleEditView { rule in
+                Task {
+                    do {
+                        try await policyStore.add(rule)
+                        isAddingRule = false
+                    } catch {}
+                }
             } onCancel: {
                 isAddingRule = false
             }
@@ -76,7 +84,7 @@ struct PolicyView: View {
                             RuleRow(rule: rule, isEditable: true) {
                                 editingRule = rule
                             } onDelete: {
-                                policyStore.remove(rule)
+                                Task { try? await policyStore.remove(rule) }
                             }
                             .padding(.vertical, 4)
                         }
