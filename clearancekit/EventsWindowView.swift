@@ -100,6 +100,16 @@ struct EventsWindowView: View {
 struct EventRow: View {
     let event: FolderOpenEvent
     @State private var allowedItems: Set<String> = []
+    @State private var isExpanded = false
+
+    private static let baselineRuleIDs: Set<UUID> = Set(faaPolicy.map(\.id))
+
+    private var isBaselineEvent: Bool {
+        guard let ruleID = event.matchedRuleID else { return false }
+        return Self.baselineRuleIDs.contains(ruleID)
+    }
+
+    private var canAllowDeny: Bool { !event.accessAllowed && !isBaselineEvent }
 
     private var formattedTime: String {
         let formatter = DateFormatter()
@@ -109,6 +119,71 @@ struct EventRow: View {
     }
 
     var body: some View {
+        if isBaselineEvent {
+            baselineRow
+        } else {
+            fullRow
+        }
+    }
+
+    // MARK: - Baseline (compact + expandable)
+
+    private var baselineRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack {
+                    Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
+                        .foregroundColor(event.accessAllowed ? .green : .red)
+                    Text(event.path)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                    Text("baseline")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    Spacer()
+                    Text(formattedTime)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    processSection
+                    if !event.decisionReason.isEmpty {
+                        Text(event.decisionReason)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !event.ancestors.isEmpty {
+                        ancestorsSection
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(event.accessAllowed ? Color.green.opacity(0.05) : Color.red.opacity(0.1))
+        )
+    }
+
+    // MARK: - Full row (user rules)
+
+    private var fullRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
@@ -147,6 +222,8 @@ struct EventRow: View {
         )
     }
 
+    // MARK: - Shared detail sections
+
     @ViewBuilder
     private var processSection: some View {
         HStack {
@@ -165,7 +242,7 @@ struct EventRow: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             if !event.signingID.isEmpty {
-                if !event.accessAllowed, let ruleID = event.matchedRuleID {
+                if canAllowDeny, let ruleID = event.matchedRuleID {
                     allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
                         PolicyStore.shared.allowProcess(
                             teamID: event.teamID,
@@ -200,7 +277,7 @@ struct EventRow: View {
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             if !ancestor.signingID.isEmpty {
-                                if !event.accessAllowed, let ruleID = event.matchedRuleID {
+                                if canAllowDeny, let ruleID = event.matchedRuleID {
                                     allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
                                         PolicyStore.shared.allowAncestor(
                                             teamID: ancestor.teamID,
