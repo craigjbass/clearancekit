@@ -159,8 +159,13 @@ extension DaemonXPCServer: NSXPCListenerDelegate {
             self?.removeClient(conn)
         }
 
+        guard ConnectionValidator.validate(newConnection) else {
+            NSLog("DaemonXPCServer: Rejected connection — validation failed")
+            return false
+        }
+
         newConnection.resume()
-        NSLog("DaemonXPCServer: Accepted new connection")
+        NSLog("DaemonXPCServer: Accepted connection (protocol v%@)", XPCConstants.protocolVersion)
         return true
     }
 }
