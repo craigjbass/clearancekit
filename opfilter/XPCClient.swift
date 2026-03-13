@@ -81,27 +81,12 @@ final class XPCClient: NSObject {
             NSLog("XPCClient (opfilter): registerFilterClient error: %@", $0.localizedDescription)
         }) as? DaemonServiceProtocol else { return }
 
-        proxy.registerFilterClient { [weak self] success in
+        // Daemon pushes current merged policy immediately after registration via policyUpdated(_:).
+        proxy.registerFilterClient { success in
             guard success else {
                 NSLog("XPCClient (opfilter): Failed to register as filter client")
                 return
             }
-            self?.fetchCurrentPolicy()
-        }
-    } 
-
-    private func fetchCurrentPolicy() {
-        guard let proxy = connection?.remoteObjectProxyWithErrorHandler({
-            NSLog("XPCClient (opfilter): fetchCurrentPolicy error: %@", $0.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
-
-        proxy.fetchCurrentPolicy { [weak self] policyData in
-            guard policyData.length > 0 else { return }
-            guard let rules = try? JSONDecoder().decode([FAARule].self, from: policyData as Data) else {
-                NSLog("XPCClient (opfilter): Failed to decode policy from daemon")
-                return
-            }
-            self?.onPolicyUpdate?(rules)
         }
     }
 }

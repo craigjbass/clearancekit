@@ -6,69 +6,58 @@
 import Foundation
 import Combine
 
-/// Vends and persists the active FAA rules.
+/// View-layer cache of the active policy.
 ///
-/// Currently seeded from the compile-time `faaPolicy` constant on first launch,
-/// then persisted to JSON in Application Support. Future dynamic sources
-/// (XPC delivery, remote config) slot in here without touching any views.
+/// The daemon (running as root) is the authoritative store. This class holds a
+/// local copy pushed down via XPC and forwards all mutations up to the daemon.
+/// There is no local disk I/O — the daemon owns persistence.
 @MainActor
 final class PolicyStore: ObservableObject {
     static let shared = PolicyStore()
 
-    @Published private(set) var rules: [FAARule]
+    /// Compile-time baseline rules. These are enforced by the daemon first and
+    /// cannot be modified through the GUI.
+    @Published private(set) var baselineRules: [FAARule] = faaPolicy
 
-    private let storageURL: URL
-    private var cancellable: AnyCancellable?
+    /// User-configurable rules managed by the daemon. Mutations are sent over XPC;
+    /// the authoritative snapshot is pushed back via `receivedUserRules(_:)`.
+    @Published private(set) var userRules: [FAARule] = []
 
-    private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = appSupport.appendingPathComponent("clearancekit")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("policy.json")
-        self.storageURL = url
+    private init() {}
 
-        if let data = try? Data(contentsOf: url),
-           let decoded = try? JSONDecoder().decode([FAARule].self, from: data) {
-            self.rules = decoded
-        } else {
-            self.rules = faaPolicy
-        }
+    // MARK: - Daemon push
 
-        cancellable = XPCClient.shared.$isConnected
-            .filter { $0 }
-            .sink { [weak self] _ in
-                guard let self else { return }
-                XPCClient.shared.updatePolicy(rules: self.rules)
-            }
+    func receivedUserRules(_ rules: [FAARule]) {
+        userRules = rules
     }
 
+    // MARK: - Mutations (optimistic local update + XPC)
+
     func add(_ rule: FAARule) {
-        rules.append(rule)
-        save()
+        userRules.append(rule)
+        XPCClient.shared.addRule(rule)
     }
 
     func update(_ rule: FAARule) {
-        guard let index = rules.firstIndex(where: { $0.id == rule.id }) else { return }
-        rules[index] = rule
-        save()
+        guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else { return }
+        userRules[index] = rule
+        XPCClient.shared.updateRule(rule)
     }
 
     func remove(_ rule: FAARule) {
-        rules.removeAll { $0.id == rule.id }
-        save()
+        userRules.removeAll { $0.id == rule.id }
+        XPCClient.shared.removeRule(ruleID: rule.id)
     }
 
-    /// Adds the process's team ID and signing ID to the allowedTeamIDs / allowedSigningIDs
-    /// of the rule with the given UUID.
     func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) {
-        guard let index = rules.firstIndex(where: { $0.id == ruleID }) else { return }
-        let existing = rules[index]
+        guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedTeamIDs
         var newSigningIDs = existing.allowedSigningIDs
         if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
         if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
-        rules[index] = FAARule(
+        let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
             allowedProcessPaths: existing.allowedProcessPaths,
@@ -78,20 +67,19 @@ final class PolicyStore: ObservableObject {
             allowedAncestorTeamIDs: existing.allowedAncestorTeamIDs,
             allowedAncestorSigningIDs: existing.allowedAncestorSigningIDs
         )
-        save()
+        userRules[index] = updated
+        XPCClient.shared.updateRule(updated)
     }
 
-    /// Adds the ancestor's team ID and signing ID to the allowedAncestorTeamIDs /
-    /// allowedAncestorSigningIDs of the rule with the given UUID.
     func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) {
-        guard let index = rules.firstIndex(where: { $0.id == ruleID }) else { return }
-        let existing = rules[index]
+        guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         var newTeamIDs = existing.allowedAncestorTeamIDs
         var newSigningIDs = existing.allowedAncestorSigningIDs
         if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
         if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
-        rules[index] = FAARule(
+        let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
             allowedProcessPaths: existing.allowedProcessPaths,
@@ -101,12 +89,7 @@ final class PolicyStore: ObservableObject {
             allowedAncestorTeamIDs: newTeamIDs,
             allowedAncestorSigningIDs: newSigningIDs
         )
-        save()
-    }
-
-    private func save() {
-        guard let data = try? JSONEncoder().encode(rules) else { return }
-        try? data.write(to: storageURL, options: .atomic)
-        XPCClient.shared.updatePolicy(rules: rules)
+        userRules[index] = updated
+        XPCClient.shared.updateRule(updated)
     }
 }

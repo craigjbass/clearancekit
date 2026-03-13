@@ -135,10 +135,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
 
 // MARK: - Daemon Service Protocol (exposed by the LaunchDaemon)
 //
-// Called by the GUI app:     registerClient / unregisterClient / isMonitoringActive /
-//                             updatePolicy / fetchCurrentPolicy
-// Called by opfilter:        reportEvent / reportMonitoringStatus / registerFilterClient /
-//                             fetchCurrentPolicy
+// Called by the GUI app:  registerClient / unregisterClient / isMonitoringActive /
+//                          fetchRecentEvents / addRule / updateRule / removeRule / requestResync
+// Called by opfilter:     registerFilterClient / reportEvent / reportMonitoringStatus
 
 @objc(DaemonServiceProtocol)
 public protocol DaemonServiceProtocol {
@@ -151,15 +150,18 @@ public protocol DaemonServiceProtocol {
     // opfilter registration
     func registerFilterClient(withReply reply: @escaping (Bool) -> Void)
 
-    // Policy management (GUI writes, daemon stores and broadcasts to opfilter)
-    func updatePolicy(_ policyData: NSData, withReply reply: @escaping (Bool) -> Void)
-    func fetchCurrentPolicy(withReply reply: @escaping (NSData) -> Void)
+    // User-rule mutations (GUI → daemon). Daemon stores, then broadcasts merged
+    // policy to opfilter clients and updated user rules to all GUI clients.
+    func addRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func updateRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
     // Telemetry from opfilter
     func reportEvent(_ event: FolderOpenEvent)
     func reportMonitoringStatus(_ isActive: Bool)
 
-    // GUI requests a full status resync from all connected filter clients
+    // GUI requests a full status resync. Daemon asks filter clients to re-report
+    // monitoring status and pushes the current user-rule snapshot back to the caller.
     func requestResync(withReply reply: @escaping () -> Void)
 }
 
@@ -169,6 +171,9 @@ public protocol DaemonServiceProtocol {
 public protocol DaemonClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
     func monitoringStatusChanged(_ isActive: Bool)
+    // Daemon pushes the authoritative user-rule snapshot whenever it changes,
+    // and once on connect (via requestResync).
+    func userRulesUpdated(_ rulesData: NSData)
 }
 
 // MARK: - Filter Client Protocol (exported by opfilter for daemon policy-push callbacks)

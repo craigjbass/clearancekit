@@ -140,15 +140,38 @@ final class XPCClient: NSObject, ObservableObject {
         service.requestResync { }
     }
 
-    func updatePolicy(rules: [FAARule]) {
-        guard let data = try? JSONEncoder().encode(rules) else { return }
+    // MARK: - Rule mutations
+
+    func addRule(_ rule: FAARule) {
+        guard let data = try? JSONEncoder().encode(rule) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: updatePolicy error: %@", error.localizedDescription)
+            NSLog("XPCClient: addRule error: %@", error.localizedDescription)
         }) as? DaemonServiceProtocol else { return }
-        service.updatePolicy(data as NSData) { success in
-            NSLog("XPCClient: Policy update %@", success ? "succeeded" : "failed")
+        service.addRule(data as NSData) { success in
+            if !success { NSLog("XPCClient: addRule rejected by daemon") }
         }
     }
+
+    func updateRule(_ rule: FAARule) {
+        guard let data = try? JSONEncoder().encode(rule) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: updateRule error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+        service.updateRule(data as NSData) { success in
+            if !success { NSLog("XPCClient: updateRule rejected by daemon") }
+        }
+    }
+
+    func removeRule(ruleID: UUID) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: removeRule error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+        service.removeRule(ruleID as NSUUID) { success in
+            if !success { NSLog("XPCClient: removeRule rejected by daemon") }
+        }
+    }
+
+    // MARK: - Events
 
     func clearEvents() {
         events.removeAll()
@@ -187,6 +210,15 @@ extension XPCClient: DaemonClientProtocol {
         NSLog("XPCClient: Monitoring status changed: %@", isActive ? "active" : "inactive")
         Task { @MainActor in
             self.isMonitoringActive = isActive
+        }
+    }
+
+    nonisolated func userRulesUpdated(_ rulesData: NSData) {
+        guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
+            fatalError("XPCClient: Failed to decode user rules from daemon — binary version mismatch")
+        }
+        Task { @MainActor in
+            PolicyStore.shared.receivedUserRules(rules)
         }
     }
 }

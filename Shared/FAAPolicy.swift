@@ -86,7 +86,19 @@ public struct FAARule: Identifiable, Codable {
 
 // MARK: - Policy
 
+public let clearancekitTeamID = "37KMK6XFTT"
+
 public let faaPolicy: [FAARule] = [
+    // Protect the daemon's policy storage directory. Only processes signed by the
+    // clearancekit team may open files under this path — this covers the daemon
+    // itself, the GUI app, and the system extension. Any other process (including
+    // a compromised user process) is denied at the kernel level before it can
+    // read or tamper with the stored rules.
+    FAARule(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        protectedPathPrefix: "/Library/Application Support/clearancekit",
+        allowedTeamIDs: [clearancekitTeamID]
+    ),
     // Example: only Finder and Terminal may access secrets
     FAARule(
         protectedPathPrefix: "/opt/clearancekit/secrets",

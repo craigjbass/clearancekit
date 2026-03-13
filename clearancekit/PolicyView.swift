@@ -45,7 +45,7 @@ struct PolicyView: View {
 
     @ViewBuilder
     private var ruleList: some View {
-        if policyStore.rules.isEmpty {
+        if policyStore.baselineRules.isEmpty && policyStore.userRules.isEmpty {
             VStack {
                 Spacer()
                 Text("No rules configured")
@@ -53,13 +53,27 @@ struct PolicyView: View {
                 Spacer()
             }
         } else {
-            List(policyStore.rules) { rule in
-                RuleRow(rule: rule) {
-                    editingRule = rule
-                } onDelete: {
-                    policyStore.remove(rule)
+            List {
+                if !policyStore.baselineRules.isEmpty {
+                    Section("Baseline Rules") {
+                        ForEach(policyStore.baselineRules) { rule in
+                            RuleRow(rule: rule, isEditable: false) { } onDelete: { }
+                                .padding(.vertical, 4)
+                        }
+                    }
                 }
-                .padding(.vertical, 4)
+                if !policyStore.userRules.isEmpty {
+                    Section("User Rules") {
+                        ForEach(policyStore.userRules) { rule in
+                            RuleRow(rule: rule, isEditable: true) {
+                                editingRule = rule
+                            } onDelete: {
+                                policyStore.remove(rule)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
             }
             .listStyle(.inset)
         }
@@ -70,6 +84,7 @@ struct PolicyView: View {
 
 private struct RuleRow: View {
     let rule: FAARule
+    let isEditable: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -79,16 +94,27 @@ private struct RuleRow: View {
                 Text(rule.protectedPathPrefix)
                     .font(.system(.body, design: .monospaced))
                     .fontWeight(.semibold)
+                if !isEditable {
+                    Text("baseline")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
                 Spacer()
-                Button { onEdit() } label: {
-                    Image(systemName: "pencil")
+                if isEditable {
+                    Button { onEdit() } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    Button { onDelete() } label: {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
-                Button { onDelete() } label: {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
-                }
-                .buttonStyle(.borderless)
             }
 
             criterionGroup("Allowed process paths", rule.allowedProcessPaths)
