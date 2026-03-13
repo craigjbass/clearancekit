@@ -11,6 +11,9 @@ import Foundation
 
 public enum XPCConstants {
     public static let daemonServiceName = "uk.craigbass.clearancekit.daemon"
+    public static let protocolVersion = "2.0"
+    public static let teamID = "37KMK6XFTT"
+    public static let bundleIDPrefix = "uk.craigbass.clearancekit"
 }
 
 // MARK: - AncestorInfo
