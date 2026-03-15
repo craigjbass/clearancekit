@@ -152,8 +152,7 @@ enum PolicySigner {
     /// Software-backed key stored explicitly in the System Keychain.
     /// Creates the key in memory first, then uses SecItemAdd with an explicit
     /// System Keychain reference so it never lands in a per-user login keychain.
-    /// Scoped via SecTrustedApplicationCreateFromPath so only processes with the
-    /// same code-signing identity (team 37KMK6XFTT) can use the key.
+    /// ACL restricted to the daemon executable only via SecTrustedApplicationCreateFromPath.
     private static func createSoftwareKey() throws -> SecKey {
         let keyAttrs: [CFString: Any] = [
             kSecAttrKeyType:       kSecAttrKeyTypeECSECPrimeRandom,
@@ -164,20 +163,17 @@ enum PolicySigner {
             throw cfError!.takeRetainedValue()
         }
 
-        var trustedApp: SecTrustedApplication?
-        SecTrustedApplicationCreateFromPath(nil, &trustedApp)   // nil = current process
-        var secAccess: SecAccess?
-        if let app = trustedApp {
-            SecAccessCreate(keyLabel as CFString, [app] as CFArray, &secAccess)
-        }
-
         var addQuery: [CFString: Any] = [
             kSecClass:              kSecClassKey,
             kSecValueRef:           key,
             kSecAttrApplicationTag: keyTag,
             kSecAttrLabel:          keyLabel,
         ]
-        if let access = secAccess { addQuery[kSecAttrAccess] = access }
+        if let access = makeDaemonOnlyACL() {
+            addQuery[kSecAttrAccess] = access
+        } else {
+            throw PolicySignerError.aclCreationFailed
+        }
         if let kc = systemKeychain { addQuery[kSecUseKeychain] = kc }
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -185,6 +181,30 @@ enum PolicySigner {
             throw PolicySignerError.keyStoreFailed(status)
         }
         return key
+    }
+
+    /// Builds a SecAccess that restricts key usage to the daemon executable.
+    /// Uses the daemon's own path rather than nil so the ACL names the specific
+    /// binary, not an implicit "current process" that may resolve incorrectly for
+    /// non-bundle tools and silently falls back to allow-all.
+    private static func makeDaemonOnlyACL() -> SecAccess? {
+        guard let executablePath = Bundle.main.executablePath else {
+            NSLog("PolicySigner: Could not determine daemon executable path for ACL")
+            return nil
+        }
+        var trustedApp: SecTrustedApplication?
+        let appStatus = SecTrustedApplicationCreateFromPath(executablePath, &trustedApp)
+        guard appStatus == errSecSuccess, let app = trustedApp else {
+            NSLog("PolicySigner: SecTrustedApplicationCreateFromPath failed (%d)", appStatus)
+            return nil
+        }
+        var secAccess: SecAccess?
+        let accessStatus = SecAccessCreate(keyLabel as CFString, [app] as CFArray, &secAccess)
+        guard accessStatus == errSecSuccess, let access = secAccess else {
+            NSLog("PolicySigner: SecAccessCreate failed (%d)", accessStatus)
+            return nil
+        }
+        return access
     }
 }
 
