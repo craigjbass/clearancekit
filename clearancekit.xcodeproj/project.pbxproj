@@ -293,7 +293,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nGIT_HASH=$(git -C \"${SRCROOT}\" rev-parse --short HEAD 2>/dev/null || echo \"unknown\")\nGIT_DIRTY=$(git -C \"${SRCROOT}\" diff --quiet HEAD 2>/dev/null && echo \"\" || echo \"+\")\nPLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n/usr/libexec/PlistBuddy -c \"Add :GitCommit string ${GIT_HASH}${GIT_DIRTY}\" \"${PLIST}\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Set :GitCommit ${GIT_HASH}${GIT_DIRTY}\" \"${PLIST}\"\n";
+			shellScript = "set -e\nGIT_HASH=$(git -C \"${SRCROOT}\" rev-parse --short HEAD 2>/dev/null || echo \"unknown\")\nGIT_DIRTY=$(git -C \"${SRCROOT}\" diff --quiet HEAD 2>/dev/null && echo \"\" || echo \"+\")\nPLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion ${GIT_HASH}${GIT_DIRTY}\" \"${PLIST}\"\n";
 		};
 		BBBB001111111111BBBB0012 /* Embed LaunchDaemon */ = {
 			isa = PBXShellScriptBuildPhase;
