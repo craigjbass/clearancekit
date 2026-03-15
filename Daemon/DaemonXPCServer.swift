@@ -5,11 +5,7 @@
 
 import Foundation
 
-private let userPolicyDir        = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
-private let userPolicyURL        = userPolicyDir.appendingPathComponent("user-policy.json")
-private let signatureURL         = userPolicyDir.appendingPathComponent("user-policy.json.sig")
-private let allowlistURL         = userPolicyDir.appendingPathComponent("global-allowlist.json")
-private let allowlistSignatureURL = userPolicyDir.appendingPathComponent("global-allowlist.json.sig")
+private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
 final class DaemonXPCServer: NSObject {
     static let shared = DaemonXPCServer()
@@ -26,15 +22,17 @@ final class DaemonXPCServer: NSObject {
     private var managedAllowlist: [AllowlistEntry] = []
     private var userAllowlist: [AllowlistEntry] = []
     private let maxHistoryCount = 1000
+    private var database: Database!
 
     private override init() {
         super.init()
     }
 
     func start() {
-        userRules = loadUserRulesFromDisk()
+        database = Database(directory: dataDirectory)
+        userRules = database.loadUserRules()
         managedRules = ManagedPolicyLoader.load()
-        userAllowlist = loadUserAllowlistFromDisk()
+        userAllowlist = database.loadUserAllowlist()
         managedAllowlist = ManagedAllowlistLoader.load()
         xprotectEntries = enumerateXProtectEntries()
         NSLog("DaemonXPCServer: Discovered %d XProtect allowlist entry/entries", xprotectEntries.count)
@@ -141,7 +139,7 @@ final class DaemonXPCServer: NSObject {
     }
 
     private func persistAndBroadcast() {
-        saveUserRulesToDisk()
+        database.saveUserRules(userRules)
         broadcastMergedPolicyToFilterClients()
         broadcastUserRulesToAllGUIClients()
     }
@@ -258,7 +256,7 @@ final class DaemonXPCServer: NSObject {
     }
 
     private func persistAndBroadcastAllowlist() {
-        saveUserAllowlistToDisk()
+        database.saveUserAllowlist(userAllowlist)
         broadcastMergedAllowlistToFilterClients()
         broadcastUserAllowlistToAllGUIClients()
     }
@@ -318,114 +316,6 @@ final class DaemonXPCServer: NSObject {
         }
     }
 
-    // MARK: - Disk I/O
-
-    private func loadUserRulesFromDisk() -> [FAARule] {
-        guard let data = try? Data(contentsOf: userPolicyURL) else { return [] }
-
-        if let sigData = try? Data(contentsOf: signatureURL) {
-            do {
-                try PolicySigner.verify(data, signature: sigData)
-            } catch {
-                NSLog("DaemonXPCServer: Policy signature verification FAILED (%@) — discarding potentially tampered data", "\(error)")
-                return []
-            }
-        } else {
-            // No signature yet: first run after enabling signing, or post-update
-            // recovery where the old key was inaccessible and was regenerated.
-            // Trust the data this once and sign it so future loads are verified.
-            NSLog("DaemonXPCServer: No policy signature found — signing existing data (first run or post-update recovery)")
-            if let sig = try? PolicySigner.sign(data) {
-                try? sig.write(to: signatureURL, options: .atomic)
-                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: signatureURL.path)
-            }
-        }
-
-        guard let rules = try? JSONDecoder().decode([FAARule].self, from: data) else {
-            NSLog("DaemonXPCServer: Failed to decode user policy from disk — starting with empty policy")
-            return []
-        }
-        NSLog("DaemonXPCServer: Loaded %d user rule(s) from disk", rules.count)
-        return rules
-    }
-
-    private func saveUserRulesToDisk() {
-        // 0o700: only root can read, write, or list this directory.
-        // createDirectory is a no-op if the directory already exists with withIntermediateDirectories: true.
-        let dirAttrs: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
-        do {
-            try FileManager.default.createDirectory(at: userPolicyDir, withIntermediateDirectories: true, attributes: dirAttrs)
-        } catch {
-            fatalError("DaemonXPCServer: Failed to create policy directory: \(error)")
-        }
-        guard let data = try? JSONEncoder().encode(userRules) else {
-            fatalError("DaemonXPCServer: Failed to encode user rules for disk — this is a bug")
-        }
-        do {
-            // .atomic writes to a temp file then renames, preserving the original on failure.
-            // After the write, lock both files down to root read/write only (0o600).
-            try data.write(to: userPolicyURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: userPolicyURL.path)
-            if let sig = try? PolicySigner.sign(data) {
-                try sig.write(to: signatureURL, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: signatureURL.path)
-            } else {
-                NSLog("DaemonXPCServer: Failed to sign policy data — signature file not updated")
-            }
-        } catch {
-            NSLog("DaemonXPCServer: Failed to write user policy to disk: %@", error.localizedDescription)
-        }
-    }
-
-    private func loadUserAllowlistFromDisk() -> [AllowlistEntry] {
-        guard let data = try? Data(contentsOf: allowlistURL) else { return [] }
-
-        if let sigData = try? Data(contentsOf: allowlistSignatureURL) {
-            do {
-                try PolicySigner.verify(data, signature: sigData)
-            } catch {
-                NSLog("DaemonXPCServer: Allowlist signature verification FAILED (%@) — discarding potentially tampered data", "\(error)")
-                return []
-            }
-        } else {
-            NSLog("DaemonXPCServer: No allowlist signature found — signing existing data (first run or post-update recovery)")
-            if let sig = try? PolicySigner.sign(data) {
-                try? sig.write(to: allowlistSignatureURL, options: .atomic)
-                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistSignatureURL.path)
-            }
-        }
-
-        guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: data) else {
-            NSLog("DaemonXPCServer: Failed to decode allowlist from disk — starting with empty user allowlist")
-            return []
-        }
-        NSLog("DaemonXPCServer: Loaded %d user allowlist entry/entries from disk", entries.count)
-        return entries
-    }
-
-    private func saveUserAllowlistToDisk() {
-        let dirAttrs: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
-        do {
-            try FileManager.default.createDirectory(at: userPolicyDir, withIntermediateDirectories: true, attributes: dirAttrs)
-        } catch {
-            fatalError("DaemonXPCServer: Failed to create policy directory: \(error)")
-        }
-        guard let data = try? JSONEncoder().encode(userAllowlist) else {
-            fatalError("DaemonXPCServer: Failed to encode user allowlist for disk — this is a bug")
-        }
-        do {
-            try data.write(to: allowlistURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistURL.path)
-            if let sig = try? PolicySigner.sign(data) {
-                try sig.write(to: allowlistSignatureURL, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistSignatureURL.path)
-            } else {
-                NSLog("DaemonXPCServer: Failed to sign allowlist data — signature file not updated")
-            }
-        } catch {
-            NSLog("DaemonXPCServer: Failed to write user allowlist to disk: %@", error.localizedDescription)
-        }
-    }
 }
 
 // MARK: - NSXPCListenerDelegate
