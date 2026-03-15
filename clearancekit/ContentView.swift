@@ -98,6 +98,10 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            setupStepsHeader
+            Divider()
+            fullDiskAccessRow
+            Divider()
             daemonStatusRow
             Divider()
             extensionStatusRow
@@ -111,6 +115,36 @@ struct SetupView: View {
     }
 
     private var appBuildVersion: String { BuildInfo.gitHash }
+
+    private var setupStepsHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("To get started, complete the following steps in order:")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("1. Grant Full Disk Access to clearancekit")
+                Text("2. Register the daemon")
+                Text("3. Activate the system extension")
+            }
+            .font(.callout)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+    }
+
+    private var fullDiskAccessRow: some View {
+        HStack {
+            Text("Full Disk Access:")
+                .font(.headline)
+            Text("Required for the daemon to monitor file access")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Open Privacy & Security") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+            }
+        }
+        .padding()
+    }
 
     private var daemonStatusRow: some View {
         HStack {
