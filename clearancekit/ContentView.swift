@@ -8,43 +8,76 @@
 import SwiftUI
 import AppKit
 
+enum SidebarItem: String, CaseIterable, Identifiable {
+    case events    = "Events"
+    case policy    = "Policy"
+    case allowlist = "Allowlist"
+    case processes = "Processes"
+    case setup     = "Setup"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .events:    return "list.bullet"
+        case .policy:    return "shield"
+        case .allowlist: return "checkmark.shield"
+        case .processes: return "cpu"
+        case .setup:     return "gearshape"
+        }
+    }
+}
+
 struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @StateObject private var daemonManager = DaemonManager.shared
+    @State private var selection: SidebarItem = .events
 
     var body: some View {
-        TabView {
-            EventsWindowView()
-                .tabItem { Label("Events", systemImage: "list.bullet") }
-            PolicyView()
-                .tabItem { Label("Policy", systemImage: "shield") }
-            AllowlistView()
-                .tabItem { Label("Allowlist", systemImage: "checkmark.shield") }
-            ProcessesView()
-                .tabItem { Label("Processes", systemImage: "cpu") }
-            setupTab
-                .tabItem { Label("Setup", systemImage: "gearshape") }
+        NavigationSplitView {
+            List(SidebarItem.allCases, selection: $selection) { item in
+                Label(item.rawValue, systemImage: item.icon)
+                    .tag(item)
+            }
+            .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+        } detail: {
+            switch selection {
+            case .events:    EventsWindowView()
+            case .policy:    PolicyView()
+            case .allowlist: AllowlistView()
+            case .processes: ProcessesView()
+            case .setup:     SetupView()
+            }
         }
-        .frame(minWidth: 640, minHeight: 440)
+        .frame(minWidth: 720, minHeight: 480)
         .onAppear {
             daemonManager.refreshStatus()
             xpcClient.connect()
         }
     }
+}
 
-    private var setupTab: some View {
+// MARK: - SetupView
+
+struct SetupView: View {
+    @StateObject private var xpcClient = XPCClient.shared
+    @StateObject private var extensionManager = SystemExtensionManager.shared
+    @StateObject private var daemonManager = DaemonManager.shared
+
+    var body: some View {
         VStack(spacing: 0) {
-            daemonStatusBar
+            daemonStatusRow
             Divider()
-            extensionStatusBar
+            extensionStatusRow
             Divider()
-            connectionStatusBar
+            connectionStatusRow
             Spacer()
         }
+        .navigationTitle("Setup")
     }
 
-    private var daemonStatusBar: some View {
+    private var daemonStatusRow: some View {
         HStack {
             Text("Daemon:")
                 .font(.headline)
@@ -53,17 +86,11 @@ struct ContentView: View {
             Spacer()
             switch daemonManager.status {
             case .notRegistered, .failed, .unknown:
-                Button("Register") {
-                    daemonManager.registerDaemon()
-                }
+                Button("Register") { daemonManager.registerDaemon() }
             case .requiresApproval:
-                Button("Open System Settings") {
-                    daemonManager.openSystemSettings()
-                }
+                Button("Open System Settings") { daemonManager.openSystemSettings() }
             case .enabled:
-                Button("Unregister") {
-                    daemonManager.unregisterDaemon()
-                }
+                Button("Unregister") { daemonManager.unregisterDaemon() }
             }
         }
         .padding()
@@ -71,13 +98,13 @@ struct ContentView: View {
 
     private var daemonStatusColor: Color {
         switch daemonManager.status {
-        case .enabled: return .green
-        case .requiresApproval: return .yellow
+        case .enabled:                          return .green
+        case .requiresApproval:                 return .yellow
         case .notRegistered, .unknown, .failed: return .red
         }
     }
 
-    private var extensionStatusBar: some View {
+    private var extensionStatusRow: some View {
         HStack {
             Text("Extension:")
                 .font(.headline)
@@ -85,22 +112,16 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
             Spacer()
             if extensionManager.extensionStatus != .activated {
-                Button("Activate") {
-                    extensionManager.activateExtension()
-                }
+                Button("Activate") { extensionManager.activateExtension() }
             } else {
-                Button("Deactivate") {
-                    extensionManager.deactivateExtension()
-                }
+                Button("Deactivate") { extensionManager.deactivateExtension() }
             }
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
+            Button("Quit") { NSApplication.shared.terminate(nil) }
         }
         .padding()
     }
 
-    private var connectionStatusBar: some View {
+    private var connectionStatusRow: some View {
         HStack {
             Circle()
                 .fill(statusColor)
@@ -108,32 +129,22 @@ struct ContentView: View {
             Text(statusText)
                 .font(.headline)
             Spacer()
-            Button("Resync") {
-                xpcClient.requestResync()
-            }
-            .disabled(!xpcClient.isConnected)
+            Button("Resync") { xpcClient.requestResync() }
+                .disabled(!xpcClient.isConnected)
         }
         .padding()
     }
 
     private var statusColor: Color {
-        if xpcClient.isConnected && xpcClient.isMonitoringActive {
-            return .green
-        } else if xpcClient.isConnected {
-            return .yellow
-        } else {
-            return .red
-        }
+        if xpcClient.isConnected && xpcClient.isMonitoringActive { return .green }
+        if xpcClient.isConnected { return .yellow }
+        return .red
     }
 
     private var statusText: String {
-        if xpcClient.isConnected && xpcClient.isMonitoringActive {
-            return "Connected - Monitoring Active"
-        } else if xpcClient.isConnected {
-            return "Connected - Monitoring Inactive"
-        } else {
-            return "Disconnected"
-        }
+        if xpcClient.isConnected && xpcClient.isMonitoringActive { return "Connected - Monitoring Active" }
+        if xpcClient.isConnected { return "Connected - Monitoring Inactive" }
+        return "Disconnected"
     }
 }
 
