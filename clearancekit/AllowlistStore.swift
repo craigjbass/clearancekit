@@ -14,8 +14,9 @@ import Combine
 final class AllowlistStore: ObservableObject {
     static let shared = AllowlistStore()
 
-    /// Compile-time baseline entries. Always allowed; cannot be modified via the GUI.
-    @Published private(set) var baselineEntries: [AllowlistEntry] = baselineAllowlist
+    /// Baseline entries: compiled-in signing-ID rules plus XProtect executables
+    /// discovered by scanning the bundle at launch. Always allowed; read-only in the GUI.
+    @Published private(set) var baselineEntries: [AllowlistEntry] = baselineAllowlist + enumerateXProtectEntries()
 
     /// Entries delivered via MDM or a .mobileconfig profile. Read-only in the GUI.
     @Published private(set) var managedEntries: [AllowlistEntry] = []

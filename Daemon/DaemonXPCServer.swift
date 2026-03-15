@@ -22,6 +22,7 @@ final class DaemonXPCServer: NSObject {
     private var recentEvents: [FolderOpenEvent] = []
     private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
+    private var xprotectEntries: [AllowlistEntry] = []
     private var managedAllowlist: [AllowlistEntry] = []
     private var userAllowlist: [AllowlistEntry] = []
     private let maxHistoryCount = 1000
@@ -35,6 +36,8 @@ final class DaemonXPCServer: NSObject {
         managedRules = ManagedPolicyLoader.load()
         userAllowlist = loadUserAllowlistFromDisk()
         managedAllowlist = ManagedAllowlistLoader.load()
+        xprotectEntries = enumerateXProtectEntries()
+        NSLog("DaemonXPCServer: Discovered %d XProtect allowlist entry/entries", xprotectEntries.count)
         // Both rule tiers must be loaded before the listener resumes so that
         // mergedPolicyData() is complete the moment the first filter client connects.
         listener = NSXPCListener(machServiceName: XPCConstants.daemonServiceName)
@@ -149,9 +152,11 @@ final class DaemonXPCServer: NSObject {
         // Reload managed rules and allowlist — picks up any MDM profile changes since last resync.
         let reloaded = ManagedPolicyLoader.loadWithSync()
         let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
+        let reloadedXProtect = enumerateXProtectEntries()
         lock.lock()
         managedRules = reloaded
         managedAllowlist = reloadedAllowlist
+        xprotectEntries = reloadedXProtect
         lock.unlock()
 
         // Re-broadcast merged policy and allowlist to filter clients.
@@ -262,10 +267,11 @@ final class DaemonXPCServer: NSObject {
 
     fileprivate func mergedAllowlistData() -> NSData {
         lock.lock()
+        let xprotect = xprotectEntries
         let managed = managedAllowlist
         let user = userAllowlist
         lock.unlock()
-        guard let data = try? JSONEncoder().encode(baselineAllowlist + managed + user) else {
+        guard let data = try? JSONEncoder().encode(baselineAllowlist + xprotect + managed + user) else {
             fatalError("DaemonXPCServer: Failed to encode merged allowlist — this is a bug")
         }
         return data as NSData

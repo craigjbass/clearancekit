@@ -74,14 +74,6 @@ private func signingEntry(n: Int, signingID: String) -> AllowlistEntry {
     )
 }
 
-private func pathEntry(n: Int, processPath: String) -> AllowlistEntry {
-    AllowlistEntry(
-        id: UUID(uuidString: String(format: "B0000000-0000-0000-0001-%012X", n))!,
-        processPath: processPath,
-        platformBinary: true
-    )
-}
-
 public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 1,  signingID: "com.apple.mdworker"),
     signingEntry(n: 2,  signingID: "com.apple.mdworker_shared"),
@@ -99,30 +91,23 @@ public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 14, signingID: "com.apple.finder"),
     signingEntry(n: 15, signingID: "com.apple.appkit.xpc.openAndSavePanelService"),
 
-    pathEntry(n: 1,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect"),
-    pathEntry(n: 2,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorAdload"),
-    pathEntry(n: 3,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorGreenAcre"),
-    pathEntry(n: 4,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorRankStank"),
-    pathEntry(n: 5,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorKeySteal"),
-    pathEntry(n: 6,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorPirrit"),
-    pathEntry(n: 7,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorDubRobber"),
-    pathEntry(n: 8,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBundlore"),
-    pathEntry(n: 9,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorMRTv3"),
-    pathEntry(n: 10, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorTrovi"),
-    pathEntry(n: 11, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorCardboardCutout"),
-    pathEntry(n: 12, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorConductor"),
-    pathEntry(n: 13, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSnowDrift"),
-    pathEntry(n: 14, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorCrapyrator"),
-    pathEntry(n: 15, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSnowBeagle"),
-    pathEntry(n: 16, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorColdSnap"),
-    pathEntry(n: 17, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorEicar"),
-    pathEntry(n: 18, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorWaterNet"),
-    pathEntry(n: 19, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorDolittle"),
-    pathEntry(n: 20, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorFloppyFlipper"),
-    pathEntry(n: 21, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBadGacha"),
-    pathEntry(n: 22, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorGenieo"),
-    pathEntry(n: 23, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSheepSwap"),
-    pathEntry(n: 24, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorRoachFlight"),
-    pathEntry(n: 25, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBlueTop"),
-    pathEntry(n: 26, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorToyDrop"),
 ]
+
+// MARK: - XProtect enumeration
+
+/// Scans the XProtect bundle's MacOS directory at runtime and returns one
+/// platform-binary allowlist entry per executable found. Called on daemon
+/// startup (and resync) so newly-shipped XProtect remediators are picked up
+/// automatically after an XProtect update, without a clearancekit update.
+public func enumerateXProtectEntries() -> [AllowlistEntry] {
+    let macosDir = URL(fileURLWithPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS")
+    guard let items = try? FileManager.default.contentsOfDirectory(
+        at: macosDir,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: .skipsHiddenFiles
+    ) else { return [] }
+    return items.compactMap { url -> AllowlistEntry? in
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
+        return AllowlistEntry(processPath: url.path, platformBinary: true)
+    }.sorted { $0.processPath < $1.processPath }
+}
