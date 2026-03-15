@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UserNotifications
 
 @MainActor
 final class XPCClient: NSObject, ObservableObject {
@@ -19,6 +20,8 @@ final class XPCClient: NSObject, ObservableObject {
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 5.0
+    private var lastDenyNotificationDate: Date?
+    private let denyNotificationDebounce: TimeInterval = 30.0
 
     private override init() {
         super.init()
@@ -218,6 +221,24 @@ final class XPCClient: NSObject, ObservableObject {
 
     // MARK: - Events
 
+    private func sendDenyNotificationIfNeeded(for event: FolderOpenEvent) {
+        let now = Date()
+        if let last = lastDenyNotificationDate, now.timeIntervalSince(last) < denyNotificationDebounce {
+            return
+        }
+        lastDenyNotificationDate = now
+
+        let content = UNMutableNotificationContent()
+        content.title = "Access Denied"
+        content.body = "\(event.processPath.split(separator: "/").last.map(String.init) ?? event.processPath) was blocked from accessing \(event.path)"
+        content.sound = .default
+
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error { NSLog("XPCClient: notification error: %@", error.localizedDescription) }
+        }
+    }
+
     func clearEvents() {
         events.removeAll()
     }
@@ -248,6 +269,9 @@ extension XPCClient: DaemonClientProtocol {
         NSLog("XPCClient: Received folder open event: %@", event.path)
         Task { @MainActor in
             self.events.insert(event, at: 0)
+            if !event.accessAllowed {
+                self.sendDenyNotificationIfNeeded(for: event)
+            }
         }
     }
 
