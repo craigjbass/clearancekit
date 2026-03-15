@@ -114,7 +114,7 @@ struct SetupView: View {
         .navigationTitle("Setup")
     }
 
-    private var appBuildVersion: String { BuildInfo.gitHash }
+    private var appBuildVersion: String { BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+")) }
 
     private var setupStepsHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -122,7 +122,7 @@ struct SetupView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
-                Text("1. Grant Full Disk Access to clearancekit")
+                Text("1. Grant Full Disk Access to 'opfilter', which is part of clearancekit")
                 Text("2. Register the daemon")
                 Text("3. Activate the system extension")
             }
@@ -171,11 +171,15 @@ struct SetupView: View {
     }
 
     private var daemonIsOutOfDate: Bool {
-        !xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion != appBuildVersion
+        !xpcClient.daemonVersion.isEmpty && cleanHash(xpcClient.daemonVersion) != appBuildVersion
     }
 
     private var opfilterIsOutOfDate: Bool {
-        !xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion != appBuildVersion
+        !xpcClient.opfilterVersion.isEmpty && cleanHash(xpcClient.opfilterVersion) != appBuildVersion
+    }
+
+    private func cleanHash(_ hash: String) -> String {
+        hash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
     }
 
     private var daemonStatusColor: Color {

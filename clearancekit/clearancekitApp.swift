@@ -51,7 +51,10 @@ struct clearancekitApp: App {
             }
         }
 
+        let marketing = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         MenuBarExtra {
+            Text("ClearanceKit \(marketing) \(BuildInfo.gitHash)")
+            Divider()
             Button("Show") {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
@@ -92,8 +95,9 @@ struct clearancekitApp: App {
         guard daemonManager.status == .enabled else { return .notWorking }
         guard xpcClient.isConnected else { return .disconnected }
         guard xpcClient.isMonitoringActive else { return .notWorking }
-        let outdated = (!xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion != BuildInfo.gitHash)
-                    || (!xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion != BuildInfo.gitHash)
+        let appHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
+        let outdated = (!xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash)
+                    || (!xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash)
         return outdated ? .outdated : .healthy
     }
 }
