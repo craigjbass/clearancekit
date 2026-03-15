@@ -22,7 +22,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .events:    return "list.bullet"
         case .policy:    return "shield"
-        case .presets:   return "lock.shield"
+        case .presets:   return "lock.app.dashed"
         case .allowlist: return "checkmark.shield"
         case .processes: return "cpu"
         case .setup:     return "gearshape"
