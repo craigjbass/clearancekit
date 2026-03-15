@@ -2,14 +2,24 @@
 //  PolicySigner.swift
 //  clearancekit-daemon
 //
-//  Signs and verifies the on-disk policy JSON using an EC-P256 key stored in
-//  the System Keychain (/Library/Keychains/System.keychain) with an ACL
-//  restricting usage to the daemon process.
+//  Signs and verifies the on-disk policy JSON using an EC-P256 key.
 //
-//  The SecKeychain APIs are deprecated but remain the only reliable keychain
-//  for root LaunchDaemons; the data-protection keychain is per-user and
-//  unsuitable for system daemons, and Secure Enclave keys require the
-//  keychain-access-groups entitlement which needs a provisioning profile.
+//  Requirements:
+//    - ACL locked down to the daemon process only
+//    - Ideally Secure Enclave-backed
+//    - Stored in the System Keychain
+//
+//  Secure Enclave is not possible from a LaunchDaemon. The SE is accessed
+//  via com.apple.ctkd.token-client, a per-user LaunchAgent — daemons run
+//  in the system context and cannot reach it. This is an architectural
+//  limitation, not an entitlement issue. The only workaround would be a
+//  daemon + LaunchAgent pair with an XPC bridge, but that only works when
+//  a user is logged in.
+//
+//  Implementation: software EC-P256 key in the System Keychain with a
+//  SecAccess ACL restricting usage to the daemon. The SecKeychain APIs are
+//  deprecated but remain the only reliable keychain for root LaunchDaemons;
+//  the data-protection keychain is per-user and unsuitable here.
 //
 
 import Foundation
