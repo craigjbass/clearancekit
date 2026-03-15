@@ -7,6 +7,7 @@ import Foundation
 
 private let userPolicyDir  = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 private let userPolicyURL  = userPolicyDir.appendingPathComponent("user-policy.json")
+private let signatureURL   = userPolicyDir.appendingPathComponent("user-policy.json.sig")
 
 final class DaemonXPCServer: NSObject {
     static let shared = DaemonXPCServer()
@@ -227,6 +228,25 @@ final class DaemonXPCServer: NSObject {
 
     private func loadUserRulesFromDisk() -> [FAARule] {
         guard let data = try? Data(contentsOf: userPolicyURL) else { return [] }
+
+        if let sigData = try? Data(contentsOf: signatureURL) {
+            do {
+                try PolicySigner.verify(data, signature: sigData)
+            } catch {
+                NSLog("DaemonXPCServer: Policy signature verification FAILED (%@) — discarding potentially tampered data", "\(error)")
+                return []
+            }
+        } else {
+            // No signature yet: first run after enabling signing, or post-update
+            // recovery where the old key was inaccessible and was regenerated.
+            // Trust the data this once and sign it so future loads are verified.
+            NSLog("DaemonXPCServer: No policy signature found — signing existing data (first run or post-update recovery)")
+            if let sig = try? PolicySigner.sign(data) {
+                try? sig.write(to: signatureURL, options: .atomic)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: signatureURL.path)
+            }
+        }
+
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: data) else {
             NSLog("DaemonXPCServer: Failed to decode user policy from disk — starting with empty policy")
             return []
@@ -249,9 +269,15 @@ final class DaemonXPCServer: NSObject {
         }
         do {
             // .atomic writes to a temp file then renames, preserving the original on failure.
-            // After the write, lock the file down to root read/write only (0o600).
+            // After the write, lock both files down to root read/write only (0o600).
             try data.write(to: userPolicyURL, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: userPolicyURL.path)
+            if let sig = try? PolicySigner.sign(data) {
+                try sig.write(to: signatureURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: signatureURL.path)
+            } else {
+                NSLog("DaemonXPCServer: Failed to sign policy data — signature file not updated")
+            }
         } catch {
             NSLog("DaemonXPCServer: Failed to write user policy to disk: %@", error.localizedDescription)
         }
