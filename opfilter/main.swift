@@ -18,4 +18,8 @@ XPCClient.shared.onPolicyUpdate = { rules in
     adapter.updatePolicy(rules)
 }
 
+XPCClient.shared.onAllowlistUpdate = { entries in
+    interactor.updateAllowlist(entries)
+}
+
 dispatchMain()

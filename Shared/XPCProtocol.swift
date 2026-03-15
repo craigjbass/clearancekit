@@ -200,6 +200,11 @@ public protocol DaemonServiceProtocol {
     func updateRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
+    // User allowlist mutations (GUI → daemon). Daemon stores, then broadcasts merged
+    // allowlist to opfilter clients and updated user entries to all GUI clients.
+    func addAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
+
     // Telemetry from opfilter
     func reportEvent(_ event: FolderOpenEvent)
     func reportMonitoringStatus(_ isActive: Bool)
@@ -223,6 +228,8 @@ public protocol DaemonClientProtocol {
     // and whenever the respective tier changes.
     func managedRulesUpdated(_ rulesData: NSData)
     func userRulesUpdated(_ rulesData: NSData)
+    func managedAllowlistUpdated(_ allowlistData: NSData)
+    func userAllowlistUpdated(_ allowlistData: NSData)
 }
 
 // MARK: - Filter Client Protocol (exported by opfilter for daemon policy-push callbacks)
@@ -230,6 +237,7 @@ public protocol DaemonClientProtocol {
 @objc(FilterClientProtocol)
 public protocol FilterClientProtocol {
     func policyUpdated(_ policyData: NSData)
+    func allowlistUpdated(_ allowlistData: NSData)
     func resyncStatus()
 }
 

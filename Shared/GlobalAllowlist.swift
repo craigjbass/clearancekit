@@ -1,0 +1,128 @@
+//
+//  GlobalAllowlist.swift
+//  clearancekit
+//
+//  Global process allowlist that bypasses all FAA policy rules.
+//  Any process matching an entry is allowed to access any FAA-protected path
+//  regardless of the active FAA policy.
+//
+//  Three tiers, evaluated in order (first match wins):
+//    1. Baseline — compiled in; covers essential Apple system processes.
+//    2. Managed  — delivered via MDM / .mobileconfig (GlobalAllowlist key).
+//    3. User     — persisted in signed JSON on disk; editable via the GUI.
+//
+
+import Foundation
+
+// MARK: - AllowlistEntry
+
+public struct AllowlistEntry: Identifiable, Codable {
+    public let id: UUID
+    /// Signing ID to match. Empty if this is a path-based entry.
+    public var signingID: String
+    /// Process executable path to match. Empty if this is a signing-ID-based entry.
+    public var processPath: String
+    /// If true, the process must be an Apple platform binary (empty team ID in ES audit token).
+    public var platformBinary: Bool
+    /// Additional team ID constraint for non-platform-binary entries. Empty = any team.
+    public var teamID: String
+
+    public init(
+        id: UUID = UUID(),
+        signingID: String = "",
+        processPath: String = "",
+        platformBinary: Bool = false,
+        teamID: String = ""
+    ) {
+        self.id = id
+        self.signingID = signingID
+        self.processPath = processPath
+        self.platformBinary = platformBinary
+        self.teamID = teamID
+    }
+
+    public func matches(processPath: String, signingID: String, teamID: String) -> Bool {
+        if platformBinary {
+            guard teamID.isEmpty else { return false }
+        } else if !self.teamID.isEmpty {
+            guard teamID == self.teamID else { return false }
+        }
+        if !self.signingID.isEmpty { return signingID == self.signingID }
+        if !self.processPath.isEmpty { return processPath == self.processPath }
+        return false
+    }
+}
+
+// MARK: - Evaluation
+
+public func isGloballyAllowed(
+    allowlist: [AllowlistEntry],
+    processPath: String,
+    signingID: String,
+    teamID: String
+) -> Bool {
+    allowlist.contains { $0.matches(processPath: processPath, signingID: signingID, teamID: teamID) }
+}
+
+// MARK: - Baseline allowlist
+
+private func signingEntry(n: Int, signingID: String) -> AllowlistEntry {
+    AllowlistEntry(
+        id: UUID(uuidString: String(format: "B0000000-0000-0000-0000-%012X", n))!,
+        signingID: signingID,
+        platformBinary: true
+    )
+}
+
+private func pathEntry(n: Int, processPath: String) -> AllowlistEntry {
+    AllowlistEntry(
+        id: UUID(uuidString: String(format: "B0000000-0000-0000-0001-%012X", n))!,
+        processPath: processPath,
+        platformBinary: true
+    )
+}
+
+public let baselineAllowlist: [AllowlistEntry] = [
+    signingEntry(n: 1,  signingID: "com.apple.mdworker"),
+    signingEntry(n: 2,  signingID: "com.apple.mdworker_shared"),
+    signingEntry(n: 3,  signingID: "com.apple.mds"),
+    signingEntry(n: 4,  signingID: "com.apple.apfsd"),
+    signingEntry(n: 5,  signingID: "com.apple.deleted"),
+    signingEntry(n: 6,  signingID: "com.apple.mdsync"),
+    signingEntry(n: 7,  signingID: "com.apple.containermanagerd"),
+    signingEntry(n: 8,  signingID: "com.apple.containermanagerd_system"),
+    signingEntry(n: 9,  signingID: "com.apple.secinitd"),
+    signingEntry(n: 10, signingID: "com.apple.CrashReporter"),
+    signingEntry(n: 11, signingID: "com.apple.filecoordinationd"),
+    signingEntry(n: 12, signingID: "com.apple.ANECompilerService"),
+    signingEntry(n: 13, signingID: "com.apple.WebKit.Networking"),
+    signingEntry(n: 14, signingID: "com.apple.finder"),
+    signingEntry(n: 15, signingID: "com.apple.appkit.xpc.openAndSavePanelService"),
+
+    pathEntry(n: 1,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect"),
+    pathEntry(n: 2,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorAdload"),
+    pathEntry(n: 3,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorGreenAcre"),
+    pathEntry(n: 4,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorRankStank"),
+    pathEntry(n: 5,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorKeySteal"),
+    pathEntry(n: 6,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorPirrit"),
+    pathEntry(n: 7,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorDubRobber"),
+    pathEntry(n: 8,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBundlore"),
+    pathEntry(n: 9,  processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorMRTv3"),
+    pathEntry(n: 10, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorTrovi"),
+    pathEntry(n: 11, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorCardboardCutout"),
+    pathEntry(n: 12, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorConductor"),
+    pathEntry(n: 13, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSnowDrift"),
+    pathEntry(n: 14, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorCrapyrator"),
+    pathEntry(n: 15, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSnowBeagle"),
+    pathEntry(n: 16, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorColdSnap"),
+    pathEntry(n: 17, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorEicar"),
+    pathEntry(n: 18, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorWaterNet"),
+    pathEntry(n: 19, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorDolittle"),
+    pathEntry(n: 20, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorFloppyFlipper"),
+    pathEntry(n: 21, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBadGacha"),
+    pathEntry(n: 22, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorGenieo"),
+    pathEntry(n: 23, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorSheepSwap"),
+    pathEntry(n: 24, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorRoachFlight"),
+    pathEntry(n: 25, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorBlueTop"),
+    pathEntry(n: 26, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtectRemediatorToyDrop"),
+]

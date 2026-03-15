@@ -5,9 +5,11 @@
 
 import Foundation
 
-private let userPolicyDir  = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
-private let userPolicyURL  = userPolicyDir.appendingPathComponent("user-policy.json")
-private let signatureURL   = userPolicyDir.appendingPathComponent("user-policy.json.sig")
+private let userPolicyDir        = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
+private let userPolicyURL        = userPolicyDir.appendingPathComponent("user-policy.json")
+private let signatureURL         = userPolicyDir.appendingPathComponent("user-policy.json.sig")
+private let allowlistURL         = userPolicyDir.appendingPathComponent("global-allowlist.json")
+private let allowlistSignatureURL = userPolicyDir.appendingPathComponent("global-allowlist.json.sig")
 
 final class DaemonXPCServer: NSObject {
     static let shared = DaemonXPCServer()
@@ -20,6 +22,8 @@ final class DaemonXPCServer: NSObject {
     private var recentEvents: [FolderOpenEvent] = []
     private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
+    private var managedAllowlist: [AllowlistEntry] = []
+    private var userAllowlist: [AllowlistEntry] = []
     private let maxHistoryCount = 1000
 
     private override init() {
@@ -29,6 +33,8 @@ final class DaemonXPCServer: NSObject {
     func start() {
         userRules = loadUserRulesFromDisk()
         managedRules = ManagedPolicyLoader.load()
+        userAllowlist = loadUserAllowlistFromDisk()
+        managedAllowlist = ManagedAllowlistLoader.load()
         // Both rule tiers must be loaded before the listener resumes so that
         // mergedPolicyData() is complete the moment the first filter client connects.
         listener = NSXPCListener(machServiceName: XPCConstants.daemonServiceName)
@@ -53,8 +59,9 @@ final class DaemonXPCServer: NSObject {
         let count = filterClients.count
         lock.unlock()
         NSLog("DaemonXPCServer: Filter client registered. Active filter clients: %d", count)
-        // Push current merged policy immediately so the filter is up to date on connect/reconnect.
+        // Push current merged policy and allowlist immediately so the filter is up to date on connect/reconnect.
         (connection.remoteObjectProxy as? FilterClientProtocol)?.policyUpdated(mergedPolicyData())
+        (connection.remoteObjectProxy as? FilterClientProtocol)?.allowlistUpdated(mergedAllowlistData())
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
@@ -139,14 +146,17 @@ final class DaemonXPCServer: NSObject {
     // MARK: - Resync
 
     fileprivate func requestResyncFromFilterClients(requestingConnection: NSXPCConnection) {
-        // Reload managed rules — picks up any MDM profile changes since last resync.
+        // Reload managed rules and allowlist — picks up any MDM profile changes since last resync.
         let reloaded = ManagedPolicyLoader.loadWithSync()
+        let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
         lock.lock()
         managedRules = reloaded
+        managedAllowlist = reloadedAllowlist
         lock.unlock()
 
-        // Re-broadcast merged policy (now includes fresh managed rules) to filter clients.
+        // Re-broadcast merged policy and allowlist to filter clients.
         broadcastMergedPolicyToFilterClients()
+        broadcastMergedAllowlistToFilterClients()
 
         lock.lock()
         let clients = Array(filterClients.values)
@@ -222,6 +232,84 @@ final class DaemonXPCServer: NSObject {
         let proxy = connection.remoteObjectProxy as? DaemonClientProtocol
         proxy?.managedRulesUpdated(encodedManagedRules())
         proxy?.userRulesUpdated(encodedUserRules())
+        proxy?.managedAllowlistUpdated(encodedManagedAllowlist())
+        proxy?.userAllowlistUpdated(encodedUserAllowlist())
+    }
+
+    // MARK: - Allowlist mutations
+
+    fileprivate func applyAddAllowlistEntry(_ entry: AllowlistEntry) {
+        lock.lock()
+        userAllowlist.append(entry)
+        lock.unlock()
+        persistAndBroadcastAllowlist()
+    }
+
+    fileprivate func applyRemoveAllowlistEntry(entryID: UUID) {
+        lock.lock()
+        userAllowlist.removeAll { $0.id == entryID }
+        lock.unlock()
+        persistAndBroadcastAllowlist()
+    }
+
+    private func persistAndBroadcastAllowlist() {
+        saveUserAllowlistToDisk()
+        broadcastMergedAllowlistToFilterClients()
+        broadcastUserAllowlistToAllGUIClients()
+    }
+
+    // MARK: - Allowlist helpers
+
+    fileprivate func mergedAllowlistData() -> NSData {
+        lock.lock()
+        let managed = managedAllowlist
+        let user = userAllowlist
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(baselineAllowlist + managed + user) else {
+            fatalError("DaemonXPCServer: Failed to encode merged allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    private func encodedManagedAllowlist() -> NSData {
+        lock.lock()
+        let entries = managedAllowlist
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("DaemonXPCServer: Failed to encode managed allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    private func encodedUserAllowlist() -> NSData {
+        lock.lock()
+        let entries = userAllowlist
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("DaemonXPCServer: Failed to encode user allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    private func broadcastMergedAllowlistToFilterClients() {
+        let data = mergedAllowlistData()
+        lock.lock()
+        let clients = Array(filterClients.values)
+        lock.unlock()
+        NSLog("DaemonXPCServer: Broadcasting merged allowlist to %d filter client(s)", clients.count)
+        for conn in clients {
+            (conn.remoteObjectProxy as? FilterClientProtocol)?.allowlistUpdated(data)
+        }
+    }
+
+    private func broadcastUserAllowlistToAllGUIClients() {
+        let data = encodedUserAllowlist()
+        lock.lock()
+        let clients = Array(guiClients.values)
+        lock.unlock()
+        for conn in clients {
+            (conn.remoteObjectProxy as? DaemonClientProtocol)?.userAllowlistUpdated(data)
+        }
     }
 
     // MARK: - Disk I/O
@@ -280,6 +368,56 @@ final class DaemonXPCServer: NSObject {
             }
         } catch {
             NSLog("DaemonXPCServer: Failed to write user policy to disk: %@", error.localizedDescription)
+        }
+    }
+
+    private func loadUserAllowlistFromDisk() -> [AllowlistEntry] {
+        guard let data = try? Data(contentsOf: allowlistURL) else { return [] }
+
+        if let sigData = try? Data(contentsOf: allowlistSignatureURL) {
+            do {
+                try PolicySigner.verify(data, signature: sigData)
+            } catch {
+                NSLog("DaemonXPCServer: Allowlist signature verification FAILED (%@) — discarding potentially tampered data", "\(error)")
+                return []
+            }
+        } else {
+            NSLog("DaemonXPCServer: No allowlist signature found — signing existing data (first run or post-update recovery)")
+            if let sig = try? PolicySigner.sign(data) {
+                try? sig.write(to: allowlistSignatureURL, options: .atomic)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistSignatureURL.path)
+            }
+        }
+
+        guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: data) else {
+            NSLog("DaemonXPCServer: Failed to decode allowlist from disk — starting with empty user allowlist")
+            return []
+        }
+        NSLog("DaemonXPCServer: Loaded %d user allowlist entry/entries from disk", entries.count)
+        return entries
+    }
+
+    private func saveUserAllowlistToDisk() {
+        let dirAttrs: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        do {
+            try FileManager.default.createDirectory(at: userPolicyDir, withIntermediateDirectories: true, attributes: dirAttrs)
+        } catch {
+            fatalError("DaemonXPCServer: Failed to create policy directory: \(error)")
+        }
+        guard let data = try? JSONEncoder().encode(userAllowlist) else {
+            fatalError("DaemonXPCServer: Failed to encode user allowlist for disk — this is a bug")
+        }
+        do {
+            try data.write(to: allowlistURL, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistURL.path)
+            if let sig = try? PolicySigner.sign(data) {
+                try sig.write(to: allowlistSignatureURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: allowlistSignatureURL.path)
+            } else {
+                NSLog("DaemonXPCServer: Failed to sign allowlist data — signature file not updated")
+            }
+        } catch {
+            NSLog("DaemonXPCServer: Failed to write user allowlist to disk: %@", error.localizedDescription)
         }
     }
 }
@@ -398,6 +536,22 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
     func removeRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
         server.applyRemoveRule(ruleID: ruleID as UUID)
+        reply(true)
+    }
+
+    func addAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server,
+              let entry = try? JSONDecoder().decode(AllowlistEntry.self, from: entryData as Data) else {
+            reply(false)
+            return
+        }
+        server.applyAddAllowlistEntry(entry)
+        reply(true)
+    }
+
+    func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.applyRemoveAllowlistEntry(entryID: entryID as UUID)
         reply(true)
     }
 

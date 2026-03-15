@@ -178,6 +178,27 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Allowlist mutations
+
+    func addAllowlistEntry(_ entry: AllowlistEntry) {
+        guard let data = try? JSONEncoder().encode(entry) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: addAllowlistEntry error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+        service.addAllowlistEntry(data as NSData) { success in
+            if !success { NSLog("XPCClient: addAllowlistEntry rejected by daemon") }
+        }
+    }
+
+    func removeAllowlistEntry(entryID: UUID) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: removeAllowlistEntry error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+        service.removeAllowlistEntry(entryID as NSUUID) { success in
+            if !success { NSLog("XPCClient: removeAllowlistEntry rejected by daemon") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -252,6 +273,24 @@ extension XPCClient: DaemonClientProtocol {
         }
         Task { @MainActor in
             PolicyStore.shared.receivedUserRules(rules)
+        }
+    }
+
+    nonisolated func managedAllowlistUpdated(_ allowlistData: NSData) {
+        guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
+            fatalError("XPCClient: Failed to decode managed allowlist from daemon — binary version mismatch")
+        }
+        Task { @MainActor in
+            AllowlistStore.shared.receivedManagedEntries(entries)
+        }
+    }
+
+    nonisolated func userAllowlistUpdated(_ allowlistData: NSData) {
+        guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
+            fatalError("XPCClient: Failed to decode user allowlist from daemon — binary version mismatch")
+        }
+        Task { @MainActor in
+            AllowlistStore.shared.receivedUserEntries(entries)
         }
     }
 }

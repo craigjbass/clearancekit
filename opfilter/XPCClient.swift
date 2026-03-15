@@ -11,6 +11,7 @@ final class XPCClient: NSObject {
     static let shared = XPCClient()
 
     var onPolicyUpdate: (([FAARule]) -> Void)?
+    var onAllowlistUpdate: (([AllowlistEntry]) -> Void)?
 
     private var connection: NSXPCConnection?
     private let reconnectInterval: TimeInterval = 5.0
@@ -101,6 +102,15 @@ extension XPCClient: FilterClientProtocol {
         }
         NSLog("XPCClient (opfilter): Policy updated — %d rule(s)", rules.count)
         onPolicyUpdate?(rules)
+    }
+
+    func allowlistUpdated(_ allowlistData: NSData) {
+        guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
+            NSLog("XPCClient (opfilter): Failed to decode allowlist update")
+            return
+        }
+        NSLog("XPCClient (opfilter): Allowlist updated — %d entry/entries", entries.count)
+        onAllowlistUpdate?(entries)
     }
 
     func resyncStatus() {
