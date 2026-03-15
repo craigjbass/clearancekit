@@ -2,20 +2,14 @@
 //  PolicySigner.swift
 //  clearancekit-daemon
 //
-//  Signs and verifies the on-disk policy JSON using an EC-P256 key.
+//  Signs and verifies the on-disk policy JSON using an EC-P256 key stored in
+//  the System Keychain (/Library/Keychains/System.keychain) with an ACL
+//  restricting usage to the daemon process.
 //
-//  Key selection (in priority order):
-//
-//  1. Secure Enclave — hardware-bound, not exportable, inaccessible while the
-//     machine is locked. Stored via the data-protection keychain
-//     (kSecUseDataProtectionKeychain). Requires the keychain-access-groups
-//     entitlement so the daemon has a valid keychain identity.
-//
-//  2. Software fallback — for Intel Macs without a Secure Enclave. Stored in
-//     the System Keychain (/Library/Keychains/System.keychain) with an ACL
-//     restricting usage to the daemon process. The SecKeychain APIs are
-//     deprecated but remain the only reliable keychain for root LaunchDaemons;
-//     the data-protection keychain is per-user and unsuitable for system daemons.
+//  The SecKeychain APIs are deprecated but remain the only reliable keychain
+//  for root LaunchDaemons; the data-protection keychain is per-user and
+//  unsuitable for system daemons, and Secure Enclave keys require the
+//  keychain-access-groups entitlement which needs a provisioning profile.
 //
 
 import Foundation
@@ -70,79 +64,25 @@ enum PolicySigner {
     static func loadOrCreateKey() throws -> SecKey {
         migratePermissiveKeyOnce()
         if let key = try? loadKey() { return key }
-        return try createKey()
+        return try createSoftwareKey()
     }
 
-    /// Searches the data-protection keychain (SE keys) then the System Keychain
-    /// (software keys) so the correct key is found regardless of which path was
-    /// used at creation time.
     private static func loadKey() throws -> SecKey {
-        let baseQuery: [CFString: Any] = [
+        var query: [CFString: Any] = [
             kSecClass:              kSecClassKey,
             kSecAttrApplicationTag: keyTag,
             kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeyClass:       kSecAttrKeyClassPrivate,
             kSecReturnRef:          true,
         ]
+        if let kc = systemKeychain { query[kSecUseKeychain] = kc }
 
-        // 1. Data-protection keychain — where SE keys are stored.
-        var dpQuery = baseQuery
-        dpQuery[kSecUseDataProtectionKeychain] = true
         var item: CFTypeRef?
-        if SecItemCopyMatching(dpQuery as CFDictionary, &item) == errSecSuccess,
-           let key = item {
-            return (key as! SecKey)
-        }
-
-        // 2. System Keychain — where software-backed keys are stored.
-        var sysQuery = baseQuery
-        if let kc = systemKeychain { sysQuery[kSecUseKeychain] = kc }
-        item = nil
-        let status = SecItemCopyMatching(sysQuery as CFDictionary, &item)
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let key = item else {
             throw PolicySignerError.keyNotFound(status)
         }
         return (key as! SecKey)
-    }
-
-    private static func createKey() throws -> SecKey {
-        do {
-            let key = try createSecureEnclaveKey()
-            NSLog("PolicySigner: Created Secure Enclave-backed EC-P256 signing key")
-            return key
-        } catch {
-            NSLog("PolicySigner: Secure Enclave key creation failed: %@", "\(error)")
-        }
-        NSLog("PolicySigner: Falling back to software-backed EC-P256 key in System Keychain")
-        return try createSoftwareKey()
-    }
-
-    /// Secure Enclave key stored via the data-protection keychain backend.
-    private static func createSecureEnclaveKey() throws -> SecKey {
-        guard let acl = SecAccessControlCreateWithFlags(
-            nil,
-            kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            .privateKeyUsage,
-            nil
-        ) else { throw PolicySignerError.aclCreationFailed }
-
-        let attrs: [CFString: Any] = [
-            kSecAttrKeyType:               kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeySizeInBits:         256,
-            kSecAttrTokenID:               kSecAttrTokenIDSecureEnclave,
-            kSecUseDataProtectionKeychain: true,
-            kSecPrivateKeyAttrs: [
-                kSecAttrIsPermanent:    true,
-                kSecAttrApplicationTag: keyTag,
-                kSecAttrLabel:          keyLabel,
-                kSecAttrAccessControl:  acl,
-            ] as [CFString: Any],
-        ]
-        var cfError: Unmanaged<CFError>?
-        guard let key = SecKeyCreateRandomKey(attrs as CFDictionary, &cfError) else {
-            throw cfError!.takeRetainedValue()
-        }
-        return key
     }
 
     /// Software-backed key stored in the System Keychain with a daemon-only ACL.
@@ -203,7 +143,7 @@ enum PolicySigner {
     /// Deletes any existing System Keychain key that was created with a
     /// permissive (allow-all) ACL. Runs once, gated by a marker file.
     /// The next call to loadOrCreateKey() will create a fresh key with a
-    /// daemon-only ACL (or use the Secure Enclave if available).
+    /// daemon-only ACL.
     private static func migratePermissiveKeyOnce() {
         guard !FileManager.default.fileExists(atPath: aclMigrationMarker.path) else { return }
         defer {
