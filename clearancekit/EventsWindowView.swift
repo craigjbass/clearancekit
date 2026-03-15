@@ -15,6 +15,7 @@ enum EventFilter: String, CaseIterable {
 
 struct EventsWindowView: View {
     @StateObject private var xpcClient = XPCClient.shared
+    @ObservedObject private var nav = NavigationState.shared
     @State private var filter: EventFilter = .all
     @State private var showDefaultAllows = false
 
@@ -78,14 +79,25 @@ struct EventsWindowView: View {
                         Text("No \(filter.rawValue.lowercased()) events recorded")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                    } 
+                    }
                     Spacer()
                 }
             } else {
-                List(filteredEvents, id: \.eventID) { event in
-                    EventRow(event: event)
+                ScrollViewReader { proxy in
+                    List(filteredEvents, id: \.eventID) { event in
+                        EventRow(event: event, isHighlighted: nav.highlightedEventID == event.eventID)
+                    }
+                    .listStyle(.inset)
+                    .onChange(of: nav.highlightedEventID) { _, eventID in
+                        guard let eventID else { return }
+                        filter = .deny
+                        withAnimation { proxy.scrollTo(eventID, anchor: .center) }
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            nav.highlightedEventID = nil
+                        }
+                    }
                 }
-                .listStyle(.inset)
             }
         }
     }
@@ -95,6 +107,7 @@ struct EventsWindowView: View {
 
 struct EventRow: View {
     let event: FolderOpenEvent
+    let isHighlighted: Bool
     @State private var allowedItems: Set<String> = []
     @State private var isExpanded = false
 
@@ -123,11 +136,12 @@ struct EventRow: View {
     }
 
     var body: some View {
-        if isReadOnlyEvent {
-            compactRow
-        } else {
-            fullRow
-        }
+        let row = isReadOnlyEvent ? AnyView(compactRow) : AnyView(fullRow)
+        row.overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.orange, lineWidth: isHighlighted ? 2 : 0)
+                .animation(.easeOut(duration: 0.3), value: isHighlighted)
+        )
     }
 
     // MARK: - Compact read-only row (baseline + managed, expandable)

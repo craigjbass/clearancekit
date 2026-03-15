@@ -34,17 +34,17 @@ struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @StateObject private var daemonManager = DaemonManager.shared
-    @State private var selection: SidebarItem = .events
+    @ObservedObject private var nav = NavigationState.shared
 
     var body: some View {
         NavigationSplitView {
-            List(SidebarItem.allCases, selection: $selection) { item in
+            List(SidebarItem.allCases, selection: $nav.selection) { item in
                 Label(item.rawValue, systemImage: item.icon)
                     .tag(item)
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 180)
         } detail: {
-            switch selection {
+            switch nav.selection {
             case .events:    EventsWindowView()
             case .policy:    PolicyView()
             case .presets:   PresetsView()

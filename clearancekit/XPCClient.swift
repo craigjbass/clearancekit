@@ -233,6 +233,7 @@ final class XPCClient: NSObject, ObservableObject {
         content.body = "\(event.processPath.split(separator: "/").last.map(String.init) ?? event.processPath) was blocked from accessing \(event.path)"
         content.sound = .default
 
+        content.userInfo = ["eventID": event.eventID.uuidString]
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error { NSLog("XPCClient: notification error: %@", error.localizedDescription) }
