@@ -110,9 +110,7 @@ struct SetupView: View {
         .navigationTitle("Setup")
     }
 
-    private var appBuildVersion: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-    }
+    private var appBuildVersion: String { BuildInfo.gitHash }
 
     private var daemonStatusRow: some View {
         HStack {
