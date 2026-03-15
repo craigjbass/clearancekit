@@ -107,35 +107,27 @@ enum PolicySigner {
         guard status == errSecSuccess, let key = item else {
             throw PolicySignerError.keyNotFound(status)
         }
-        migrateSystemKeychainACL()
-        return (key as! SecKey)
+        let secKey = key as! SecKey
+        migrateSystemKeychainACL(secKey)
+        return secKey
     }
 
-    /// Updates the ACL of an existing System Keychain key to daemon-only in-place,
-    /// preserving the key material so existing signatures remain valid.
-    private static func migrateSystemKeychainACL() {
+    /// Updates the ACL of an existing System Keychain key to daemon-only in-place.
+    /// SecItemUpdate silently ignores kSecAttrAccess, so we use SecKeychainItemSetAccess
+    /// which is the correct API for mutating ACLs on legacy keychain items.
+    /// SecKey is toll-free bridged to SecKeychainItem for legacy keychain objects.
+    private static func migrateSystemKeychainACL(_ key: SecKey) {
         guard let access = makeDaemonOnlyACL() else {
             NSLog("PolicySigner: ACL migration skipped — could not build daemon-only ACL")
             return
         }
-        var searchQuery: [CFString: Any] = [
-            kSecClass:              kSecClassKey,
-            kSecAttrApplicationTag: keyTag,
-            kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeyClass:       kSecAttrKeyClassPrivate,
-        ]
-        if let kc = systemKeychain { searchQuery[kSecUseKeychain] = kc }
-        let updateStatus = SecItemUpdate(
-            searchQuery as CFDictionary,
-            [kSecAttrAccess: access] as CFDictionary
-        )
-        switch updateStatus {
+        let keychainItem = unsafeBitCast(key, to: SecKeychainItem.self)
+        let status = SecKeychainItemSetAccess(keychainItem, access)
+        switch status {
         case errSecSuccess:
             NSLog("PolicySigner: Migrated System Keychain key ACL to daemon-only")
-        case errSecItemNotFound:
-            break
         default:
-            NSLog("PolicySigner: ACL migration failed (%d) — key remains with existing ACL", updateStatus)
+            NSLog("PolicySigner: ACL migration failed (%d) — key remains with existing ACL", status)
         }
     }
 
