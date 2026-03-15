@@ -17,11 +17,11 @@
 //                                                       from ProtectedPathPrefix
 //    ProtectedPathPrefix         (string, required)  — path or glob pattern
 //    AllowedProcessPaths         (array of strings)
-//    AllowedTeamIDs              (array of strings)
-//    AllowedSigningIDs           (array of strings)
+//    AllowedSignatures           (array of strings)  — each "teamID:signingID",
+//                                                       e.g. "apple:com.apple.Safari"
+//                                                       or "37KMK6XFTT:*"
 //    AllowedAncestorProcessPaths (array of strings)
-//    AllowedAncestorTeamIDs      (array of strings)
-//    AllowedAncestorSigningIDs   (array of strings)
+//    AllowedAncestorSignatures   (array of strings)  — same format as AllowedSignatures
 //
 
 import Foundation
@@ -74,12 +74,20 @@ enum ManagedPolicyLoader {
             id: id,
             protectedPathPrefix: path,
             allowedProcessPaths:         dict["AllowedProcessPaths"]         as? [String] ?? [],
-            allowedTeamIDs:              dict["AllowedTeamIDs"]              as? [String] ?? [],
-            allowedSigningIDs:           dict["AllowedSigningIDs"]           as? [String] ?? [],
+            allowedSignatures:           parseSignatures(dict["AllowedSignatures"]         as? [String] ?? []),
             allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],
-            allowedAncestorTeamIDs:      dict["AllowedAncestorTeamIDs"]      as? [String] ?? [],
-            allowedAncestorSigningIDs:   dict["AllowedAncestorSigningIDs"]   as? [String] ?? []
+            allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? [])
         )
+    }
+
+    private static func parseSignatures(_ strings: [String]) -> [ProcessSignature] {
+        strings.compactMap { s in
+            guard let colonIndex = s.firstIndex(of: ":") else { return nil }
+            return ProcessSignature(
+                teamID: String(s[s.startIndex..<colonIndex]),
+                signingID: String(s[s.index(after: colonIndex)...])
+            )
+        }
     }
 
     /// Derives a stable UUID v5 (RFC 4122, SHA-1) for a rule when no explicit

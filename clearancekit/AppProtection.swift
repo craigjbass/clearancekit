@@ -97,21 +97,20 @@ enum AppBundleIntrospector {
 
     static func generateRules(from info: AppBundleInfo) -> [FAARule] {
         let effectiveTeamID = info.teamID.isEmpty ? appleTeamID : info.teamID
+        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: info.signingID)
         var rules: [FAARule] = []
 
         if info.isSandboxed {
             rules.append(FAARule(
                 protectedPathPrefix: "/Users/*/Library/Containers/\(info.bundleID)",
-                allowedTeamIDs: [effectiveTeamID],
-                allowedSigningIDs: [info.signingID]
+                allowedSignatures: [signature]
             ))
         }
 
         for group in info.appGroups {
             rules.append(FAARule(
                 protectedPathPrefix: "/Users/*/Library/Group Containers/\(group)",
-                allowedTeamIDs: [effectiveTeamID],
-                allowedSigningIDs: [info.signingID]
+                allowedSignatures: [signature]
             ))
         }
 

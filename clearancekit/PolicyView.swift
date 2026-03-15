@@ -134,11 +134,9 @@ private struct RuleRow: View {
             }
 
             criterionGroup("Allowed process paths", rule.allowedProcessPaths)
-            criterionGroup("Allowed team IDs", rule.allowedTeamIDs)
-            criterionGroup("Allowed signing IDs", rule.allowedSigningIDs)
+            criterionGroup("Allowed signatures", rule.allowedSignatures.map(\.description))
             criterionGroup("Allowed ancestor paths", rule.allowedAncestorProcessPaths)
-            criterionGroup("Allowed ancestor team IDs", rule.allowedAncestorTeamIDs)
-            criterionGroup("Allowed ancestor signing IDs", rule.allowedAncestorSigningIDs)
+            criterionGroup("Allowed ancestor signatures", rule.allowedAncestorSignatures.map(\.description))
         }
     }
 

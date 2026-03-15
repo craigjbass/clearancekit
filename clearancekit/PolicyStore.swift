@@ -65,19 +65,16 @@ final class PolicyStore: ObservableObject {
         try await BiometricAuth.authenticate(reason: "Allow this process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
-        var newTeamIDs = existing.allowedTeamIDs
-        var newSigningIDs = existing.allowedSigningIDs
-        if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
-        if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
+        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
+        var newSignatures = existing.allowedSignatures
+        if !newSignatures.contains(signature) { newSignatures.append(signature) }
         let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
             allowedProcessPaths: existing.allowedProcessPaths,
-            allowedTeamIDs: newTeamIDs,
-            allowedSigningIDs: newSigningIDs,
+            allowedSignatures: newSignatures,
             allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorTeamIDs: existing.allowedAncestorTeamIDs,
-            allowedAncestorSigningIDs: existing.allowedAncestorSigningIDs
+            allowedAncestorSignatures: existing.allowedAncestorSignatures
         )
         userRules[index] = updated
         XPCClient.shared.updateRule(updated)
@@ -110,19 +107,16 @@ final class PolicyStore: ObservableObject {
         try await BiometricAuth.authenticate(reason: "Allow this ancestor process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
-        var newTeamIDs = existing.allowedAncestorTeamIDs
-        var newSigningIDs = existing.allowedAncestorSigningIDs
-        if !newTeamIDs.contains(effectiveTeamID) { newTeamIDs.append(effectiveTeamID) }
-        if !signingID.isEmpty && !newSigningIDs.contains(signingID) { newSigningIDs.append(signingID) }
+        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
+        var newSignatures = existing.allowedAncestorSignatures
+        if !newSignatures.contains(signature) { newSignatures.append(signature) }
         let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
             allowedProcessPaths: existing.allowedProcessPaths,
-            allowedTeamIDs: existing.allowedTeamIDs,
-            allowedSigningIDs: existing.allowedSigningIDs,
+            allowedSignatures: existing.allowedSignatures,
             allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorTeamIDs: newTeamIDs,
-            allowedAncestorSigningIDs: newSigningIDs
+            allowedAncestorSignatures: newSignatures
         )
         userRules[index] = updated
         XPCClient.shared.updateRule(updated)

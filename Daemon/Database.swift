@@ -161,8 +161,8 @@ final class Database {
         var rules: [FAARule] = []
         query("""
             SELECT id, protected_path_prefix,
-                   allowed_process_paths, allowed_team_ids, allowed_signing_ids,
-                   allowed_ancestor_process_paths, allowed_ancestor_team_ids, allowed_ancestor_signing_ids
+                   allowed_process_paths, allowed_signatures,
+                   allowed_ancestor_process_paths, allowed_ancestor_signatures
             FROM user_rules ORDER BY rowid
         """) { stmt in
             rules.append(ruleFromRow(stmt))
@@ -191,18 +191,16 @@ final class Database {
         execute("""
             INSERT INTO user_rules
                 (id, protected_path_prefix,
-                 allowed_process_paths, allowed_team_ids, allowed_signing_ids,
-                 allowed_ancestor_process_paths, allowed_ancestor_team_ids, allowed_ancestor_signing_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 allowed_process_paths, allowed_signatures,
+                 allowed_ancestor_process_paths, allowed_ancestor_signatures)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, bindings: [
             .text(rule.id.uuidString),
             .text(rule.protectedPathPrefix),
             .text(encodeStringArray(rule.allowedProcessPaths)),
-            .text(encodeStringArray(rule.allowedTeamIDs)),
-            .text(encodeStringArray(rule.allowedSigningIDs)),
+            .text(encodeSignatureArray(rule.allowedSignatures)),
             .text(encodeStringArray(rule.allowedAncestorProcessPaths)),
-            .text(encodeStringArray(rule.allowedAncestorTeamIDs)),
-            .text(encodeStringArray(rule.allowedAncestorSigningIDs)),
+            .text(encodeSignatureArray(rule.allowedAncestorSignatures)),
         ])
     }
 
@@ -211,11 +209,9 @@ final class Database {
             id: UUID(uuidString: columnText(stmt, 0))!,
             protectedPathPrefix: columnText(stmt, 1),
             allowedProcessPaths: decodeStringArray(columnText(stmt, 2)),
-            allowedTeamIDs: decodeStringArray(columnText(stmt, 3)),
-            allowedSigningIDs: decodeStringArray(columnText(stmt, 4)),
-            allowedAncestorProcessPaths: decodeStringArray(columnText(stmt, 5)),
-            allowedAncestorTeamIDs: decodeStringArray(columnText(stmt, 6)),
-            allowedAncestorSigningIDs: decodeStringArray(columnText(stmt, 7))
+            allowedSignatures: decodeSignatureArray(columnText(stmt, 3)),
+            allowedAncestorProcessPaths: decodeStringArray(columnText(stmt, 4)),
+            allowedAncestorSignatures: decodeSignatureArray(columnText(stmt, 5))
         )
     }
 
@@ -319,6 +315,14 @@ final class Database {
 
     private func decodeStringArray(_ json: String) -> [String] {
         try! JSONDecoder().decode([String].self, from: json.data(using: .utf8)!)
+    }
+
+    private func encodeSignatureArray(_ sigs: [ProcessSignature]) -> String {
+        String(data: try! JSONEncoder().encode(sigs), encoding: .utf8)!
+    }
+
+    private func decodeSignatureArray(_ json: String) -> [ProcessSignature] {
+        try! JSONDecoder().decode([ProcessSignature].self, from: json.data(using: .utf8)!)
     }
 
     private func canonicalRulesJSON(_ rules: [FAARule]) -> Data {

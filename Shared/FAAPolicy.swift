@@ -46,6 +46,45 @@ public enum PolicyDecision {
     }
 }
 
+// MARK: - ProcessSignature
+
+/// A combined process identity in the form `teamID:signingID`.
+/// Use `appleTeamID` ("apple") for Apple platform binaries.
+/// Use `*` as the signingID to allow any signing ID from that team.
+public struct ProcessSignature: Codable, Equatable, Hashable {
+    public let teamID: String
+    public let signingID: String
+
+    public init(teamID: String, signingID: String) {
+        self.teamID = teamID
+        self.signingID = signingID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let string = try container.decode(String.self)
+        guard let colonIndex = string.firstIndex(of: ":") else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "ProcessSignature requires teamID:signingID format")
+        }
+        teamID = String(string[string.startIndex..<colonIndex])
+        signingID = String(string[string.index(after: colonIndex)...])
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode("\(teamID):\(signingID)")
+    }
+
+    public func matches(resolvedTeamID: String, signingID: String) -> Bool {
+        guard teamID == resolvedTeamID else { return false }
+        return self.signingID == "*" || self.signingID == signingID
+    }
+}
+
+extension ProcessSignature: CustomStringConvertible {
+    public var description: String { "\(teamID):\(signingID)" }
+}
+
 // MARK: - FAARule
 
 public struct FAARule: Identifiable, Codable {
@@ -57,30 +96,24 @@ public struct FAARule: Identifiable, Codable {
     /// the kernel delivers a superset of events which the policy filter narrows down.
     public var esMutePath: String { mutePath(for: protectedPathPrefix) }
     public let allowedProcessPaths: [String]
-    public let allowedTeamIDs: [String]
-    public let allowedSigningIDs: [String]
+    public let allowedSignatures: [ProcessSignature]
     public let allowedAncestorProcessPaths: [String]
-    public let allowedAncestorTeamIDs: [String]
-    public let allowedAncestorSigningIDs: [String]
+    public let allowedAncestorSignatures: [ProcessSignature]
 
     public init(
         id: UUID = UUID(),
         protectedPathPrefix: String,
         allowedProcessPaths: [String] = [],
-        allowedTeamIDs: [String] = [],
-        allowedSigningIDs: [String] = [],
+        allowedSignatures: [ProcessSignature] = [],
         allowedAncestorProcessPaths: [String] = [],
-        allowedAncestorTeamIDs: [String] = [],
-        allowedAncestorSigningIDs: [String] = []
+        allowedAncestorSignatures: [ProcessSignature] = []
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
         self.allowedProcessPaths = allowedProcessPaths
-        self.allowedTeamIDs = allowedTeamIDs
-        self.allowedSigningIDs = allowedSigningIDs
+        self.allowedSignatures = allowedSignatures
         self.allowedAncestorProcessPaths = allowedAncestorProcessPaths
-        self.allowedAncestorTeamIDs = allowedAncestorTeamIDs
-        self.allowedAncestorSigningIDs = allowedAncestorSigningIDs
+        self.allowedAncestorSignatures = allowedAncestorSignatures
     }
 }
 
@@ -97,7 +130,7 @@ public let faaPolicy: [FAARule] = [
     FAARule(
         id: UUID(uuidString: "5DCEA92F-C4FB-4D5D-9E56-FD36D8F330DF")!,
         protectedPathPrefix: "/Library/Application Support/clearancekit",
-        allowedTeamIDs: [clearancekitTeamID]
+        allowedSignatures: [ProcessSignature(teamID: clearancekitTeamID, signingID: "*")]
     ),
 ]
 
@@ -190,16 +223,11 @@ public func checkFAAPolicy(
             return .allowed(matchedCriterion: "process path \(processPath)")
         }
 
-        // teamID and signingID are AND: both specified constraints must be satisfied.
         // Apple platform binaries carry an empty team ID; resolve to appleTeamID for matching.
         let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
-        let teamOK    = rule.allowedTeamIDs.isEmpty    || rule.allowedTeamIDs.contains(resolvedTeamID)
-        let signingOK = rule.allowedSigningIDs.isEmpty || rule.allowedSigningIDs.contains(signingID)
-        if (!rule.allowedTeamIDs.isEmpty || !rule.allowedSigningIDs.isEmpty) && teamOK && signingOK {
-            var parts: [String] = []
-            if !rule.allowedTeamIDs.isEmpty    { parts.append("team ID \(resolvedTeamID)") }
-            if !rule.allowedSigningIDs.isEmpty { parts.append("signing ID \(signingID)") }
-            return .allowed(matchedCriterion: parts.joined(separator: " and "))
+        if !rule.allowedSignatures.isEmpty,
+           let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) {
+            return .allowed(matchedCriterion: "identity \(match)")
         }
 
         if !rule.allowedAncestorProcessPaths.isEmpty,
@@ -207,17 +235,12 @@ public func checkFAAPolicy(
             return .allowed(matchedCriterion: "ancestor process path \(match.path)")
         }
 
-        // Ancestor teamID and signingID are also AND across both constraints.
-        for ancestor in ancestors {
-            let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
-            let aTeamOK    = rule.allowedAncestorTeamIDs.isEmpty    || rule.allowedAncestorTeamIDs.contains(resolvedAncestorTeamID)
-            let aSigningOK = rule.allowedAncestorSigningIDs.isEmpty || rule.allowedAncestorSigningIDs.contains(ancestor.signingID)
-            if (!rule.allowedAncestorTeamIDs.isEmpty || !rule.allowedAncestorSigningIDs.isEmpty) && aTeamOK && aSigningOK {
-                var parts: [String] = []
-                if !rule.allowedAncestorTeamIDs.isEmpty    { parts.append("ancestor team ID \(resolvedAncestorTeamID)") }
-                if !rule.allowedAncestorSigningIDs.isEmpty { parts.append("ancestor signing ID \(ancestor.signingID)") }
-                parts.append("(\(ancestor.path))")
-                return .allowed(matchedCriterion: parts.joined(separator: " and "))
+        if !rule.allowedAncestorSignatures.isEmpty {
+            for ancestor in ancestors {
+                let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
+                if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: resolvedAncestorTeamID, signingID: ancestor.signingID) }) {
+                    return .allowed(matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
+                }
             }
         }
 
@@ -225,20 +248,14 @@ public func checkFAAPolicy(
         if !rule.allowedProcessPaths.isEmpty {
             criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
         }
-        if !rule.allowedTeamIDs.isEmpty {
-            criteria.append("team IDs: \(rule.allowedTeamIDs.joined(separator: ", "))")
-        }
-        if !rule.allowedSigningIDs.isEmpty {
-            criteria.append("signing IDs: \(rule.allowedSigningIDs.joined(separator: ", "))")
+        if !rule.allowedSignatures.isEmpty {
+            criteria.append("signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
         }
         if !rule.allowedAncestorProcessPaths.isEmpty {
             criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
         }
-        if !rule.allowedAncestorTeamIDs.isEmpty {
-            criteria.append("ancestor team IDs: \(rule.allowedAncestorTeamIDs.joined(separator: ", "))")
-        }
-        if !rule.allowedAncestorSigningIDs.isEmpty {
-            criteria.append("ancestor signing IDs: \(rule.allowedAncestorSigningIDs.joined(separator: ", "))")
+        if !rule.allowedAncestorSignatures.isEmpty {
+            criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
         }
         return .denied(ruleID: rule.id, rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
     }

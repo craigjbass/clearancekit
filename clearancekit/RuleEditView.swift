@@ -9,11 +9,9 @@ import SwiftUI
 
 private enum ProcessPickerTarget: Identifiable, Hashable {
     case process
-    case teamID
-    case signingID
+    case signature
     case ancestor
-    case ancestorTeamID
-    case ancestorSigningID
+    case ancestorSignature
     var id: Self { self }
 }
 
@@ -60,14 +58,9 @@ struct RuleEditView: View {
                     pickerSectionHeader("Allowed Process Paths", target: .process)
                 }
                 Section {
-                    StringListEditor(values: $draft.allowedTeamIDs)
+                    StringListEditor(values: $draft.allowedSignatures, placeholder: "teamID:signingID")
                 } header: {
-                    pickerSectionHeader("Allowed Team IDs", target: .teamID)
-                }
-                Section {
-                    StringListEditor(values: $draft.allowedSigningIDs)
-                } header: {
-                    pickerSectionHeader("Allowed Signing IDs", target: .signingID)
+                    pickerSectionHeader("Allowed Signatures", target: .signature)
                 }
                 Section {
                     StringListEditor(values: $draft.allowedAncestorProcessPaths)
@@ -75,14 +68,9 @@ struct RuleEditView: View {
                     pickerSectionHeader("Allowed Ancestor Process Paths", target: .ancestor)
                 }
                 Section {
-                    StringListEditor(values: $draft.allowedAncestorTeamIDs)
+                    StringListEditor(values: $draft.allowedAncestorSignatures, placeholder: "teamID:signingID")
                 } header: {
-                    pickerSectionHeader("Allowed Ancestor Team IDs", target: .ancestorTeamID)
-                }
-                Section {
-                    StringListEditor(values: $draft.allowedAncestorSigningIDs)
-                } header: {
-                    pickerSectionHeader("Allowed Ancestor Signing IDs", target: .ancestorSigningID)
+                    pickerSectionHeader("Allowed Ancestor Signatures", target: .ancestorSignature)
                 }
             }
             .formStyle(.grouped)
@@ -103,23 +91,19 @@ struct RuleEditView: View {
         .frame(width: 520, height: 640)
         .sheet(item: $processPicker) { target in
             ProcessPickerView { process in
+                let effectiveTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
+                let sig = "\(effectiveTeamID):\(process.signingID.isEmpty ? "*" : process.signingID)"
                 switch target {
                 case .process:
                     if !process.path.isEmpty { draft.allowedProcessPaths.append(process.path) }
-                    if !process.teamID.isEmpty { draft.allowedTeamIDs.append(process.teamID) }
-                    if !process.signingID.isEmpty { draft.allowedSigningIDs.append(process.signingID) }
-                case .teamID:
-                    if !process.teamID.isEmpty { draft.allowedTeamIDs.append(process.teamID) }
-                case .signingID:
-                    if !process.signingID.isEmpty { draft.allowedSigningIDs.append(process.signingID) }
+                    draft.allowedSignatures.append(sig)
+                case .signature:
+                    draft.allowedSignatures.append(sig)
                 case .ancestor:
                     if !process.path.isEmpty { draft.allowedAncestorProcessPaths.append(process.path) }
-                    if !process.teamID.isEmpty { draft.allowedAncestorTeamIDs.append(process.teamID) }
-                    if !process.signingID.isEmpty { draft.allowedAncestorSigningIDs.append(process.signingID) }
-                case .ancestorTeamID:
-                    if !process.teamID.isEmpty { draft.allowedAncestorTeamIDs.append(process.teamID) }
-                case .ancestorSigningID:
-                    if !process.signingID.isEmpty { draft.allowedAncestorSigningIDs.append(process.signingID) }
+                    draft.allowedAncestorSignatures.append(sig)
+                case .ancestorSignature:
+                    draft.allowedAncestorSignatures.append(sig)
                 }
                 processPicker = nil
             } onCancel: {
@@ -145,36 +129,37 @@ struct RuleEditView: View {
 private struct DraftRule {
     var protectedPathPrefix: String = ""
     var allowedProcessPaths: [String] = []
-    var allowedTeamIDs: [String] = []
-    var allowedSigningIDs: [String] = []
+    var allowedSignatures: [String] = []
     var allowedAncestorProcessPaths: [String] = []
-    var allowedAncestorTeamIDs: [String] = []
-    var allowedAncestorSigningIDs: [String] = []
+    var allowedAncestorSignatures: [String] = []
 
     init() {}
 
     init(from rule: FAARule) {
         self.protectedPathPrefix = rule.protectedPathPrefix
         self.allowedProcessPaths = rule.allowedProcessPaths
-        self.allowedTeamIDs = rule.allowedTeamIDs
-        self.allowedSigningIDs = rule.allowedSigningIDs
+        self.allowedSignatures = rule.allowedSignatures.map(\.description)
         self.allowedAncestorProcessPaths = rule.allowedAncestorProcessPaths
-        self.allowedAncestorTeamIDs = rule.allowedAncestorTeamIDs
-        self.allowedAncestorSigningIDs = rule.allowedAncestorSigningIDs
+        self.allowedAncestorSignatures = rule.allowedAncestorSignatures.map(\.description)
     }
 
     func toRule(preservingID id: UUID?) -> FAARule {
         let trimmed: (String) -> String = { $0.trimmingCharacters(in: .whitespaces) }
         let nonEmpty: ([String]) -> [String] = { $0.map(trimmed).filter { !$0.isEmpty } }
+        let parseSignature: (String) -> ProcessSignature? = { s in
+            guard let colonIndex = s.firstIndex(of: ":") else { return nil }
+            return ProcessSignature(
+                teamID: String(s[s.startIndex..<colonIndex]),
+                signingID: String(s[s.index(after: colonIndex)...])
+            )
+        }
         return FAARule(
             id: id ?? UUID(),
             protectedPathPrefix: trimmed(protectedPathPrefix),
             allowedProcessPaths: nonEmpty(allowedProcessPaths),
-            allowedTeamIDs: nonEmpty(allowedTeamIDs),
-            allowedSigningIDs: nonEmpty(allowedSigningIDs),
+            allowedSignatures: nonEmpty(allowedSignatures).compactMap(parseSignature),
             allowedAncestorProcessPaths: nonEmpty(allowedAncestorProcessPaths),
-            allowedAncestorTeamIDs: nonEmpty(allowedAncestorTeamIDs),
-            allowedAncestorSigningIDs: nonEmpty(allowedAncestorSigningIDs)
+            allowedAncestorSignatures: nonEmpty(allowedAncestorSignatures).compactMap(parseSignature)
         )
     }
 }
@@ -183,12 +168,13 @@ private struct DraftRule {
 
 struct StringListEditor: View {
     @Binding var values: [String]
+    var placeholder: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(values.indices, id: \.self) { i in
                 HStack {
-                    TextField("", text: $values[i])
+                    TextField(placeholder, text: $values[i])
                         .font(.system(.body, design: .monospaced))
                     Button {
                         values.remove(at: i)

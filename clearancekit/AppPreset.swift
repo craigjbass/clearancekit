@@ -37,18 +37,9 @@ struct AppPreset: Identifiable {
 
 // MARK: - Built-in presets
 
-let safariTeamID = appleTeamID
-let safariSigningID = "com.apple.Safari"
-
-let notesSigningIDs = [
-    "com.apple.Notes",
-    "com.apple.Notes.WidgetExtension",
-    "com.apple.Notes.QuickLookExtension",
-    "com.apple.Notes.SharingExtension",
-    "com.apple.Notes.SpotlightIndexExtension",
-    "com.apple.Notes.IntentsExtension",
-    "com.apple.LinkedNotesUIService",
-]
+private func apple(_ signingID: String) -> ProcessSignature {
+    ProcessSignature(teamID: appleTeamID, signingID: signingID)
+}
 
 let builtInPresets: [AppPreset] = [
     AppPreset(
@@ -60,8 +51,15 @@ let builtInPresets: [AppPreset] = [
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0002-0001-0001-000000000001")!,
                 protectedPathPrefix: "/Users/*/Library/Group Containers/group.com.apple.notes",
-                allowedTeamIDs: [appleTeamID],
-                allowedSigningIDs: notesSigningIDs
+                allowedSignatures: [
+                    apple("com.apple.Notes"),
+                    apple("com.apple.Notes.WidgetExtension"),
+                    apple("com.apple.Notes.QuickLookExtension"),
+                    apple("com.apple.Notes.SharingExtension"),
+                    apple("com.apple.Notes.SpotlightIndexExtension"),
+                    apple("com.apple.Notes.IntentsExtension"),
+                    apple("com.apple.LinkedNotesUIService"),
+                ]
             ),
         ]
     ),
@@ -74,37 +72,34 @@ let builtInPresets: [AppPreset] = [
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000001")!,
                 protectedPathPrefix: "/Users/*/Library/Safari",
-                allowedTeamIDs: [safariTeamID],
-                allowedSigningIDs: [
-                    safariSigningID,
-                    "com.apple.cloudd",
-                    "com.apple.WebKit.WebContent",
-                    "com.apple.Safari.History",
-                    "com.apple.Safari.SandboxBroker",
-                    "com.apple.SafariBookmarksSyncAgent",
-                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
+                allowedSignatures: [
+                    apple("com.apple.Safari"),
+                    apple("com.apple.cloudd"),
+                    apple("com.apple.WebKit.WebContent"),
+                    apple("com.apple.Safari.History"),
+                    apple("com.apple.Safari.SandboxBroker"),
+                    apple("com.apple.SafariBookmarksSyncAgent"),
+                    apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
                 ]
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000002")!,
                 protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
-                allowedTeamIDs: [safariTeamID],
-                allowedSigningIDs: [
-                    safariSigningID,
-                    "com.apple.cloudd",
-                    "com.apple.WebKit.WebContent",
-                    "com.apple.Safari.History",
-                    "com.apple.Safari.SandboxBroker",
-                    "com.apple.SafariBookmarksSyncAgent",
-                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
-                    "com.apple.SafariPlatformSupport.Helper"
+                allowedSignatures: [
+                    apple("com.apple.Safari"),
+                    apple("com.apple.cloudd"),
+                    apple("com.apple.WebKit.WebContent"),
+                    apple("com.apple.Safari.History"),
+                    apple("com.apple.Safari.SandboxBroker"),
+                    apple("com.apple.SafariBookmarksSyncAgent"),
+                    apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
+                    apple("com.apple.SafariPlatformSupport.Helper"),
                 ]
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000003")!,
                 protectedPathPrefix: "/Users/*/Library/Group Containers/group.com.apple.safari",
-                allowedTeamIDs: [safariTeamID],
-                allowedSigningIDs: [safariSigningID]
+                allowedSignatures: [apple("com.apple.Safari")]
             ),
         ]
     ),
