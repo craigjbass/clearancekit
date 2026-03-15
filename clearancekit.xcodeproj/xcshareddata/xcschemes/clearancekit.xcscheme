@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1620"
+   LastUpgradeVersion = "2630"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -9,8 +9,8 @@
          <ExecutionAction
             ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
             <ActionContent
-               title = "Deploy"
-               scriptText = "&quot;${SRCROOT}/scripts/deploy.sh&quot;">
+               title = "Reload Daemon"
+               scriptText = "&quot;${SRCROOT}/scripts/reload-daemon.sh&quot;">
                <EnvironmentBuildable>
                   <BuildableReference
                      BuildableIdentifier = "primary"
