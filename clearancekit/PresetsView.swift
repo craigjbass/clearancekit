@@ -10,6 +10,11 @@ struct PresetsView: View {
     @StateObject private var policyStore = PolicyStore.shared
     @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var errorMessage: String?
+    @State private var isUpdatingAll = false
+
+    private var driftedPresets: [AppPreset] {
+        builtInPresets.filter { $0.hasDrifted(in: policyStore.userRules) }
+    }
 
     var body: some View {
         List {
@@ -29,6 +34,18 @@ struct PresetsView: View {
         }
         .listStyle(.inset)
         .navigationTitle("App Protections")
+        .toolbar {
+            if !driftedPresets.isEmpty {
+                ToolbarItem {
+                    Button {
+                        updateAll()
+                    } label: {
+                        Text("Update All")
+                    }
+                    .disabled(isUpdatingAll)
+                }
+            }
+        }
         .onDrop(of: [.fileURL], isTargeted: nil, perform: handleDrop)
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
@@ -37,6 +54,19 @@ struct PresetsView: View {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    private func updateAll() {
+        isUpdatingAll = true
+        Task {
+            defer { isUpdatingAll = false }
+            do {
+                let allRules = driftedPresets.flatMap(\.rules)
+                try await PolicyStore.shared.updateAll(allRules, reason: "Update all app protections to latest definitions")
+            } catch {
+                // Touch ID cancelled — no state change needed.
+            }
         }
     }
 
@@ -149,6 +179,7 @@ private struct PresetRow: View {
     let userRules: [FAARule]
 
     @State private var isToggling = false
+    @State private var isUpdating = false
 
     private var enabledState: AppPreset.EnabledState {
         preset.enabledState(in: userRules)
@@ -156,6 +187,10 @@ private struct PresetRow: View {
 
     private var isEnabled: Bool {
         enabledState == .enabled
+    }
+
+    private var hasDrifted: Bool {
+        preset.hasDrifted(in: userRules)
     }
 
     var body: some View {
@@ -169,13 +204,10 @@ private struct PresetRow: View {
                     Text(preset.appName)
                         .font(.headline)
                     if enabledState == .partiallyEnabled {
-                        Text("partially enabled")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        badge("partially enabled", color: .orange)
+                    }
+                    if hasDrifted {
+                        badge("update available", color: .blue)
                     }
                 }
                 Text(preset.description)
@@ -186,6 +218,12 @@ private struct PresetRow: View {
 
             Spacer()
 
+            if hasDrifted {
+                Button("Update") { update() }
+                    .buttonStyle(.borderless)
+                    .disabled(isUpdating)
+            }
+
             Toggle("", isOn: Binding(
                 get: { isEnabled },
                 set: { newValue in toggle(on: newValue) }
@@ -193,6 +231,16 @@ private struct PresetRow: View {
             .labelsHidden()
             .disabled(isToggling)
         }
+    }
+
+    private func badge(_ label: String, color: Color) -> some View {
+        Text(label)
+            .font(.caption2)
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     private func toggle(on: Bool) {
@@ -208,6 +256,18 @@ private struct PresetRow: View {
             } catch {
                 // Touch ID cancelled or failed — no state change needed since
                 // PolicyStore only updates on success.
+            }
+        }
+    }
+
+    private func update() {
+        isUpdating = true
+        Task {
+            defer { isUpdating = false }
+            do {
+                try await PolicyStore.shared.updateAll(preset.rules, reason: "Update \(preset.appName) data protection to latest definition")
+            } catch {
+                // Touch ID cancelled — no state change needed.
             }
         }
     }

@@ -33,6 +33,14 @@ struct AppPreset: Identifiable {
         if matchCount > 0 { return .partiallyEnabled }
         return .disabled
     }
+
+    func hasDrifted(in userRules: [FAARule]) -> Bool {
+        guard enabledState(in: userRules) == .enabled else { return false }
+        return rules.contains { presetRule in
+            guard let applied = userRules.first(where: { $0.id == presetRule.id }) else { return false }
+            return applied != presetRule
+        }
+    }
 }
 
 // MARK: - Built-in presets
@@ -40,6 +48,18 @@ struct AppPreset: Identifiable {
 private func apple(_ signingID: String) -> ProcessSignature {
     ProcessSignature(teamID: appleTeamID, signingID: signingID)
 }
+
+let safariSignatures = [
+    apple("com.apple.Safari"),
+    apple("com.apple.cloudd"),
+    apple("com.apple.WebKit.WebContent"),
+    apple("com.apple.Safari.History"),
+    apple("com.apple.Safari.SandboxBroker"),
+    apple("com.apple.SafariBookmarksSyncAgent"),
+    apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
+    apple("com.apple.SafariPlatformSupport.Helper"),
+    apple("com.apple.WebKit.GPU")
+]
 
 let builtInPresets: [AppPreset] = [
     AppPreset(
@@ -72,30 +92,12 @@ let builtInPresets: [AppPreset] = [
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000001")!,
                 protectedPathPrefix: "/Users/*/Library/Safari",
-                allowedSignatures: [
-                    apple("com.apple.Safari"),
-                    apple("com.apple.cloudd"),
-                    apple("com.apple.WebKit.WebContent"),
-                    apple("com.apple.Safari.History"),
-                    apple("com.apple.Safari.SandboxBroker"),
-                    apple("com.apple.SafariBookmarksSyncAgent"),
-                    apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
-                ]
+                allowedSignatures: safariSignatures
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000002")!,
                 protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
-                allowedSignatures: [
-                    apple("com.apple.Safari"),
-                    apple("com.apple.cloudd"),
-                    apple("com.apple.WebKit.WebContent"),
-                    apple("com.apple.Safari.History"),
-                    apple("com.apple.Safari.SandboxBroker"),
-                    apple("com.apple.SafariBookmarksSyncAgent"),
-                    apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
-                    apple("com.apple.SafariPlatformSupport.Helper"),
-                    apple("com.apple.WebKit.GPU")
-                ]
+                allowedSignatures: safariSignatures
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000003")!,

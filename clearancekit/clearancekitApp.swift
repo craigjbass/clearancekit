@@ -49,7 +49,7 @@ struct clearancekitApp: App {
             }
         }
 
-        MenuBarExtra("clearancekit", systemImage: "star") {
+        MenuBarExtra("clearancekit", systemImage: "checkmark.shield") {
             Button("Show") {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)

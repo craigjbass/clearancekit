@@ -87,7 +87,7 @@ extension ProcessSignature: CustomStringConvertible {
 
 // MARK: - FAARule
 
-public struct FAARule: Identifiable, Codable {
+public struct FAARule: Identifiable, Codable, Equatable {
     public let id: UUID
     public let protectedPathPrefix: String
 
