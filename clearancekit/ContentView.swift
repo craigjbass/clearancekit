@@ -141,11 +141,9 @@ struct SetupView: View {
     }
 
     private var versionRow: some View {
-        let info = Bundle.main.infoDictionary
-        let marketing = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let marketing = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         return HStack {
-            Text("Version \(marketing) (\(build))")
+            Text("Version \(marketing) (\(BuildInfo.gitHash))")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Spacer()
