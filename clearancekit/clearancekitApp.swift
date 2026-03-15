@@ -37,6 +37,8 @@ struct clearancekitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var nav = NavigationState.shared
+    @StateObject private var xpcClient = XPCClient.shared
+    @StateObject private var daemonManager = DaemonManager.shared
 
     var body: some Scene {
         Window("clearancekit", id: "main") {
@@ -49,7 +51,7 @@ struct clearancekitApp: App {
             }
         }
 
-        MenuBarExtra("clearancekit", systemImage: "checkmark.shield") {
+        MenuBarExtra {
             Button("Show") {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
@@ -58,6 +60,40 @@ struct clearancekitApp: App {
             Button("Quit") {
                 NSApplication.shared.terminate(nil)
             }
+        } label: {
+            Image(systemName: menuBarIconName)
+                .foregroundStyle(menuBarIconColor)
         }
+    }
+
+    private var menuBarIconName: String {
+        switch menuBarStatus {
+        case .healthy:      return "checkmark.shield"
+        case .outdated:     return "exclamationmark.shield"
+        case .disconnected: return "exclamationmark.shield"
+        case .notWorking:   return "shield.slash"
+        }
+    }
+
+    private var menuBarIconColor: Color {
+        switch menuBarStatus {
+        case .healthy:      return .primary
+        case .outdated:     return .orange
+        case .disconnected: return .red
+        case .notWorking:   return .red
+        }
+    }
+
+    private enum MenuBarStatus {
+        case healthy, outdated, disconnected, notWorking
+    }
+
+    private var menuBarStatus: MenuBarStatus {
+        guard daemonManager.status == .enabled else { return .notWorking }
+        guard xpcClient.isConnected else { return .disconnected }
+        guard xpcClient.isMonitoringActive else { return .notWorking }
+        let outdated = (!xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion != BuildInfo.gitHash)
+                    || (!xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion != BuildInfo.gitHash)
+        return outdated ? .outdated : .healthy
     }
 }
