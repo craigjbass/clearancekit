@@ -9,11 +9,12 @@ import SwiftUI
 import AppKit
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case events    = "Events"
-    case policy    = "Policy"
-    case allowlist = "Allowlist"
-    case processes = "Processes"
-    case setup     = "Setup"
+    case events     = "Events"
+    case policy     = "Policy"
+    case presets    = "App Protections"
+    case allowlist  = "Allowlist"
+    case processes  = "Processes"
+    case setup      = "Setup"
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .events:    return "list.bullet"
         case .policy:    return "shield"
+        case .presets:   return "lock.shield"
         case .allowlist: return "checkmark.shield"
         case .processes: return "cpu"
         case .setup:     return "gearshape"
@@ -45,6 +47,7 @@ struct ContentView: View {
             switch selection {
             case .events:    EventsWindowView()
             case .policy:    PolicyView()
+            case .presets:   PresetsView()
             case .allowlist: AllowlistView()
             case .processes: ProcessesView()
             case .setup:     SetupView()

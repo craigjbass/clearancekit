@@ -83,6 +83,28 @@ final class PolicyStore: ObservableObject {
         XPCClient.shared.updateRule(updated)
     }
 
+    // MARK: - Batch mutations (single Touch ID prompt for multiple rules)
+
+    func addAll(_ rules: [FAARule], reason: String) async throws {
+        let newRules = rules.filter { rule in !userRules.contains { $0.id == rule.id } }
+        guard !newRules.isEmpty else { return }
+        try await BiometricAuth.authenticate(reason: reason)
+        for rule in newRules {
+            userRules.append(rule)
+            XPCClient.shared.addRule(rule)
+        }
+    }
+
+    func removeAll(_ rules: [FAARule], reason: String) async throws {
+        let ids = Set(rules.map(\.id))
+        guard userRules.contains(where: { ids.contains($0.id) }) else { return }
+        try await BiometricAuth.authenticate(reason: reason)
+        userRules.removeAll { ids.contains($0.id) }
+        for rule in rules {
+            XPCClient.shared.removeRule(ruleID: rule.id)
+        }
+    }
+
     func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
         try await BiometricAuth.authenticate(reason: "Allow this ancestor process")
