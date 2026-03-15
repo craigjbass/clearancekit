@@ -480,9 +480,8 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
     }
 
     func fetchVersionInfo(withReply reply: @escaping (NSString, NSString) -> Void) {
-        let daemonVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
         let opfilterVersion = server?.currentOpfilterVersion() ?? ""
-        reply(daemonVersion as NSString, opfilterVersion as NSString)
+        reply(BuildInfo.gitHash as NSString, opfilterVersion as NSString)
     }
 
     func reportEvent(_ event: FolderOpenEvent) {
