@@ -40,7 +40,31 @@ struct AppPreset: Identifiable {
 let safariTeamID = appleTeamID
 let safariSigningID = "com.apple.Safari"
 
+let notesSigningIDs = [
+    "com.apple.Notes",
+    "com.apple.Notes.WidgetExtension",
+    "com.apple.Notes.QuickLookExtension",
+    "com.apple.Notes.SharingExtension",
+    "com.apple.Notes.SpotlightIndexExtension",
+    "com.apple.Notes.IntentsExtension",
+    "com.apple.LinkedNotesUIService",
+]
+
 let builtInPresets: [AppPreset] = [
+    AppPreset(
+        id: "notes-data-protection",
+        appName: "Notes",
+        appBundlePath: "/Applications/Notes.app",
+        description: "Prevents other processes from reading your Notes database and attachments. Only Notes and its extensions may open files in the Notes group container.",
+        rules: [
+            FAARule(
+                id: UUID(uuidString: "A1B2C3D4-0002-0001-0001-000000000001")!,
+                protectedPathPrefix: "/Users/*/Library/Group Containers/group.com.apple.notes",
+                allowedTeamIDs: [appleTeamID],
+                allowedSigningIDs: notesSigningIDs
+            ),
+        ]
+    ),
     AppPreset(
         id: "safari-data-protection",
         appName: "Safari",
