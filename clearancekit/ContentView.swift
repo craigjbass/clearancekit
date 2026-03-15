@@ -37,20 +37,27 @@ struct ContentView: View {
     @ObservedObject private var nav = NavigationState.shared
 
     var body: some View {
-        NavigationSplitView {
-            List(SidebarItem.allCases, selection: $nav.selection) { item in
-                Label(item.rawValue, systemImage: item.icon)
-                    .tag(item)
+        VStack(spacing: 0) {
+            if xpcClient.hasDaemonVersionMismatch {
+                DaemonVersionMismatchBanner {
+                    nav.selection = .setup
+                }
             }
-            .navigationSplitViewColumnWidth(min: 160, ideal: 180)
-        } detail: {
-            switch nav.selection {
-            case .events:    EventsWindowView()
-            case .policy:    PolicyView()
-            case .presets:   PresetsView()
-            case .allowlist: AllowlistView()
-            case .processes: ProcessesView()
-            case .setup:     SetupView()
+            NavigationSplitView {
+                List(SidebarItem.allCases, selection: $nav.selection) { item in
+                    Label(item.rawValue, systemImage: item.icon)
+                        .tag(item)
+                }
+                .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+            } detail: {
+                switch nav.selection {
+                case .events:    EventsWindowView()
+                case .policy:    PolicyView()
+                case .presets:   PresetsView()
+                case .allowlist: AllowlistView()
+                case .processes: ProcessesView()
+                case .setup:     SetupView()
+                }
             }
         }
         .frame(minWidth: 720, minHeight: 480)
@@ -58,6 +65,27 @@ struct ContentView: View {
             daemonManager.refreshStatus()
             xpcClient.connect()
         }
+    }
+}
+
+// MARK: - DaemonVersionMismatchBanner
+
+private struct DaemonVersionMismatchBanner: View {
+    let onSetup: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+            Text("Daemon version mismatch — re-register the daemon to restore functionality.")
+            Spacer()
+            Button("Go to Setup", action: onSetup)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.windowBackgroundColor))
+        Divider()
     }
 }
 

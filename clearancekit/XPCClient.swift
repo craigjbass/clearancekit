@@ -15,6 +15,7 @@ final class XPCClient: NSObject, ObservableObject {
 
     @Published private(set) var isConnected = false
     @Published private(set) var isMonitoringActive = false
+    @Published private(set) var hasDaemonVersionMismatch = false
     @Published private(set) var events: [FolderOpenEvent] = []
 
     private var connection: NSXPCConnection?
@@ -93,6 +94,7 @@ final class XPCClient: NSObject, ObservableObject {
                 if success {
                     NSLog("XPCClient: Successfully registered with daemon")
                     self?.isConnected = true
+                    self?.hasDaemonVersionMismatch = false
                     self?.stopReconnectTimer()
                     self?.requestResync()
                 } else {
@@ -125,6 +127,16 @@ final class XPCClient: NSObject, ObservableObject {
         isMonitoringActive = false
         NSLog("XPCClient: Connection lost, scheduling reconnect")
         scheduleReconnect()
+    }
+
+    private func handleDaemonVersionMismatch() {
+        hasDaemonVersionMismatch = true
+        connection?.invalidate()
+        connection = nil
+        isConnected = false
+        isMonitoringActive = false
+        stopReconnectTimer()
+        NSLog("XPCClient: Daemon version mismatch — stopped reconnecting. Re-register the daemon to resolve.")
     }
 
     private func scheduleReconnect() {
@@ -285,7 +297,9 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func managedRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            fatalError("XPCClient: Failed to decode managed rules from daemon — binary version mismatch")
+            NSLog("XPCClient: Failed to decode managed rules — daemon version mismatch, invalidating connection")
+            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            return
         }
         Task { @MainActor in
             PolicyStore.shared.receivedManagedRules(rules)
@@ -294,7 +308,9 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func userRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            fatalError("XPCClient: Failed to decode user rules from daemon — binary version mismatch")
+            NSLog("XPCClient: Failed to decode user rules — daemon version mismatch, invalidating connection")
+            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            return
         }
         Task { @MainActor in
             PolicyStore.shared.receivedUserRules(rules)
@@ -303,7 +319,9 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func managedAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            fatalError("XPCClient: Failed to decode managed allowlist from daemon — binary version mismatch")
+            NSLog("XPCClient: Failed to decode managed allowlist — daemon version mismatch, invalidating connection")
+            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            return
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedManagedEntries(entries)
@@ -312,7 +330,9 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func userAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            fatalError("XPCClient: Failed to decode user allowlist from daemon — binary version mismatch")
+            NSLog("XPCClient: Failed to decode user allowlist — daemon version mismatch, invalidating connection")
+            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            return
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedUserEntries(entries)
