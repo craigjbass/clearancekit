@@ -151,6 +151,7 @@
 				468256382F2832C400839A1A /* Sources */,
 				468256392F2832C400839A1A /* Frameworks */,
 				4682563A2F2832C400839A1A /* Resources */,
+				CC1111111111111111110001 /* Embed Git Hash */,
 				4682566C2F28331400839A1A /* Embed System Extensions */,
 				BBBB001111111111BBBB0012 /* Embed LaunchDaemon */,
 			);
@@ -276,6 +277,24 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		CC1111111111111111110001 /* Embed Git Hash */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Git Hash";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nGIT_HASH=$(git -C \"${SRCROOT}\" rev-parse --short HEAD 2>/dev/null || echo \"unknown\")\nGIT_DIRTY=$(git -C \"${SRCROOT}\" diff --quiet HEAD 2>/dev/null && echo \"\" || echo \"+\")\nPLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n/usr/libexec/PlistBuddy -c \"Add :GitCommit string ${GIT_HASH}${GIT_DIRTY}\" \"${PLIST}\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Set :GitCommit ${GIT_HASH}${GIT_DIRTY}\" \"${PLIST}\"\n";
+		};
 		BBBB001111111111BBBB0012 /* Embed LaunchDaemon */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

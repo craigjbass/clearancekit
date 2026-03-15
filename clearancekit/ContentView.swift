@@ -76,6 +76,8 @@ struct SetupView: View {
             Divider()
             connectionStatusRow
             Spacer()
+            Divider()
+            versionRow
         }
         .navigationTitle("Setup")
     }
@@ -134,6 +136,20 @@ struct SetupView: View {
             Spacer()
             Button("Resync") { xpcClient.requestResync() }
                 .disabled(!xpcClient.isConnected)
+        }
+        .padding()
+    }
+
+    private var versionRow: some View {
+        let info = Bundle.main.infoDictionary
+        let marketing = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let git = info?["GitCommit"] as? String ?? "dev"
+        return HStack {
+            Text("Version \(marketing) (\(build)) — \(git)")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Spacer()
         }
         .padding()
     }
