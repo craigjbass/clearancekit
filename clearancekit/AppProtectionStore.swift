@@ -91,6 +91,11 @@ final class AppProtectionStore: ObservableObject {
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
-        protections = try! JSONDecoder().decode([AppProtection].self, from: data)
+        guard let loaded = try? JSONDecoder().decode([AppProtection].self, from: data) else {
+            NSLog("AppProtectionStore: Failed to decode stored protections — clearing (schema change)")
+            UserDefaults.standard.removeObject(forKey: storageKey)
+            return
+        }
+        protections = loaded
     }
 }
