@@ -51,13 +51,27 @@ let builtInPresets: [AppPreset] = [
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000001")!,
                 protectedPathPrefix: "/Users/*/Library/Safari",
                 allowedTeamIDs: [safariTeamID],
-                allowedSigningIDs: [safariSigningID]
+                allowedSigningIDs: [
+                    safariSigningID,
+                    "com.apple.cloudd",
+                    "com.apple.WebKit.WebContent",
+                    "com.apple.Safari.History",
+                    "com.apple.Safari.SandboxBroker",
+                    "com.apple.SafariBookmarksSyncAgent"
+                ]
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000002")!,
                 protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
                 allowedTeamIDs: [safariTeamID],
-                allowedSigningIDs: [safariSigningID]
+                allowedSigningIDs: [
+                    safariSigningID,
+                    "com.apple.cloudd",
+                    "com.apple.WebKit.WebContent",
+                    "com.apple.Safari.History",
+                    "com.apple.Safari.SandboxBroker",
+                    "com.apple.SafariBookmarksSyncAgent"
+                ]
             ),
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000003")!,

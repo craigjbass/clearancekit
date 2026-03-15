@@ -78,11 +78,7 @@ struct EventsWindowView: View {
                         Text("No \(filter.rawValue.lowercased()) events recorded")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                    } else {
-                        Text("Access a file in /opt/clearancekit to see FAA events")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    } 
                     Spacer()
                 }
             } else {
