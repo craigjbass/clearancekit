@@ -94,6 +94,7 @@ let builtInPresets: [AppPreset] = [
                     apple("com.apple.SafariBookmarksSyncAgent"),
                     apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
                     apple("com.apple.SafariPlatformSupport.Helper"),
+                    apple("com.apple.WebKit.GPU")
                 ]
             ),
             FAARule(
