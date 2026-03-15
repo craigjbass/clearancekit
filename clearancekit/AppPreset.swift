@@ -54,7 +54,7 @@ let builtInPresets: [AppPreset] = [
     AppPreset(
         id: "notes-data-protection",
         appName: "Notes",
-        appBundlePath: "/Applications/Notes.app",
+        appBundlePath: "/System/Applications/Notes.app",
         description: "Prevents other processes from reading your Notes database and attachments. Only Notes and its extensions may open files in the Notes group container.",
         rules: [
             FAARule(
@@ -81,7 +81,8 @@ let builtInPresets: [AppPreset] = [
                     "com.apple.WebKit.WebContent",
                     "com.apple.Safari.History",
                     "com.apple.Safari.SandboxBroker",
-                    "com.apple.SafariBookmarksSyncAgent"
+                    "com.apple.SafariBookmarksSyncAgent",
+                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
                 ]
             ),
             FAARule(
@@ -94,7 +95,8 @@ let builtInPresets: [AppPreset] = [
                     "com.apple.WebKit.WebContent",
                     "com.apple.Safari.History",
                     "com.apple.Safari.SandboxBroker",
-                    "com.apple.SafariBookmarksSyncAgent"
+                    "com.apple.SafariBookmarksSyncAgent",
+                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
                 ]
             ),
             FAARule(
