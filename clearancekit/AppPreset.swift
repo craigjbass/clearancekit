@@ -96,7 +96,8 @@ let builtInPresets: [AppPreset] = [
                     "com.apple.Safari.History",
                     "com.apple.Safari.SandboxBroker",
                     "com.apple.SafariBookmarksSyncAgent",
-                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
+                    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent",
+                    "com.apple.SafariPlatformSupport.Helper"
                 ]
             ),
             FAARule(
