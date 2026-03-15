@@ -316,6 +316,7 @@
 		};
 		CC1111111111111111110001 /* Embed Git Hash */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -335,6 +336,7 @@
 		};
 		DD3333333333333333330001 /* Embed Git Hash */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -354,6 +356,7 @@
 		};
 		EE4444444444444444440001 /* Embed Git Hash */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
