@@ -309,6 +309,7 @@ extension XPCClient: DaemonClientProtocol {
         NSLog("XPCClient: Monitoring status changed: %@", isActive ? "active" : "inactive")
         Task { @MainActor in
             self.isMonitoringActive = isActive
+            if isActive { self.fetchVersionInfo() }
         }
     }
 
