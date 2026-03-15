@@ -95,18 +95,9 @@ public let faaPolicy: [FAARule] = [
     // a compromised user process) is denied at the kernel level before it can
     // read or tamper with the stored rules.
     FAARule(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        id: UUID(uuidString: "5DCEA92F-C4FB-4D5D-9E56-FD36D8F330DF")!,
         protectedPathPrefix: "/Library/Application Support/clearancekit",
         allowedTeamIDs: [clearancekitTeamID]
-    ),
-    // Example: only Finder and Terminal may access secrets
-    FAARule(
-        protectedPathPrefix: "/opt/clearancekit/secrets",
-        allowedProcessPaths: [
-            "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
-            "/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
-        ],
-        allowedAncestorSigningIDs: ["com.apple.Terminal"]
     ),
 ]
 
