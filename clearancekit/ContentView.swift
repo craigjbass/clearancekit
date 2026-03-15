@@ -110,12 +110,21 @@ struct SetupView: View {
         .navigationTitle("Setup")
     }
 
+    private var appBuildVersion: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+    }
+
     private var daemonStatusRow: some View {
         HStack {
             Text("Daemon:")
                 .font(.headline)
             Text(daemonManager.statusMessage)
                 .foregroundColor(daemonStatusColor)
+            if daemonIsOutOfDate {
+                Text("(v\(xpcClient.daemonVersion) — re-register to update)")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+            }
             Spacer()
             switch daemonManager.status {
             case .notRegistered, .failed, .unknown:
@@ -127,6 +136,14 @@ struct SetupView: View {
             }
         }
         .padding()
+    }
+
+    private var daemonIsOutOfDate: Bool {
+        !xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion != appBuildVersion
+    }
+
+    private var opfilterIsOutOfDate: Bool {
+        !xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion != appBuildVersion
     }
 
     private var daemonStatusColor: Color {
@@ -143,6 +160,11 @@ struct SetupView: View {
                 .font(.headline)
             Text(extensionManager.statusMessage)
                 .foregroundColor(.secondary)
+            if opfilterIsOutOfDate {
+                Text("(v\(xpcClient.opfilterVersion) — reactivate to update)")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+            }
             Spacer()
             if extensionManager.extensionStatus != .activated {
                 Button("Activate") { extensionManager.activateExtension() }

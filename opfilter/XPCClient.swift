@@ -82,8 +82,9 @@ final class XPCClient: NSObject {
             NSLog("XPCClient (opfilter): registerFilterClient error: %@", $0.localizedDescription)
         }) as? DaemonServiceProtocol else { return }
 
+        let version = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
         // Daemon pushes current merged policy immediately after registration via policyUpdated(_:).
-        proxy.registerFilterClient { success in
+        proxy.registerFilterClient(version as NSString) { success in
             guard success else {
                 NSLog("XPCClient (opfilter): Failed to register as filter client")
                 return

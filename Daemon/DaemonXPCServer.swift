@@ -15,6 +15,7 @@ final class DaemonXPCServer: NSObject {
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var filterClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var monitoringActive = false
+    private var opfilterVersion: String = ""
     private var recentEvents: [FolderOpenEvent] = []
     private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
@@ -54,12 +55,13 @@ final class DaemonXPCServer: NSObject {
         NSLog("DaemonXPCServer: GUI client registered. Active clients: %d", count)
     }
 
-    fileprivate func addFilterClient(_ connection: NSXPCConnection) {
+    fileprivate func addFilterClient(_ connection: NSXPCConnection, version: String) {
         lock.lock()
         filterClients[ObjectIdentifier(connection)] = connection
+        opfilterVersion = version
         let count = filterClients.count
         lock.unlock()
-        NSLog("DaemonXPCServer: Filter client registered. Active filter clients: %d", count)
+        NSLog("DaemonXPCServer: Filter client registered (v%@). Active filter clients: %d", version, count)
         // Push current merged policy and allowlist immediately so the filter is up to date on connect/reconnect.
         (connection.remoteObjectProxy as? FilterClientProtocol)?.policyUpdated(mergedPolicyData())
         (connection.remoteObjectProxy as? FilterClientProtocol)?.allowlistUpdated(mergedAllowlistData())
@@ -108,6 +110,12 @@ final class DaemonXPCServer: NSObject {
 
     fileprivate func currentMonitoringStatus() -> Bool {
         monitoringActive
+    }
+
+    fileprivate func currentOpfilterVersion() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return opfilterVersion
     }
 
     // MARK: - Rule mutations
@@ -465,10 +473,16 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
 
     // MARK: Called by opfilter
 
-    func registerFilterClient(withReply reply: @escaping (Bool) -> Void) {
+    func registerFilterClient(_ version: NSString, withReply reply: @escaping (Bool) -> Void) {
         guard let conn = connection, let server else { reply(false); return }
-        server.addFilterClient(conn)
+        server.addFilterClient(conn, version: version as String)
         reply(true)
+    }
+
+    func fetchVersionInfo(withReply reply: @escaping (NSString, NSString) -> Void) {
+        let daemonVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        let opfilterVersion = server?.currentOpfilterVersion() ?? ""
+        reply(daemonVersion as NSString, opfilterVersion as NSString)
     }
 
     func reportEvent(_ event: FolderOpenEvent) {

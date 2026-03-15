@@ -192,7 +192,10 @@ public protocol DaemonServiceProtocol {
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void)
 
     // opfilter registration
-    func registerFilterClient(withReply reply: @escaping (Bool) -> Void)
+    func registerFilterClient(_ version: NSString, withReply reply: @escaping (Bool) -> Void)
+
+    // Version query — GUI asks for daemon and opfilter build versions to detect stale components.
+    func fetchVersionInfo(withReply reply: @escaping (_ daemonVersion: NSString, _ opfilterVersion: NSString) -> Void)
 
     // User-rule mutations (GUI → daemon). Daemon stores, then broadcasts merged
     // policy to opfilter clients and updated user rules to all GUI clients.

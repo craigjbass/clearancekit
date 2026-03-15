@@ -16,6 +16,8 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var isConnected = false
     @Published private(set) var isMonitoringActive = false
     @Published private(set) var hasDaemonVersionMismatch = false
+    @Published private(set) var daemonVersion = ""
+    @Published private(set) var opfilterVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
 
     private var connection: NSXPCConnection?
@@ -96,6 +98,7 @@ final class XPCClient: NSObject, ObservableObject {
                     self?.isConnected = true
                     self?.hasDaemonVersionMismatch = false
                     self?.stopReconnectTimer()
+                    self?.fetchVersionInfo()
                     self?.requestResync()
                 } else {
                     NSLog("XPCClient: Failed to register with daemon")
@@ -152,6 +155,20 @@ final class XPCClient: NSObject, ObservableObject {
     private func stopReconnectTimer() {
         reconnectTimer?.invalidate()
         reconnectTimer = nil
+    }
+
+    private func fetchVersionInfo() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: fetchVersionInfo error: %@", error.localizedDescription)
+        }) as? DaemonServiceProtocol else { return }
+
+        service.fetchVersionInfo { [weak self] daemonVer, opfilterVer in
+            Task { @MainActor in
+                self?.daemonVersion = daemonVer as String
+                self?.opfilterVersion = opfilterVer as String
+                NSLog("XPCClient: daemon v%@, opfilter v%@", daemonVer, opfilterVer)
+            }
+        }
     }
 
     func requestResync() {
