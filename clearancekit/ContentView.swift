@@ -207,7 +207,6 @@ struct SetupView: View {
             } else {
                 Button("Deactivate") { extensionManager.deactivateExtension() }
             }
-            Button("Quit") { NSApplication.shared.terminate(nil) }
         }
         .padding()
     }
@@ -222,6 +221,7 @@ struct SetupView: View {
             Spacer()
             Button("Resync") { xpcClient.requestResync() }
                 .disabled(!xpcClient.isConnected)
+            Button("Quit GUI") { NSApplication.shared.terminate(nil) }
         }
         .padding()
     }
