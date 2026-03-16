@@ -69,11 +69,52 @@ jobs:
 
       - name: Package DMG
         run: |
+          # Create a writable staging image large enough to hold the app + layout metadata
           hdiutil create \
             -volname "clearancekit" \
-            -srcfolder "build/export/clearancekit.app" \
-            -ov -format UDZO \
-            "build/clearancekit-${{ github.ref_name }}.dmg"
+            -size 200m \
+            -fs HFS+ \
+            -layout SPUD \
+            -ov -format UDRW \
+            build/clearancekit-staging.dmg
+
+          # Mount it and copy in the app + an Applications symlink
+          MOUNT=$(hdiutil attach -readwrite -noverify build/clearancekit-staging.dmg \
+            | grep -E '^/dev/' | awk '{print $3}')
+          cp -R "build/export/clearancekit.app" "$MOUNT/"
+          ln -s /Applications "$MOUNT/Applications"
+
+          # Set Finder window size, background colour, and icon positions via osascript
+          osascript <<APPLESCRIPT
+          tell application "Finder"
+            tell disk "clearancekit"
+              open
+              set current view of container window to icon view
+              set toolbar visible of container window to false
+              set statusbar visible of container window to false
+              set the bounds of container window to {400, 100, 1000, 500}
+              set viewOptions to the icon view options of container window
+              set arrangement of viewOptions to not arranged
+              set icon size of viewOptions to 128
+              set background color of viewOptions to {61166, 61166, 61166}
+              set position of item "clearancekit.app" of container window to {175, 190}
+              set position of item "Applications" of container window to {425, 190}
+              close
+              open
+              update without registering applications
+              delay 2
+              close
+            end tell
+          end tell
+          APPLESCRIPT
+
+          hdiutil detach "$MOUNT"
+
+          # Convert to a compressed, read-only final image
+          hdiutil convert build/clearancekit-staging.dmg \
+            -format UDZO \
+            -o "build/clearancekit-${{ github.ref_name }}.dmg"
+          rm build/clearancekit-staging.dmg
 
       - name: Notarize DMG
         env:
