@@ -59,8 +59,8 @@ let safariSignatures = [
     apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
     apple("com.apple.SafariPlatformSupport.Helper"),
     apple("com.apple.WebKit.GPU"),
-    apple("com.apple.Safari.CacheDeleteExtension"),
-    apple("com.apple.Safari.CacheDeleteExtension")
+    apple("com.apple.localizationswitcherd"),
+    apple("com.apple.Safari.PasswordBreachAgent")
 ]
 
 let builtInPresets: [AppPreset] = [
