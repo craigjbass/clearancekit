@@ -90,9 +90,9 @@ struct EventsWindowView: View {
                     .listStyle(.inset)
                     .onChange(of: nav.highlightedEventID) { _, eventID in
                         guard let eventID else { return }
-                        filter = .deny
-                        withAnimation { proxy.scrollTo(eventID, anchor: .center) }
-                        Task {
+                        Task { @MainActor in
+                            filter = .deny
+                            withAnimation { proxy.scrollTo(eventID, anchor: .center) }
                             try? await Task.sleep(for: .seconds(2))
                             nav.highlightedEventID = nil
                         }
