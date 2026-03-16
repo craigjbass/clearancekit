@@ -92,11 +92,6 @@ jobs:
           rm AuthKey.p8
           xcrun stapler staple "build/clearancekit-${{ github.ref_name }}.dmg"
 
-      - name: Attest DMG provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: build/clearancekit-${{ github.ref_name }}.dmg
-
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
