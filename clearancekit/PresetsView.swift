@@ -18,6 +18,12 @@ struct PresetsView: View {
 
     var body: some View {
         List {
+            if let session = protectionStore.activeDiscovery {
+                Section {
+                    DiscoverySessionRow(session: session)
+                        .padding(.vertical, 6)
+                }
+            }
             Section("Custom") {
                 ForEach(protectionStore.protections) { protection in
                     CustomProtectionRow(protection: protection)
@@ -106,6 +112,105 @@ struct PresetsView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+}
+
+// MARK: - DiscoverySessionRow
+
+private struct DiscoverySessionRow: View {
+    @ObservedObject var session: DiscoverySession
+    @State private var isFinalizing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(session.appInfo.appName)
+                            .font(.headline)
+                        timerBadge
+                    }
+                    Text("No sandbox or app group containers found — monitoring file access")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancel") {
+                    AppProtectionStore.shared.cancelDiscovery()
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
+
+            if !session.isComplete {
+                Text("Close and reopen \(session.appInfo.appName) to capture the folder paths it accesses.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if session.capturedPaths.isEmpty {
+                if session.isComplete {
+                    Text("No paths captured. The app may not have accessed any files during the session.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(session.capturedPaths, id: \.self) { path in
+                        Text(path)
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signing: \(session.appInfo.signingID)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Team: \(session.appInfo.teamID.isEmpty ? "Apple" : session.appInfo.teamID)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Create Protection") {
+                        isFinalizing = true
+                        Task {
+                            defer { isFinalizing = false }
+                            try? await AppProtectionStore.shared.finalizeDiscovery(session)
+                        }
+                    }
+                    .disabled(isFinalizing)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var timerBadge: some View {
+        if session.isComplete {
+            Text("complete")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else {
+            Text("\(Int(session.timeRemaining))s")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .monospacedDigit()
         }
     }
 }

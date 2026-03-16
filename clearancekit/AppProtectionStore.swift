@@ -11,6 +11,7 @@ final class AppProtectionStore: ObservableObject {
     static let shared = AppProtectionStore()
 
     @Published private(set) var protections: [AppProtection] = []
+    @Published private(set) var activeDiscovery: DiscoverySession?
 
     private let storageKey = "AppProtections"
 
@@ -23,13 +24,14 @@ final class AppProtectionStore: ObservableObject {
             throw AppProtectionError.inspectionFailed
         }
 
-        let rules = AppBundleIntrospector.generateRules(from: info)
-        guard !rules.isEmpty else {
-            throw AppProtectionError.noProtectablePaths
-        }
-
         guard !protections.contains(where: { $0.bundleID == info.bundleID }) else {
             throw AppProtectionError.alreadyExists
+        }
+
+        let rules = AppBundleIntrospector.generateRules(from: info)
+        guard !rules.isEmpty else {
+            activeDiscovery = DiscoverySession(appInfo: info)
+            return
         }
 
         let protection = AppProtection(
@@ -45,6 +47,32 @@ final class AppProtectionStore: ObservableObject {
         try await PolicyStore.shared.addAll(rules, reason: "Protect \(info.appName)")
         protections.append(protection)
         save()
+    }
+
+    func finalizeDiscovery(_ session: DiscoverySession) async throws {
+        let rules = session.buildRules()
+        precondition(!rules.isEmpty, "finalizeDiscovery called with no captured paths — button should be disabled")
+
+        let protection = AppProtection(
+            id: UUID(),
+            appName: session.appInfo.appName,
+            appBundlePath: session.appInfo.appPath,
+            bundleID: session.appInfo.bundleID,
+            ruleIDs: rules.map(\.id),
+            isEnabled: true,
+            snapshotRules: rules
+        )
+
+        try await PolicyStore.shared.addAll(rules, reason: "Protect \(session.appInfo.appName)")
+        protections.append(protection)
+        save()
+        session.complete()
+        activeDiscovery = nil
+    }
+
+    func cancelDiscovery() {
+        activeDiscovery?.complete()
+        activeDiscovery = nil
     }
 
     func enable(_ protection: AppProtection) async throws {

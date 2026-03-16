@@ -179,6 +179,18 @@ final class XPCServer: NSObject {
         broadcastUserRulesToAllGUIClients()
     }
 
+    // MARK: - Discovery mode
+
+    fileprivate func beginDiscovery() {
+        adapter.setDiscoveryPaths(["/Users"])
+        NSLog("XPCServer: Discovery mode activated")
+    }
+
+    fileprivate func endDiscovery() {
+        adapter.setDiscoveryPaths([])
+        NSLog("XPCServer: Discovery mode deactivated")
+    }
+
     // MARK: - Resync
 
     fileprivate func requestResync(requestingConnection: NSXPCConnection) {
@@ -428,6 +440,16 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     func requestResync(withReply reply: @escaping () -> Void) {
         guard let server, let conn = connection else { reply(); return }
         server.requestResync(requestingConnection: conn)
+        reply()
+    }
+
+    func beginDiscovery(withReply reply: @escaping () -> Void) {
+        server?.beginDiscovery()
+        reply()
+    }
+
+    func endDiscovery(withReply reply: @escaping () -> Void) {
+        server?.endDiscovery()
         reply()
     }
 

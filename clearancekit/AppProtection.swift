@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import Combine
 import Foundation
 import Security
 
@@ -27,15 +28,12 @@ struct AppProtection: Identifiable, Codable {
 
 enum AppProtectionError: LocalizedError {
     case inspectionFailed
-    case noProtectablePaths
     case alreadyExists
 
     var errorDescription: String? {
         switch self {
         case .inspectionFailed:
             return "Could not read code signing information from this application."
-        case .noProtectablePaths:
-            return "This application has no sandbox or group containers to protect."
         case .alreadyExists:
             return "A protection for this application already exists."
         }
@@ -115,5 +113,114 @@ enum AppBundleIntrospector {
         }
 
         return rules
+    }
+}
+
+// MARK: - DiscoverySession
+
+@MainActor
+final class DiscoverySession: ObservableObject {
+    let appInfo: AppBundleInfo
+
+    private static let sessionDuration: TimeInterval = 60
+
+    @Published private(set) var timeRemaining: TimeInterval = sessionDuration
+    @Published private(set) var capturedPaths: [String] = []
+    @Published private(set) var isComplete = false
+
+    private var timer: Timer?
+    private var cancellable: AnyCancellable?
+    private var seenPaths: Set<String> = []
+    private var previousEventCount = 0
+
+    init(appInfo: AppBundleInfo) {
+        self.appInfo = appInfo
+        subscribe()
+        startTimer()
+        XPCClient.shared.beginDiscovery()
+    }
+
+    func complete() {
+        timer?.invalidate()
+        timer = nil
+        cancellable = nil
+        isComplete = true
+        XPCClient.shared.endDiscovery()
+    }
+
+    func buildRules() -> [FAARule] {
+        let effectiveTeamID = appInfo.teamID.isEmpty ? appleTeamID : appInfo.teamID
+        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: appInfo.signingID)
+        return capturedPaths.map { FAARule(protectedPathPrefix: $0, allowedSignatures: [signature]) }
+    }
+
+    private func subscribe() {
+        cancellable = XPCClient.shared.$events
+            .receive(on: RunLoop.main)
+            .sink { [weak self] events in self?.ingest(events) }
+    }
+
+    private func ingest(_ events: [FolderOpenEvent]) {
+        let newCount = events.count
+        guard newCount > previousEventCount else {
+            previousEventCount = newCount
+            return
+        }
+        let newEvents = events.prefix(newCount - previousEventCount)
+        previousEventCount = newCount
+
+        for event in newEvents where matchesApp(event) {
+            let dir = normalizedParentDirectory(of: event.path)
+            guard isInterestingPath(dir) else { continue }
+            seenPaths.insert(dir)
+        }
+        capturedPaths = deduplicatedPaths()
+    }
+
+    private func matchesApp(_ event: FolderOpenEvent) -> Bool {
+        if !appInfo.signingID.isEmpty && event.signingID == appInfo.signingID { return true }
+        return event.processPath.hasPrefix(appInfo.appPath)
+    }
+
+    private func normalizedParentDirectory(of path: String) -> String {
+        var components = (path as NSString).deletingLastPathComponent
+            .components(separatedBy: "/")
+        guard components.count >= 4,
+              components[1] == "Users",
+              !components[2].isEmpty,
+              components[2] != "*" else {
+            return (path as NSString).deletingLastPathComponent
+        }
+        components[2] = "*"
+        return components.joined(separator: "/")
+    }
+
+    private func isInterestingPath(_ path: String) -> Bool {
+        let boringPrefixes = [
+            "/private/var/folders/", "/System/", "/usr/", "/bin/",
+            "/sbin/", "/var/", "/tmp/", "/Library/Caches/", "/Applications/"
+        ]
+        guard !boringPrefixes.contains(where: { path.hasPrefix($0) }) else { return false }
+        return path.contains("/Users/") || path.contains("/Library/")
+    }
+
+    private func deduplicatedPaths() -> [String] {
+        let sorted = seenPaths.sorted()
+        return sorted.filter { path in
+            !sorted.contains { other in other != path && path.hasPrefix(other + "/") }
+        }
+    }
+
+    private func startTimer() {
+        timeRemaining = Self.sessionDuration
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.tick() }
+        }
+    }
+
+    private func tick() {
+        guard !isComplete else { return }
+        timeRemaining -= 1
+        if timeRemaining <= 0 { complete() }
     }
 }

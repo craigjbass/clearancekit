@@ -245,6 +245,22 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Discovery mode
+
+    func beginDiscovery() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: beginDiscovery error: %@", error.localizedDescription)
+        }) as? ServiceProtocol else { return }
+        service.beginDiscovery { }
+    }
+
+    func endDiscovery() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            NSLog("XPCClient: endDiscovery error: %@", error.localizedDescription)
+        }) as? ServiceProtocol else { return }
+        service.endDiscovery { }
+    }
+
     // MARK: - Events
 
     private func sendDenyNotificationIfNeeded(for event: FolderOpenEvent) {

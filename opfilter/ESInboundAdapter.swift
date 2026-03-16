@@ -12,7 +12,8 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 final class ESInboundAdapter {
     private let interactor: FilterInteractor
     private var client: OpaquePointer?
-    private var mutedPrefixes: Set<String> = []
+    private var policyPrefixes: Set<String> = []
+    private var discoveryPrefixes: Set<String> = []
 
     init(interactor: FilterInteractor) {
         self.interactor = interactor
@@ -56,35 +57,46 @@ final class ESInboundAdapter {
         logger.log("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
     }
 
-    /// Applies an updated policy: diffs the protected path prefixes, unmutes removed
-    /// ones, mutes added ones, clears the ES authorization cache, and updates the
-    /// interactor's rule set.
+    /// Applies an updated policy: diffs the effective muted prefix set (policy ∪ discovery),
+    /// clears the ES authorization cache, and updates the interactor's rule set.
     func updatePolicy(_ rules: [FAARule]) {
         guard let client else { return }
-
-        let newPrefixes = Set(rules.map { $0.esMutePath })
-        for prefix in mutedPrefixes.subtracting(newPrefixes) {
-            es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.log("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
-        }
-        for prefix in newPrefixes.subtracting(mutedPrefixes) {
-            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.log("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
-        }
-        mutedPrefixes = newPrefixes
-
+        let old = policyPrefixes.union(discoveryPrefixes)
+        policyPrefixes = Set(rules.map { $0.esMutePath })
+        applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
         interactor.updatePolicy(rules)
         logger.log("ESInboundAdapter: policy updated — \(rules.count) rule(s), cache cleared")
     }
 
+    /// Temporarily widens monitoring to deliver events for paths with no policy rules.
+    /// Pass `["/Users"]` to begin and `[]` to end.
+    func setDiscoveryPaths(_ paths: [String]) {
+        guard let client else { return }
+        let old = policyPrefixes.union(discoveryPrefixes)
+        discoveryPrefixes = Set(paths)
+        applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
+        es_clear_cache(client)
+        logger.log("ESInboundAdapter: discovery paths updated — \(paths.count) path(s)")
+    }
+
+    private func applyPrefixDiff(from old: Set<String>, to new: Set<String>, client: OpaquePointer) {
+        for prefix in old.subtracting(new) {
+            es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+            logger.log("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
+        }
+        for prefix in new.subtracting(old) {
+            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+            logger.log("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
+        }
+    }
+
     private func applyMutedPrefixes(from rules: [FAARule]) {
         guard let client else { return }
-        let prefixes = Set(rules.map { $0.esMutePath })
-        for prefix in prefixes {
+        policyPrefixes = Set(rules.map { $0.esMutePath })
+        for prefix in policyPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
-        mutedPrefixes = prefixes
     }
 
     private static func filterEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FilterEvent {
