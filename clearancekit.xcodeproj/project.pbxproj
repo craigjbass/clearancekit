@@ -212,8 +212,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				EE4444444444444444440002 /* Tests */,
 				468256722F28500000000003 /* Shared */,
+				EE4444444444444444440002 /* Tests */,
 			);
 			name = clearancekitTests;
 			packageProductDependencies = (
@@ -499,7 +499,7 @@
 				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3201;
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 37KMK6XFTT;
 				ENABLE_APP_SANDBOX = YES;
@@ -524,7 +524,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -546,7 +546,7 @@
 				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3201;
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 37KMK6XFTT;
 				ENABLE_APP_SANDBOX = YES;
@@ -571,7 +571,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

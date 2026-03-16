@@ -25,6 +25,7 @@ final class XPCServer: NSObject {
     private let database: Database
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
+    private var xprotectWatcher: XProtectWatcher?
 
     init(interactor: FilterInteractor, adapter: ESInboundAdapter) {
         self.interactor = interactor
@@ -49,6 +50,25 @@ final class XPCServer: NSObject {
         listener?.delegate = self
         listener?.resume()
         NSLog("XPCServer: Listening on %@", XPCConstants.serviceName)
+
+        let watcher = XProtectWatcher { [weak self] in self?.handleXProtectChange() }
+        watcher.start()
+        xprotectWatcher = watcher
+    }
+
+    private func handleXProtectChange() {
+        let reloaded = enumerateXProtectEntries()
+        lock.lock()
+        let currentPaths = Set(xprotectEntries.map(\.processPath))
+        let newPaths = Set(reloaded.map(\.processPath))
+        guard currentPaths != newPaths else {
+            lock.unlock()
+            return
+        }
+        xprotectEntries = reloaded
+        lock.unlock()
+        applyAllowlistToFilter()
+        NSLog("XPCServer: XProtect bundle changed — reloaded %d entry/entries", reloaded.count)
     }
 
     // MARK: - Direct filter integration
