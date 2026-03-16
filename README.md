@@ -1,95 +1,39 @@
 # clearancekit
 
-clearancekit is a macOS security tool that monitors file system activity and enforces per-process allow/deny policies. It surfaces deny events from the Endpoint Security framework in a native SwiftUI interface, letting you build and refine policies without writing configuration files.
+clearancekit monitors file system activity and enforces per-process allow/deny policies on macOS. It surfaces deny events from the Endpoint Security framework in a native SwiftUI interface, letting you build and refine policies without writing configuration files.
+
+## Installation
+
+Download the latest DMG from the [Releases](../../releases) page, open it, and drag clearancekit to Applications.
+
+On first launch you will be prompted to activate the system extension and grant Full Disk Access — both are required for Endpoint Security to function.
 
 ## Architecture
 
-Three components work together:
+Two components work together:
 
-- **clearancekit.app** — SwiftUI menu bar app. Manages policies, displays live deny events, and communicates with the daemon over XPC.
-- **uk.craigbass.clearancekit.daemon** — LaunchDaemon that runs as root. Subscribes to Endpoint Security events, evaluates policies, and sends deny events to the app via XPC.
-- **uk.craigbass.clearancekit.opfilter** — System extension (DriverKit/EndpointSecurity) loaded by the app. Intercepts `ES_EVENT_TYPE_AUTH_OPEN` events and enforces allow/deny decisions in the kernel.
+- **clearancekit.app** — SwiftUI menu bar app. Manages policies, displays live events, and communicates with the system extension over XPC.
+- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Intercepts `ES_EVENT_TYPE_AUTH_OPEN` events, evaluates policies, and serves the GUI over XPC.
 
-## Dev Setup
+## Development
 
 ### Prerequisites
 
-- Xcode 16+
-- Apple Developer account with the **Endpoint Security** entitlement (`com.apple.developer.endpoint-security.client`) provisioned for your team
-- Provisioning profiles for all three targets
+- Xcode 26+
+- Apple Developer account with the **Endpoint Security** entitlement approved for your team ID
+- Developer ID provisioning profiles for both `uk.craigbass.clearancekit` and `uk.craigbass.clearancekit.opfilter`
 
-### One-time machine configuration
+### First run
 
-The system extension framework normally requires user approval on every update and enforces placement in `/Applications`. Developer mode bypasses both restrictions so builds from DerivedData update automatically and TCC grants persist.
-
-**Apple Silicon — do this once:**
-
-1. Boot to Recovery (hold Power at startup)
-2. Open Startup Security Utility → set **Reduced Security** and enable **Allow user management of kernel extensions from identified developers**
-3. Boot normally, then run:
-
-```
-systemextensionsctl developer on
-```
-
-**Intel — do this once:**
-
-1. Boot to Recovery (hold Cmd+R at startup)
-2. In Terminal:
-
-```
-csrutil enable --without-fs --without-debug --without-nvram
-```
-
-3. Boot normally, then run:
-
-```
-systemextensionsctl developer on
-```
-
-### First-time activation
-
-1. Build and run the app (Cmd+R) — copies the app to DerivedData and reloads the daemon via the post-build action (one admin password prompt)
-2. Open the app and go to the **Setup** tab
-3. Click **Activate Extension** — macOS prompts for approval in System Settings (only needed once)
-4. Click **Register Daemon** if it is not already running
-
-### Ongoing dev loop
-
-After the one-time setup, each iteration is just:
-
-1. **Cmd+B** or **Cmd+R** in Xcode
-2. The post-build action reloads the daemon from the freshly-built bundle (one admin prompt per login session)
-3. The system extension updates automatically (developer mode)
-4. TCC grants are persistent — no need to re-grant
-
-No copying to `/Applications`, no `launchctl` commands, no extension deactivation.
+1. Build and run the app (Cmd+R)
+2. Open the **Setup** tab and click **Activate Extension** — macOS prompts for approval in System Settings (once only)
+3. Grant Full Disk Access to the system extension when prompted
 
 ### Attaching the debugger
 
-**Daemon:** In Xcode, use **Debug → Attach to Process by PID or Name** and enter `uk.craigbass.clearancekit.daemon`. Build first so symbols are current.
-
-**System extension:** Same approach — attach to `uk.craigbass.clearancekit.opfilter`. Note that attaching to an ES client can cause watchdog timeouts; use `ES_OSLOG_LEVEL=debug` logging as a lower-overhead alternative.
+Use **Debug → Attach to Process by PID or Name** and enter `uk.craigbass.clearancekit.opfilter`. Note that attaching to an ES client can cause watchdog timeouts; `ES_OSLOG_LEVEL=debug` logging is a lower-overhead alternative.
 
 ## Troubleshooting
-
-Check daemon status:
-
-```
-launchctl print system/uk.craigbass.clearancekit.daemon
-```
-
-Manually unload the daemon:
-
-```
-sudo launchctl bootout system/uk.craigbass.clearancekit.daemon
-```
-
-Manually load the daemon (replace `<path>` with the actual plist path):
-
-```
-sudo launchctl bootstrap system <path>/clearancekit.app/Contents/Library/LaunchDaemons/uk.craigbass.clearancekit.daemon.plist
-```
 
 Check system extension state:
 
@@ -97,8 +41,8 @@ Check system extension state:
 systemextensionsctl list
 ```
 
-Re-enable developer mode after an OS update:
+View extension logs:
 
 ```
-systemextensionsctl developer on
+log stream --predicate 'subsystem == "uk.craigbass.clearancekit.opfilter"' --level debug
 ```
