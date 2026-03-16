@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-notarize:
+    runs-on: macos-latest
+    permissions:
+      id-token: write      # required for GitHub attestation
+      contents: write      # required to upload release assets
+      attestations: write  # required for attest-build-provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          echo "$P12_BASE64" | base64 --decode > certificate.p12
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Install provisioning profiles
+        env:
+          PP_APP_BASE64: ${{ secrets.PROVISIONING_PROFILE_APP }}
+          PP_EXT_BASE64: ${{ secrets.PROVISIONING_PROFILE_OPFILTER }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PP_APP_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/clearancekit.provisionprofile
+          echo "$PP_EXT_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/opfilter.provisionprofile
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project clearancekit.xcodeproj \
+            -scheme clearancekit \
+            -configuration Release \
+            -archivePath build/clearancekit.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=37KMK6XFTT
+
+      - name: Export
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/clearancekit.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Package DMG
+        run: |
+          hdiutil create \
+            -volname "clearancekit" \
+            -srcfolder "build/export/clearancekit.app" \
+            -ov -format UDZO \
+            "build/clearancekit-${{ github.ref_name }}.dmg"
+
+      - name: Notarize DMG
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_API_PRIVATE_KEY }}
+        run: |
+          echo "$ASC_PRIVATE_KEY" > AuthKey.p8
+          xcrun notarytool submit \
+            "build/clearancekit-${{ github.ref_name }}.dmg" \
+            --key AuthKey.p8 \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait \
+            --timeout 30m
+          rm AuthKey.p8
+          xcrun stapler staple "build/clearancekit-${{ github.ref_name }}.dmg"
+
+      - name: Attest DMG provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/clearancekit-${{ github.ref_name }}.dmg
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/clearancekit-${{ github.ref_name }}.dmg
+          generate_release_notes: true
