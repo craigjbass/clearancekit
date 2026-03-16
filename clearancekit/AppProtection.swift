@@ -171,7 +171,7 @@ final class DiscoverySession: ObservableObject {
 
         for event in newEvents where matchesApp(event) {
             let dir = normalizedParentDirectory(of: event.path)
-            guard isInterestingPath(dir) else { continue }
+            guard isInterestingPath(dir), isSpecificEnough(dir) else { continue }
             seenPaths.insert(dir)
         }
         capturedPaths = deduplicatedPaths()
@@ -202,6 +202,31 @@ final class DiscoverySession: ObservableObject {
         ]
         guard !boringPrefixes.contains(where: { path.hasPrefix($0) }) else { return false }
         return path.contains("/Users/") || path.contains("/Library/")
+    }
+
+    // Shared system directories that are meaningless to protect on a per-app basis.
+    // Protecting e.g. /Users/*/Library/Preferences would block every app that reads prefs.
+    private static let sharedLibraryDirs: [String] = [
+        "/Users/*/Library/Preferences",
+        "/Users/*/Library/Logs",
+        "/Users/*/Library/Cookies",
+        "/Users/*/Library/HTTPStorages",
+        "/Users/*/Library/WebKit",
+        "/Users/*/Library/Saved Application State",
+        "/Users/*/Library/Application Scripts",
+        "/Users/*/Library/Recent Servers",
+    ]
+
+    private func isSpecificEnough(_ path: String) -> Bool {
+        // Reject any path that is, or falls under, a known shared directory.
+        for shared in Self.sharedLibraryDirs {
+            if path == shared || path.hasPrefix(shared + "/") { return false }
+        }
+        // Require at least /Users/*/<top-level>/<category>/<app-specific>.
+        // This rejects /Users/*/Library and /Users/*/Library/Application Support
+        // while accepting /Users/*/Library/Application Support/Signal.
+        let components = path.components(separatedBy: "/").filter { !$0.isEmpty }
+        return components.count >= 5
     }
 
     private func deduplicatedPaths() -> [String] {
