@@ -42,6 +42,7 @@
 		4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = uk.craigbass.clearancekit.opfilter.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4682565E2F28331400839A1A /* libEndpointSecurity.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libEndpointSecurity.tbd; path = usr/lib/libEndpointSecurity.tbd; sourceTree = SDKROOT; };
 		CC2222222222222222220001 /* BuildInfo.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.generated.swift; sourceTree = DERIVED_FILE_DIR; };
+		EE4444444444444444440001 /* clearancekitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = clearancekitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -73,6 +74,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		EE4444444444444444440002 /* Tests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +97,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EE4444444444444444440004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -100,6 +113,7 @@
 				4682563E2F2832C400839A1A /* clearancekit */,
 				468256602F28331400839A1A /* opfilter */,
 				468256722F28500000000003 /* Shared */,
+				EE4444444444444444440002 /* Tests */,
 				4682565D2F28331400839A1A /* Frameworks */,
 				4682563D2F2832C400839A1A /* Products */,
 				46C35DB92F672255000EE3AE /* Recovered References */,
@@ -111,6 +125,7 @@
 			children = (
 				4682563C2F2832C400839A1A /* clearancekit.app */,
 				4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */,
+				EE4444444444444444440001 /* clearancekitTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -184,6 +199,29 @@
 			productReference = 4682565C2F28331400839A1A /* uk.craigbass.clearancekit.opfilter.systemextension */;
 			productType = "com.apple.product-type.system-extension";
 		};
+		EE4444444444444444440006 /* clearancekitTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE4444444444444444440009 /* Build configuration list for PBXNativeTarget "clearancekitTests" */;
+			buildPhases = (
+				EE4444444444444444440003 /* Sources */,
+				EE4444444444444444440004 /* Frameworks */,
+				EE4444444444444444440005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				EE4444444444444444440002 /* Tests */,
+				468256722F28500000000003 /* Shared */,
+			);
+			name = clearancekitTests;
+			packageProductDependencies = (
+			);
+			productName = clearancekitTests;
+			productReference = EE4444444444444444440001 /* clearancekitTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -199,6 +237,9 @@
 					};
 					4682565B2F28331400839A1A = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					EE4444444444444444440006 = {
+						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
@@ -218,6 +259,7 @@
 			targets = (
 				4682563B2F2832C400839A1A /* clearancekit */,
 				4682565B2F28331400839A1A /* opfilter */,
+				EE4444444444444444440006 /* clearancekitTests */,
 			);
 		};
 /* End PBXProject section */
@@ -231,6 +273,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4682565A2F28331400839A1A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EE4444444444444444440005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -296,6 +345,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				DD3333333333333333330002 /* BuildInfo.generated.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EE4444444444444444440003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -592,6 +648,42 @@
 			};
 			name = Release;
 		};
+		EE4444444444444444440007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		EE4444444444444444440008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -618,6 +710,15 @@
 			buildConfigurations = (
 				4682566A2F28331400839A1A /* Debug */,
 				4682566B2F28331400839A1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EE4444444444444444440009 /* Build configuration list for PBXNativeTarget "clearancekitTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE4444444444444444440007 /* Debug */,
+				EE4444444444444444440008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
