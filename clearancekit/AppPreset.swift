@@ -58,7 +58,9 @@ let safariSignatures = [
     apple("com.apple.SafariBookmarksSyncAgent"),
     apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
     apple("com.apple.SafariPlatformSupport.Helper"),
-    apple("com.apple.WebKit.GPU")
+    apple("com.apple.WebKit.GPU"),
+    apple("com.apple.Safari.CacheDeleteExtension"),
+    apple("com.apple.Safari.CacheDeleteExtension")
 ]
 
 let builtInPresets: [AppPreset] = [
@@ -102,7 +104,7 @@ let builtInPresets: [AppPreset] = [
             FAARule(
                 id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000003")!,
                 protectedPathPrefix: "/Users/*/Library/Group Containers/group.com.apple.safari",
-                allowedSignatures: [apple("com.apple.Safari")]
+                allowedSignatures: safariSignatures
             ),
         ]
     ),
