@@ -1,6 +1,6 @@
 //
 //  DatabaseMigrations.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  Schema migration definitions. Each migration runs exactly once, tracked by
 //  the schema_migrations table. Add new migrations to the end of allMigrations.

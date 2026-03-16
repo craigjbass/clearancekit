@@ -1,6 +1,6 @@
 //
 //  ConnectionValidator.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  Validates incoming XPC connections using audit_token-based code signing checks.
 //  Introduced in protocol v2.0.

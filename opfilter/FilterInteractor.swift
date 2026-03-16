@@ -32,6 +32,8 @@ enum FilterEvent {
 // MARK: - FilterInteractor
 
 final class FilterInteractor {
+    var onEvent: ((FolderOpenEvent) -> Void)?
+
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
 
@@ -107,8 +109,9 @@ final class FilterInteractor {
             ancestors: ancestors,
             matchedRuleID: decision.matchedRuleID
         )
+        let callback = onEvent
         DispatchQueue.main.async {
-            XPCClient.shared.reportEvent(folderOpenEvent)
+            callback?(folderOpenEvent)
         }
     }
 

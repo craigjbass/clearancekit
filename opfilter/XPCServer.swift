@@ -1,21 +1,21 @@
 //
-//  DaemonXPCServer.swift
-//  clearancekit-daemon
+//  XPCServer.swift
+//  opfilter
+//
+//  XPC server that exposes policy management to the GUI app.
+//  Replaces the former DaemonXPCServer — opfilter is now the single
+//  privileged process for both ES enforcement and GUI communication.
 //
 
 import Foundation
 
 private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
-final class DaemonXPCServer: NSObject {
-    static let shared = DaemonXPCServer()
-
+final class XPCServer: NSObject {
     private var listener: NSXPCListener?
     private let lock = NSLock()
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
-    private var filterClients: [ObjectIdentifier: NSXPCConnection] = [:]
     private var monitoringActive = false
-    private var opfilterVersion: String = ""
     private var recentEvents: [FolderOpenEvent] = []
     private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
@@ -23,26 +23,72 @@ final class DaemonXPCServer: NSObject {
     private var managedAllowlist: [AllowlistEntry] = []
     private var userAllowlist: [AllowlistEntry] = []
     private let maxHistoryCount = 1000
-    private var database: Database!
+    private let database: Database
+    private let interactor: FilterInteractor
+    private let adapter: ESInboundAdapter
 
-    private override init() {
-        super.init()
-    }
+    init(interactor: FilterInteractor, adapter: ESInboundAdapter) {
+        self.interactor = interactor
+        self.adapter = adapter
+        self.database = Database(directory: dataDirectory)
 
-    func start() {
-        database = Database(directory: dataDirectory)
         userRules = database.loadUserRules()
         managedRules = ManagedPolicyLoader.load()
         userAllowlist = database.loadUserAllowlist()
         managedAllowlist = ManagedAllowlistLoader.load()
         xprotectEntries = enumerateXProtectEntries()
-        NSLog("DaemonXPCServer: Discovered %d XProtect allowlist entry/entries", xprotectEntries.count)
-        // Both rule tiers must be loaded before the listener resumes so that
-        // mergedPolicyData() is complete the moment the first filter client connects.
-        listener = NSXPCListener(machServiceName: XPCConstants.daemonServiceName)
+        NSLog("XPCServer: Discovered %d XProtect allowlist entry/entries", xprotectEntries.count)
+
+        super.init()
+
+        applyPolicyToFilter()
+        applyAllowlistToFilter()
+    }
+
+    func start() {
+        listener = NSXPCListener(machServiceName: XPCConstants.serviceName)
         listener?.delegate = self
         listener?.resume()
-        NSLog("DaemonXPCServer: Listening on %@", XPCConstants.daemonServiceName)
+        NSLog("XPCServer: Listening on %@", XPCConstants.serviceName)
+    }
+
+    // MARK: - Direct filter integration
+
+    func setMonitoringActive(_ active: Bool) {
+        broadcastMonitoringStatus(active)
+    }
+
+    func handleEvent(_ event: FolderOpenEvent) {
+        broadcastEvent(event)
+    }
+
+    // MARK: - Policy / allowlist assembly
+
+    func mergedRules() -> [FAARule] {
+        lock.lock()
+        let managed = managedRules
+        let user = userRules
+        lock.unlock()
+        return faaPolicy + managed + user
+    }
+
+    func mergedAllowlist() -> [AllowlistEntry] {
+        lock.lock()
+        let xprotect = xprotectEntries
+        let managed = managedAllowlist
+        let user = userAllowlist
+        lock.unlock()
+        return baselineAllowlist + xprotect + managed + user
+    }
+
+    private func applyPolicyToFilter() {
+        let rules = mergedRules()
+        adapter.updatePolicy(rules)
+    }
+
+    private func applyAllowlistToFilter() {
+        let entries = mergedAllowlist()
+        interactor.updateAllowlist(entries)
     }
 
     // MARK: - Client registration
@@ -52,29 +98,15 @@ final class DaemonXPCServer: NSObject {
         guiClients[ObjectIdentifier(connection)] = connection
         let count = guiClients.count
         lock.unlock()
-        NSLog("DaemonXPCServer: GUI client registered. Active clients: %d", count)
-    }
-
-    fileprivate func addFilterClient(_ connection: NSXPCConnection, version: String) {
-        lock.lock()
-        filterClients[ObjectIdentifier(connection)] = connection
-        opfilterVersion = version
-        let count = filterClients.count
-        lock.unlock()
-        NSLog("DaemonXPCServer: Filter client registered (v%@). Active filter clients: %d", version, count)
-        // Push current merged policy and allowlist immediately so the filter is up to date on connect/reconnect.
-        (connection.remoteObjectProxy as? FilterClientProtocol)?.policyUpdated(mergedPolicyData())
-        (connection.remoteObjectProxy as? FilterClientProtocol)?.allowlistUpdated(mergedAllowlistData())
+        NSLog("XPCServer: GUI client registered. Active clients: %d", count)
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
         lock.lock()
         guiClients.removeValue(forKey: ObjectIdentifier(connection))
-        filterClients.removeValue(forKey: ObjectIdentifier(connection))
-        let guiCount = guiClients.count
-        let filterCount = filterClients.count
+        let count = guiClients.count
         lock.unlock()
-        NSLog("DaemonXPCServer: Client removed. GUI: %d, Filter: %d", guiCount, filterCount)
+        NSLog("XPCServer: Client removed. GUI clients: %d", count)
     }
 
     // MARK: - Event broadcasting
@@ -88,7 +120,7 @@ final class DaemonXPCServer: NSObject {
         let clients = Array(guiClients.values)
         lock.unlock()
         for conn in clients {
-            (conn.remoteObjectProxy as? DaemonClientProtocol)?.folderOpened(event)
+            (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
         }
     }
 
@@ -104,18 +136,12 @@ final class DaemonXPCServer: NSObject {
         let clients = Array(guiClients.values)
         lock.unlock()
         for conn in clients {
-            (conn.remoteObjectProxy as? DaemonClientProtocol)?.monitoringStatusChanged(isActive)
+            (conn.remoteObjectProxy as? ClientProtocol)?.monitoringStatusChanged(isActive)
         }
     }
 
     fileprivate func currentMonitoringStatus() -> Bool {
         monitoringActive
-    }
-
-    fileprivate func currentOpfilterVersion() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return opfilterVersion
     }
 
     // MARK: - Rule mutations
@@ -124,38 +150,37 @@ final class DaemonXPCServer: NSObject {
         lock.lock()
         userRules.append(rule)
         lock.unlock()
-        persistAndBroadcast()
+        persistAndBroadcastRules()
     }
 
     fileprivate func applyUpdateRule(_ rule: FAARule) {
         lock.lock()
         guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else {
             lock.unlock()
-            NSLog("DaemonXPCServer: updateRule — rule %@ not found", rule.id.uuidString)
+            NSLog("XPCServer: updateRule — rule %@ not found", rule.id.uuidString)
             return
         }
         userRules[index] = rule
         lock.unlock()
-        persistAndBroadcast()
+        persistAndBroadcastRules()
     }
 
     fileprivate func applyRemoveRule(ruleID: UUID) {
         lock.lock()
         userRules.removeAll { $0.id == ruleID }
         lock.unlock()
-        persistAndBroadcast()
+        persistAndBroadcastRules()
     }
 
-    private func persistAndBroadcast() {
+    private func persistAndBroadcastRules() {
         database.saveUserRules(userRules)
-        broadcastMergedPolicyToFilterClients()
+        applyPolicyToFilter()
         broadcastUserRulesToAllGUIClients()
     }
 
     // MARK: - Resync
 
-    fileprivate func requestResyncFromFilterClients(requestingConnection: NSXPCConnection) {
-        // Reload managed rules and allowlist — picks up any MDM profile changes since last resync.
+    fileprivate func requestResync(requestingConnection: NSXPCConnection) {
         let reloaded = ManagedPolicyLoader.loadWithSync()
         let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
         let reloadedXProtect = enumerateXProtectEntries()
@@ -165,32 +190,17 @@ final class DaemonXPCServer: NSObject {
         xprotectEntries = reloadedXProtect
         lock.unlock()
 
-        // Re-broadcast merged policy and allowlist to filter clients.
-        broadcastMergedPolicyToFilterClients()
-        broadcastMergedAllowlistToFilterClients()
-
-        lock.lock()
-        let clients = Array(filterClients.values)
-        lock.unlock()
-        NSLog("DaemonXPCServer: Requesting resync from %d filter client(s)", clients.count)
-        for conn in clients {
-            (conn.remoteObjectProxy as? FilterClientProtocol)?.resyncStatus()
-        }
+        applyPolicyToFilter()
+        applyAllowlistToFilter()
 
         pushPolicySnapshotToGUIClient(requestingConnection)
     }
 
     // MARK: - Policy helpers
 
-    fileprivate func mergedPolicyData() -> NSData {
-        // Evaluation order: baseline → managed → user. First match wins, so higher
-        // tiers always take precedence for any overlapping path prefix.
-        lock.lock()
-        let managed = managedRules
-        let user = userRules
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(faaPolicy + managed + user) else {
-            fatalError("DaemonXPCServer: Failed to encode merged policy — this is a bug")
+    private func mergedPolicyData() -> NSData {
+        guard let data = try? JSONEncoder().encode(mergedRules()) else {
+            fatalError("XPCServer: Failed to encode merged policy — this is a bug")
         }
         return data as NSData
     }
@@ -200,7 +210,7 @@ final class DaemonXPCServer: NSObject {
         let rules = managedRules
         lock.unlock()
         guard let data = try? JSONEncoder().encode(rules) else {
-            fatalError("DaemonXPCServer: Failed to encode managed rules — this is a bug")
+            fatalError("XPCServer: Failed to encode managed rules — this is a bug")
         }
         return data as NSData
     }
@@ -210,20 +220,9 @@ final class DaemonXPCServer: NSObject {
         let rules = userRules
         lock.unlock()
         guard let data = try? JSONEncoder().encode(rules) else {
-            fatalError("DaemonXPCServer: Failed to encode user rules — this is a bug")
+            fatalError("XPCServer: Failed to encode user rules — this is a bug")
         }
         return data as NSData
-    }
-
-    private func broadcastMergedPolicyToFilterClients() {
-        let data = mergedPolicyData()
-        lock.lock()
-        let clients = Array(filterClients.values)
-        lock.unlock()
-        NSLog("DaemonXPCServer: Broadcasting merged policy to %d filter client(s)", clients.count)
-        for conn in clients {
-            (conn.remoteObjectProxy as? FilterClientProtocol)?.policyUpdated(data)
-        }
     }
 
     private func broadcastUserRulesToAllGUIClients() {
@@ -232,15 +231,12 @@ final class DaemonXPCServer: NSObject {
         let clients = Array(guiClients.values)
         lock.unlock()
         for conn in clients {
-            (conn.remoteObjectProxy as? DaemonClientProtocol)?.userRulesUpdated(data)
+            (conn.remoteObjectProxy as? ClientProtocol)?.userRulesUpdated(data)
         }
     }
 
-    /// Pushes the managed- and user-rule snapshots to a single GUI client.
-    /// Called on connect (via requestResync) so the GUI always has a complete
-    /// picture of both editable tiers immediately after connecting.
     fileprivate func pushPolicySnapshotToGUIClient(_ connection: NSXPCConnection) {
-        let proxy = connection.remoteObjectProxy as? DaemonClientProtocol
+        let proxy = connection.remoteObjectProxy as? ClientProtocol
         proxy?.managedRulesUpdated(encodedManagedRules())
         proxy?.userRulesUpdated(encodedUserRules())
         proxy?.managedAllowlistUpdated(encodedManagedAllowlist())
@@ -265,30 +261,18 @@ final class DaemonXPCServer: NSObject {
 
     private func persistAndBroadcastAllowlist() {
         database.saveUserAllowlist(userAllowlist)
-        broadcastMergedAllowlistToFilterClients()
+        applyAllowlistToFilter()
         broadcastUserAllowlistToAllGUIClients()
     }
 
     // MARK: - Allowlist helpers
-
-    fileprivate func mergedAllowlistData() -> NSData {
-        lock.lock()
-        let xprotect = xprotectEntries
-        let managed = managedAllowlist
-        let user = userAllowlist
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(baselineAllowlist + xprotect + managed + user) else {
-            fatalError("DaemonXPCServer: Failed to encode merged allowlist — this is a bug")
-        }
-        return data as NSData
-    }
 
     private func encodedManagedAllowlist() -> NSData {
         lock.lock()
         let entries = managedAllowlist
         lock.unlock()
         guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("DaemonXPCServer: Failed to encode managed allowlist — this is a bug")
+            fatalError("XPCServer: Failed to encode managed allowlist — this is a bug")
         }
         return data as NSData
     }
@@ -298,20 +282,9 @@ final class DaemonXPCServer: NSObject {
         let entries = userAllowlist
         lock.unlock()
         guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("DaemonXPCServer: Failed to encode user allowlist — this is a bug")
+            fatalError("XPCServer: Failed to encode user allowlist — this is a bug")
         }
         return data as NSData
-    }
-
-    private func broadcastMergedAllowlistToFilterClients() {
-        let data = mergedAllowlistData()
-        lock.lock()
-        let clients = Array(filterClients.values)
-        lock.unlock()
-        NSLog("DaemonXPCServer: Broadcasting merged allowlist to %d filter client(s)", clients.count)
-        for conn in clients {
-            (conn.remoteObjectProxy as? FilterClientProtocol)?.allowlistUpdated(data)
-        }
     }
 
     private func broadcastUserAllowlistToAllGUIClients() {
@@ -320,47 +293,41 @@ final class DaemonXPCServer: NSObject {
         let clients = Array(guiClients.values)
         lock.unlock()
         for conn in clients {
-            (conn.remoteObjectProxy as? DaemonClientProtocol)?.userAllowlistUpdated(data)
+            (conn.remoteObjectProxy as? ClientProtocol)?.userAllowlistUpdated(data)
         }
     }
-
 }
 
 // MARK: - NSXPCListenerDelegate
 
-extension DaemonXPCServer: NSXPCListenerDelegate {
+extension XPCServer: NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        let exportedInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
+        let exportedInterface = NSXPCInterface(with: ServiceProtocol.self)
         let eventClasses = NSSet(array: [FolderOpenEvent.self, AncestorInfo.self, NSArray.self, NSDate.self, NSString.self, NSUUID.self]) as! Set<AnyHashable>
         exportedInterface.setClasses(
             eventClasses,
-            for: #selector(DaemonServiceProtocol.reportEvent(_:)),
-            argumentIndex: 0,
-            ofReply: false
-        )
-        exportedInterface.setClasses(
-            eventClasses,
-            for: #selector(DaemonServiceProtocol.fetchRecentEvents(withReply:)),
+            for: #selector(ServiceProtocol.fetchRecentEvents(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
         let processInfoClasses = NSSet(array: [NSArray.self, RunningProcessInfo.self]) as! Set<AnyHashable>
         exportedInterface.setClasses(
             processInfoClasses,
-            for: #selector(DaemonServiceProtocol.fetchProcessList(withReply:)),
+            for: #selector(ServiceProtocol.fetchProcessList(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
         newConnection.exportedInterface = exportedInterface
         newConnection.exportedObject = ConnectionHandler(server: self, connection: newConnection)
 
-        newConnection.remoteObjectInterface = NSXPCInterface(with: AnyClientProtocol.self)
-        newConnection.remoteObjectInterface?.setClasses(
+        let remoteInterface = NSXPCInterface(with: ClientProtocol.self)
+        remoteInterface.setClasses(
             eventClasses,
-            for: #selector(DaemonClientProtocol.folderOpened(_:)),
+            for: #selector(ClientProtocol.folderOpened(_:)),
             argumentIndex: 0,
             ofReply: false
         )
+        newConnection.remoteObjectInterface = remoteInterface
 
         newConnection.invalidationHandler = { [weak self, weak newConnection] in
             guard let conn = newConnection else { return }
@@ -368,34 +335,32 @@ extension DaemonXPCServer: NSXPCListenerDelegate {
         }
         newConnection.interruptionHandler = { [weak self, weak newConnection] in
             guard let conn = newConnection else { return }
-            NSLog("DaemonXPCServer: Connection interrupted")
+            NSLog("XPCServer: Connection interrupted")
             self?.removeClient(conn)
         }
 
         guard ConnectionValidator.validate(newConnection) else {
-            NSLog("DaemonXPCServer: Rejected connection — validation failed")
+            NSLog("XPCServer: Rejected connection — validation failed")
             return false
         }
 
         newConnection.resume()
-        NSLog("DaemonXPCServer: Accepted connection (protocol v%@)", XPCConstants.protocolVersion)
+        NSLog("XPCServer: Accepted connection (protocol v%@)", XPCConstants.protocolVersion)
         return true
     }
 }
 
 // MARK: - ConnectionHandler
 
-private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
-    weak var server: DaemonXPCServer?
+private final class ConnectionHandler: NSObject, ServiceProtocol {
+    weak var server: XPCServer?
     weak var connection: NSXPCConnection?
 
-    init(server: DaemonXPCServer, connection: NSXPCConnection) {
+    init(server: XPCServer, connection: NSXPCConnection) {
         self.server = server
         self.connection = connection
         super.init()
     }
-
-    // MARK: Called by GUI app
 
     func registerClient(withReply reply: @escaping (Bool) -> Void) {
         guard let conn = connection, let server else { reply(false); return }
@@ -415,6 +380,10 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
         reply(server?.getRecentEvents() ?? [])
+    }
+
+    func fetchVersionInfo(withReply reply: @escaping (NSString) -> Void) {
+        reply(BuildInfo.gitHash as NSString)
     }
 
     func addRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -461,7 +430,7 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
 
     func requestResync(withReply reply: @escaping () -> Void) {
         guard let server, let conn = connection else { reply(); return }
-        server.requestResyncFromFilterClients(requestingConnection: conn)
+        server.requestResync(requestingConnection: conn)
         reply()
     }
 
@@ -469,28 +438,5 @@ private final class ConnectionHandler: NSObject, DaemonServiceProtocol {
         DispatchQueue.global(qos: .userInitiated).async {
             reply(ProcessEnumerator.enumerateAll())
         }
-    }
-
-    // MARK: Called by opfilter
-
-    func registerFilterClient(_ version: NSString, withReply reply: @escaping (Bool) -> Void) {
-        guard let conn = connection, let server else { reply(false); return }
-        server.addFilterClient(conn, version: version as String)
-        reply(true)
-    }
-
-    func fetchVersionInfo(withReply reply: @escaping (NSString, NSString) -> Void) {
-        let opfilterVersion = server?.currentOpfilterVersion() ?? ""
-        reply(BuildInfo.gitHash as NSString, opfilterVersion as NSString)
-    }
-
-    func reportEvent(_ event: FolderOpenEvent) {
-        NSLog("DaemonXPCServer: Event from opfilter: %@", event.path)
-        server?.broadcastEvent(event)
-    }
-
-    func reportMonitoringStatus(_ isActive: Bool) {
-        NSLog("DaemonXPCServer: Monitoring status from opfilter: %@", isActive ? "active" : "inactive")
-        server?.broadcastMonitoringStatus(isActive)
     }
 }

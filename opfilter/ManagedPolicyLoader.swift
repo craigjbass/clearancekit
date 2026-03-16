@@ -1,11 +1,11 @@
 //
 //  ManagedPolicyLoader.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  Reads the managed FAAPolicy preference delivered via MDM or a manually
 //  installed .mobileconfig profile. Uses CFPreferencesCopyAppValue which
 //  reads the merged preferences layer including managed profiles. This is
-//  safe because the daemon runs as root — all writable preference locations
+//  safe because opfilter runs as root — all writable preference locations
 //  (/var/root/Library/Preferences, /Library/Preferences,
 //  /Library/Managed Preferences) are root-owned, so no unprivileged user
 //  can shadow the managed value.
@@ -49,7 +49,7 @@ enum ManagedPolicyLoader {
     }
 
     /// Flushes the CFPreferences cache before reading so that a freshly
-    /// delivered MDM payload is picked up without a daemon restart.
+    /// delivered MDM payload is picked up without an opfilter restart.
     static func loadWithSync() -> [FAARule] {
         CFPreferencesAppSynchronize(preferencesDomain)
         return load()

@@ -54,7 +54,6 @@ final class ESInboundAdapter {
         }
 
         logger.log("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
-        XPCClient.shared.reportMonitoringStatus(true)
     }
 
     /// Applies an updated policy: diffs the protected path prefixes, unmutes removed

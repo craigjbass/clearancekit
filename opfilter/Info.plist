@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSSystemExtensionUsageDescription</key>
-    <string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
+	<key>NSSystemExtensionUsageDescription</key>
+	<string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
+	<key>NSEndpointSecurityMachServiceName</key>
+	<string>uk.craigbass.clearancekit.opfilter</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

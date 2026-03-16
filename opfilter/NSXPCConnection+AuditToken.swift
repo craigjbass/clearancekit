@@ -1,6 +1,6 @@
 //
 //  NSXPCConnection+AuditToken.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  NSXPCConnection.auditToken is public API since macOS 14 but is not exposed in
 //  Swift's Foundation overlay because audit_token_t requires <bsm/audit.h>.

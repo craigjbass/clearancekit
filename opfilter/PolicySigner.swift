@@ -1,24 +1,20 @@
 //
 //  PolicySigner.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  Signs and verifies the on-disk policy JSON using an EC-P256 key.
 //
 //  Requirements:
-//    - ACL locked down to the daemon process only
-//    - Ideally Secure Enclave-backed
+//    - ACL locked down to the opfilter process only
 //    - Stored in the System Keychain
 //
-//  Secure Enclave is not possible from a LaunchDaemon. The SE is accessed
-//  via com.apple.ctkd.token-client, a per-user LaunchAgent — daemons run
-//  in the system context and cannot reach it. This is an architectural
-//  limitation, not an entitlement issue. The only workaround would be a
-//  daemon + LaunchAgent pair with an XPC bridge, but that only works when
-//  a user is logged in.
+//  Secure Enclave is not accessible from system-level processes. The SE is
+//  accessed via com.apple.ctkd.token-client, a per-user LaunchAgent —
+//  system extensions run in the system context and cannot reach it.
 //
 //  Implementation: software EC-P256 key in the System Keychain with a
-//  SecAccess ACL restricting usage to the daemon. The SecKeychain APIs are
-//  deprecated but remain the only reliable keychain for root LaunchDaemons;
+//  SecAccess ACL restricting usage to opfilter. The SecKeychain APIs are
+//  deprecated but remain the only reliable keychain for root processes;
 //  the data-protection keychain is per-user and unsuitable here.
 //
 
@@ -95,10 +91,10 @@ enum PolicySigner {
         return (key as! SecKey)
     }
 
-    /// Software-backed key stored in the System Keychain with a daemon-only ACL.
+    /// Software-backed key stored in the System Keychain with a opfilter-only ACL.
     /// The key is created in memory first, then stored via SecItemAdd with an
     /// explicit System Keychain reference and a SecAccess restricting usage to
-    /// the current process (the daemon).
+    /// the current process (opfilter).
     private static func createSoftwareKey() throws -> SecKey {
         let keyAttrs: [CFString: Any] = [
             kSecAttrKeyType:       kSecAttrKeyTypeECSECPrimeRandom,
@@ -124,13 +120,13 @@ enum PolicySigner {
         guard status == errSecSuccess else {
             throw PolicySignerError.keyStoreFailed(status)
         }
-        NSLog("PolicySigner: Stored software key in System Keychain with daemon-only ACL")
+        NSLog("PolicySigner: Stored software key in System Keychain with opfilter-only ACL")
         return key
     }
 
-    /// Builds a SecAccess that lists only the daemon as a trusted application.
+    /// Builds a SecAccess that lists only opfilter as a trusted application.
     /// In Keychain Access this shows as "Confirm before allowing access" with
-    /// the daemon under "Always allow access by these applications".
+    /// opfilter under "Always allow access by these applications".
     private static func makeDaemonOnlyAccess() throws -> SecAccess {
         var trustedApp: SecTrustedApplication?
         let appStatus = SecTrustedApplicationCreateFromPath(nil, &trustedApp)
@@ -153,7 +149,7 @@ enum PolicySigner {
     /// Deletes any existing System Keychain key that was created with a
     /// permissive (allow-all) ACL. Runs once, gated by a marker file.
     /// The next call to loadOrCreateKey() will create a fresh key with a
-    /// daemon-only ACL.
+    /// opfilter-only ACL.
     private static func migratePermissiveKeyOnce() {
         guard !FileManager.default.fileExists(atPath: aclMigrationMarker.path) else { return }
         defer {

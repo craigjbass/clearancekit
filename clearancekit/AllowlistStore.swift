@@ -8,8 +8,8 @@ import Combine
 
 /// View-layer cache of the active global allowlist.
 ///
-/// The daemon is the authoritative store. This class holds a local copy
-/// pushed down via XPC and forwards all mutations up to the daemon.
+/// The opfilter service is the authoritative store. This class holds a local copy
+/// pushed down via XPC and forwards all mutations up to opfilter.
 @MainActor
 final class AllowlistStore: ObservableObject {
     static let shared = AllowlistStore()
@@ -21,12 +21,12 @@ final class AllowlistStore: ObservableObject {
     /// Entries delivered via MDM or a .mobileconfig profile. Read-only in the GUI.
     @Published private(set) var managedEntries: [AllowlistEntry] = []
 
-    /// User-configurable entries managed by the daemon.
+    /// User-configurable entries managed by opfilter.
     @Published private(set) var userEntries: [AllowlistEntry] = []
 
     private init() {}
 
-    // MARK: - Daemon push
+    // MARK: - Service push
 
     func receivedManagedEntries(_ entries: [AllowlistEntry]) {
         managedEntries = entries

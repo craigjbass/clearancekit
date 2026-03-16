@@ -1,6 +1,6 @@
 //
 //  ManagedAllowlistLoader.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  Reads the managed GlobalAllowlist preference delivered via MDM or a manually
 //  installed .mobileconfig profile. Follows the same CFPreferencesCopyAppValue

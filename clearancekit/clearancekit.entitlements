@@ -10,7 +10,7 @@
 	</array>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
-		<string>uk.craigbass.clearancekit.daemon</string>
+		<string>uk.craigbass.clearancekit.opfilter</string>
 	</array>
 </dict>
 </plist>

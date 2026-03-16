@@ -15,9 +15,8 @@ final class XPCClient: NSObject, ObservableObject {
 
     @Published private(set) var isConnected = false
     @Published private(set) var isMonitoringActive = false
-    @Published private(set) var hasDaemonVersionMismatch = false
-    @Published private(set) var daemonVersion = ""
-    @Published private(set) var opfilterVersion = ""
+    @Published private(set) var hasServiceVersionMismatch = false
+    @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
 
     private var connection: NSXPCConnection?
@@ -33,33 +32,33 @@ final class XPCClient: NSObject, ObservableObject {
     func connect() {
         guard connection == nil else { return }
 
-        NSLog("XPCClient: Connecting to %@", XPCConstants.daemonServiceName)
+        NSLog("XPCClient: Connecting to %@", XPCConstants.serviceName)
 
-        let conn = NSXPCConnection(machServiceName: XPCConstants.daemonServiceName, options: [])
+        let conn = NSXPCConnection(machServiceName: XPCConstants.serviceName, options: [])
         let eventClasses = NSSet(array: [FolderOpenEvent.self, AncestorInfo.self, NSArray.self, NSDate.self, NSString.self, NSUUID.self]) as! Set<AnyHashable>
 
-        let remoteInterface = NSXPCInterface(with: DaemonServiceProtocol.self)
+        let remoteInterface = NSXPCInterface(with: ServiceProtocol.self)
         remoteInterface.setClasses(
             eventClasses,
-            for: #selector(DaemonServiceProtocol.fetchRecentEvents(withReply:)),
+            for: #selector(ServiceProtocol.fetchRecentEvents(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
         let processInfoClasses = NSSet(array: [NSArray.self, RunningProcessInfo.self]) as! Set<AnyHashable>
         remoteInterface.setClasses(
             processInfoClasses,
-            for: #selector(DaemonServiceProtocol.fetchProcessList(withReply:)),
+            for: #selector(ServiceProtocol.fetchProcessList(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
         conn.remoteObjectInterface = remoteInterface
 
-        conn.exportedInterface = NSXPCInterface(with: DaemonClientProtocol.self)
+        conn.exportedInterface = NSXPCInterface(with: ClientProtocol.self)
         conn.exportedObject = self
 
         conn.exportedInterface?.setClasses(
             eventClasses,
-            for: #selector(DaemonClientProtocol.folderOpened(_:)),
+            for: #selector(ClientProtocol.folderOpened(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -85,7 +84,7 @@ final class XPCClient: NSObject, ObservableObject {
             Task { @MainActor in
                 self?.handleDisconnection()
             }
-        }) as? DaemonServiceProtocol else {
+        }) as? ServiceProtocol else {
             NSLog("XPCClient: Failed to get remote object proxy")
             handleDisconnection()
             return
@@ -94,14 +93,14 @@ final class XPCClient: NSObject, ObservableObject {
         service.registerClient { [weak self] success in
             Task { @MainActor in
                 if success {
-                    NSLog("XPCClient: Successfully registered with daemon")
+                    NSLog("XPCClient: Successfully registered with service")
                     self?.isConnected = true
-                    self?.hasDaemonVersionMismatch = false
+                    self?.hasServiceVersionMismatch = false
                     self?.stopReconnectTimer()
                     self?.fetchVersionInfo()
                     self?.requestResync()
                 } else {
-                    NSLog("XPCClient: Failed to register with daemon")
+                    NSLog("XPCClient: Failed to register with service")
                     self?.handleDisconnection()
                 }
             }
@@ -112,7 +111,7 @@ final class XPCClient: NSObject, ObservableObject {
         stopReconnectTimer()
 
         if let conn = connection,
-           let service = conn.remoteObjectProxy as? DaemonServiceProtocol {
+           let service = conn.remoteObjectProxy as? ServiceProtocol {
             service.unregisterClient { _ in }
         }
 
@@ -132,14 +131,14 @@ final class XPCClient: NSObject, ObservableObject {
         scheduleReconnect()
     }
 
-    private func handleDaemonVersionMismatch() {
-        hasDaemonVersionMismatch = true
+    private func handleServiceVersionMismatch() {
+        hasServiceVersionMismatch = true
         connection?.invalidate()
         connection = nil
         isConnected = false
         isMonitoringActive = false
         stopReconnectTimer()
-        NSLog("XPCClient: Daemon version mismatch — stopped reconnecting. Re-register the daemon to resolve.")
+        NSLog("XPCClient: Service version mismatch — stopped reconnecting. Reactivate the system extension to resolve.")
     }
 
     private func scheduleReconnect() {
@@ -160,13 +159,12 @@ final class XPCClient: NSObject, ObservableObject {
     private func fetchVersionInfo() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: fetchVersionInfo error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
 
-        service.fetchVersionInfo { [weak self] daemonVer, opfilterVer in
+        service.fetchVersionInfo { [weak self] version in
             Task { @MainActor in
-                self?.daemonVersion = daemonVer as String
-                self?.opfilterVersion = opfilterVer as String
-                NSLog("XPCClient: daemon v%@, opfilter v%@", daemonVer, opfilterVer)
+                self?.serviceVersion = version as String
+                NSLog("XPCClient: service v%@", version)
             }
         }
     }
@@ -174,7 +172,7 @@ final class XPCClient: NSObject, ObservableObject {
     func requestResync() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: requestResync error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
 
         service.requestResync { }
     }
@@ -185,9 +183,9 @@ final class XPCClient: NSObject, ObservableObject {
         guard let data = try? JSONEncoder().encode(rule) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: addRule error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
         service.addRule(data as NSData) { success in
-            if !success { NSLog("XPCClient: addRule rejected by daemon") }
+            if !success { NSLog("XPCClient: addRule rejected by service") }
         }
     }
 
@@ -195,18 +193,18 @@ final class XPCClient: NSObject, ObservableObject {
         guard let data = try? JSONEncoder().encode(rule) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: updateRule error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
         service.updateRule(data as NSData) { success in
-            if !success { NSLog("XPCClient: updateRule rejected by daemon") }
+            if !success { NSLog("XPCClient: updateRule rejected by service") }
         }
     }
 
     func removeRule(ruleID: UUID) {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: removeRule error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
         service.removeRule(ruleID as NSUUID) { success in
-            if !success { NSLog("XPCClient: removeRule rejected by daemon") }
+            if !success { NSLog("XPCClient: removeRule rejected by service") }
         }
     }
 
@@ -216,18 +214,18 @@ final class XPCClient: NSObject, ObservableObject {
         guard let data = try? JSONEncoder().encode(entry) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: addAllowlistEntry error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
         service.addAllowlistEntry(data as NSData) { success in
-            if !success { NSLog("XPCClient: addAllowlistEntry rejected by daemon") }
+            if !success { NSLog("XPCClient: addAllowlistEntry rejected by service") }
         }
     }
 
     func removeAllowlistEntry(entryID: UUID) {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
             NSLog("XPCClient: removeAllowlistEntry error: %@", error.localizedDescription)
-        }) as? DaemonServiceProtocol else { return }
+        }) as? ServiceProtocol else { return }
         service.removeAllowlistEntry(entryID as NSUUID) { success in
-            if !success { NSLog("XPCClient: removeAllowlistEntry rejected by daemon") }
+            if !success { NSLog("XPCClient: removeAllowlistEntry rejected by service") }
         }
     }
 
@@ -238,7 +236,7 @@ final class XPCClient: NSObject, ObservableObject {
             guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
                 NSLog("XPCClient: fetchProcessList error: %@", error.localizedDescription)
                 continuation.resume(returning: [])
-            }) as? DaemonServiceProtocol else {
+            }) as? ServiceProtocol else {
                 continuation.resume(returning: [])
                 return
             }
@@ -277,7 +275,7 @@ final class XPCClient: NSObject, ObservableObject {
         guard let conn = connection,
               let service = conn.remoteObjectProxyWithErrorHandler({ error in
                   NSLog("XPCClient: fetchHistoricEvents error: %@", error.localizedDescription)
-              }) as? DaemonServiceProtocol else {
+              }) as? ServiceProtocol else {
             return
         }
         service.fetchRecentEvents { [weak self] historicEvents in
@@ -292,9 +290,9 @@ final class XPCClient: NSObject, ObservableObject {
     }
 }
 
-// MARK: - DaemonClientProtocol
+// MARK: - ClientProtocol
 
-extension XPCClient: DaemonClientProtocol {
+extension XPCClient: ClientProtocol {
     nonisolated func folderOpened(_ event: FolderOpenEvent) {
         NSLog("XPCClient: Received folder open event: %@", event.path)
         Task { @MainActor in
@@ -315,8 +313,8 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func managedRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            NSLog("XPCClient: Failed to decode managed rules — daemon version mismatch, invalidating connection")
-            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            NSLog("XPCClient: Failed to decode managed rules — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
         Task { @MainActor in
@@ -326,8 +324,8 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func userRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            NSLog("XPCClient: Failed to decode user rules — daemon version mismatch, invalidating connection")
-            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            NSLog("XPCClient: Failed to decode user rules — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
         Task { @MainActor in
@@ -337,8 +335,8 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func managedAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            NSLog("XPCClient: Failed to decode managed allowlist — daemon version mismatch, invalidating connection")
-            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            NSLog("XPCClient: Failed to decode managed allowlist — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
         Task { @MainActor in
@@ -348,8 +346,8 @@ extension XPCClient: DaemonClientProtocol {
 
     nonisolated func userAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            NSLog("XPCClient: Failed to decode user allowlist — daemon version mismatch, invalidating connection")
-            Task { @MainActor in self.handleDaemonVersionMismatch() }
+            NSLog("XPCClient: Failed to decode user allowlist — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
         Task { @MainActor in

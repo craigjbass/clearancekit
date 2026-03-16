@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Constants
 
 public enum XPCConstants {
-    public static let daemonServiceName = "uk.craigbass.clearancekit.daemon"
+    public static let serviceName = "uk.craigbass.clearancekit.opfilter"
     public static let protocolVersion = "2.0"
     public static let teamID = "37KMK6XFTT"
     public static let bundleIDPrefix = "uk.craigbass.clearancekit"
@@ -177,78 +177,51 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
     }
 }
 
-// MARK: - Daemon Service Protocol (exposed by the LaunchDaemon)
+// MARK: - Service Protocol (exposed by opfilter)
 //
 // Called by the GUI app:  registerClient / unregisterClient / isMonitoringActive /
 //                          fetchRecentEvents / addRule / updateRule / removeRule / requestResync
-// Called by opfilter:     registerFilterClient / reportEvent / reportMonitoringStatus
 
-@objc(DaemonServiceProtocol)
-public protocol DaemonServiceProtocol {
+@objc(ServiceProtocol)
+public protocol ServiceProtocol {
     // GUI registration
     func registerClient(withReply reply: @escaping (Bool) -> Void)
     func unregisterClient(withReply reply: @escaping (Bool) -> Void)
     func isMonitoringActive(withReply reply: @escaping (Bool) -> Void)
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void)
 
-    // opfilter registration
-    func registerFilterClient(_ version: NSString, withReply reply: @escaping (Bool) -> Void)
+    // Version query — GUI asks for opfilter build version to detect stale components.
+    func fetchVersionInfo(withReply reply: @escaping (_ serviceVersion: NSString) -> Void)
 
-    // Version query — GUI asks for daemon and opfilter build versions to detect stale components.
-    func fetchVersionInfo(withReply reply: @escaping (_ daemonVersion: NSString, _ opfilterVersion: NSString) -> Void)
-
-    // User-rule mutations (GUI → daemon). Daemon stores, then broadcasts merged
-    // policy to opfilter clients and updated user rules to all GUI clients.
+    // User-rule mutations (GUI → opfilter). Opfilter stores, then applies merged
+    // policy directly and pushes updated user rules to all GUI clients.
     func addRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
     func updateRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
-    // User allowlist mutations (GUI → daemon). Daemon stores, then broadcasts merged
-    // allowlist to opfilter clients and updated user entries to all GUI clients.
+    // User allowlist mutations (GUI → opfilter). Opfilter stores, then applies merged
+    // allowlist directly and pushes updated user entries to all GUI clients.
     func addAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
-    // Telemetry from opfilter
-    func reportEvent(_ event: FolderOpenEvent)
-    func reportMonitoringStatus(_ isActive: Bool)
-
-    // GUI requests a full status resync. Daemon asks filter clients to re-report
-    // monitoring status and pushes the current user-rule snapshot back to the caller.
+    // GUI requests a full status resync. Opfilter pushes the current user-rule
+    // and allowlist snapshots back to the caller.
     func requestResync(withReply reply: @escaping () -> Void)
 
     // Returns a snapshot of all running processes with code-signing information.
-    // Runs in the daemon (root, unsandboxed) to bypass App Sandbox restrictions.
     func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
 }
 
-// MARK: - Daemon Client Protocol (exported by the GUI app for daemon callbacks)
+// MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
 
-@objc(DaemonClientProtocol)
-public protocol DaemonClientProtocol {
+@objc(ClientProtocol)
+public protocol ClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
     func monitoringStatusChanged(_ isActive: Bool)
-    // Daemon pushes the authoritative rule snapshots on connect (via requestResync)
+    // Opfilter pushes the authoritative rule snapshots on connect (via requestResync)
     // and whenever the respective tier changes.
     func managedRulesUpdated(_ rulesData: NSData)
     func userRulesUpdated(_ rulesData: NSData)
     func managedAllowlistUpdated(_ allowlistData: NSData)
     func userAllowlistUpdated(_ allowlistData: NSData)
 }
-
-// MARK: - Filter Client Protocol (exported by opfilter for daemon policy-push callbacks)
-
-@objc(FilterClientProtocol)
-public protocol FilterClientProtocol {
-    func policyUpdated(_ policyData: NSData)
-    func allowlistUpdated(_ allowlistData: NSData)
-    func resyncStatus()
-}
-
-// MARK: - Any Client Protocol
-//
-// Combined protocol used as the daemon's remoteObjectInterface so it can call back
-// to both GUI connections (DaemonClientProtocol) and opfilter connections
-// (FilterClientProtocol) through a single interface declaration.
-
-@objc(AnyClientProtocol)
-public protocol AnyClientProtocol: DaemonClientProtocol, FilterClientProtocol {}

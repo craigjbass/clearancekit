@@ -96,7 +96,7 @@ public let baselineAllowlist: [AllowlistEntry] = [
 // MARK: - XProtect enumeration
 
 /// Scans the XProtect bundle's MacOS directory at runtime and returns one
-/// platform-binary allowlist entry per executable found. Called on daemon
+/// platform-binary allowlist entry per executable found. Called on opfilter
 /// startup (and resync) so newly-shipped XProtect remediators are picked up
 /// automatically after an XProtect update, without a clearancekit update.
 public func enumerateXProtectEntries() -> [AllowlistEntry] {

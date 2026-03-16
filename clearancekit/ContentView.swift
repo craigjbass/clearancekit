@@ -33,13 +33,12 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
-    @StateObject private var daemonManager = DaemonManager.shared
     @ObservedObject private var nav = NavigationState.shared
 
     var body: some View {
         VStack(spacing: 0) {
-            if xpcClient.hasDaemonVersionMismatch {
-                DaemonVersionMismatchBanner {
+            if xpcClient.hasServiceVersionMismatch {
+                ServiceVersionMismatchBanner {
                     nav.selection = .setup
                 }
             }
@@ -62,22 +61,21 @@ struct ContentView: View {
         }
         .frame(minWidth: 720, minHeight: 480)
         .onAppear {
-            daemonManager.refreshStatus()
             xpcClient.connect()
         }
     }
 }
 
-// MARK: - DaemonVersionMismatchBanner
+// MARK: - ServiceVersionMismatchBanner
 
-private struct DaemonVersionMismatchBanner: View {
+private struct ServiceVersionMismatchBanner: View {
     let onSetup: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.yellow)
-            Text("Daemon version mismatch — re-register the daemon to restore functionality.")
+            Text("Service version mismatch — reactivate the system extension to restore functionality.")
             Spacer()
             Button("Go to Setup", action: onSetup)
                 .buttonStyle(.borderedProminent)
@@ -94,15 +92,12 @@ private struct DaemonVersionMismatchBanner: View {
 struct SetupView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
-    @StateObject private var daemonManager = DaemonManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
             setupStepsHeader
             Divider()
             fullDiskAccessRow
-            Divider()
-            daemonStatusRow
             Divider()
             extensionStatusRow
             Divider()
@@ -123,8 +118,7 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
                 Text("1. Grant Full Disk Access to 'opfilter', which is part of clearancekit")
-                Text("2. Register the daemon")
-                Text("3. Activate the system extension")
+                Text("2. Activate the system extension")
             }
             .font(.callout)
         }
@@ -136,7 +130,7 @@ struct SetupView: View {
         HStack {
             Text("Full Disk Access:")
                 .font(.headline)
-            Text("Required for the daemon to monitor file access")
+            Text("Required for opfilter to monitor file access")
                 .foregroundStyle(.secondary)
             Spacer()
             Button("Open Privacy & Security") {
@@ -146,48 +140,12 @@ struct SetupView: View {
         .padding()
     }
 
-    private var daemonStatusRow: some View {
-        HStack {
-            Text("Daemon:")
-                .font(.headline)
-            Text(daemonManager.statusMessage)
-                .foregroundColor(daemonStatusColor)
-            if daemonIsOutOfDate {
-                Text("(v\(xpcClient.daemonVersion) — re-register to update)")
-                    .foregroundStyle(.orange)
-                    .font(.caption)
-            }
-            Spacer()
-            switch daemonManager.status {
-            case .notRegistered, .failed, .unknown:
-                Button("Register") { daemonManager.registerDaemon() }
-            case .requiresApproval:
-                Button("Open System Settings") { daemonManager.openSystemSettings() }
-            case .enabled:
-                Button("Unregister") { daemonManager.unregisterDaemon() }
-            }
-        }
-        .padding()
-    }
-
-    private var daemonIsOutOfDate: Bool {
-        !xpcClient.daemonVersion.isEmpty && cleanHash(xpcClient.daemonVersion) != appBuildVersion
-    }
-
-    private var opfilterIsOutOfDate: Bool {
-        !xpcClient.opfilterVersion.isEmpty && cleanHash(xpcClient.opfilterVersion) != appBuildVersion
+    private var serviceIsOutOfDate: Bool {
+        !xpcClient.serviceVersion.isEmpty && cleanHash(xpcClient.serviceVersion) != appBuildVersion
     }
 
     private func cleanHash(_ hash: String) -> String {
         hash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
-    }
-
-    private var daemonStatusColor: Color {
-        switch daemonManager.status {
-        case .enabled:                          return .green
-        case .requiresApproval:                 return .yellow
-        case .notRegistered, .unknown, .failed: return .red
-        }
     }
 
     private var extensionStatusRow: some View {
@@ -196,8 +154,8 @@ struct SetupView: View {
                 .font(.headline)
             Text(extensionManager.statusMessage)
                 .foregroundColor(.secondary)
-            if opfilterIsOutOfDate {
-                Text("(v\(xpcClient.opfilterVersion) — reactivate to update)")
+            if serviceIsOutOfDate {
+                Text("(v\(xpcClient.serviceVersion) — reactivate to update)")
                     .foregroundStyle(.orange)
                     .font(.caption)
             }

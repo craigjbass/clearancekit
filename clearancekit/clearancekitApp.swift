@@ -38,7 +38,6 @@ struct clearancekitApp: App {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var xpcClient = XPCClient.shared
-    @StateObject private var daemonManager = DaemonManager.shared
 
     var body: some Scene {
         Window("clearancekit", id: "main") {
@@ -92,12 +91,11 @@ struct clearancekitApp: App {
     }
 
     private var menuBarStatus: MenuBarStatus {
-        guard daemonManager.status == .enabled else { return .notWorking }
         guard xpcClient.isConnected else { return .disconnected }
         guard xpcClient.isMonitoringActive else { return .notWorking }
         let appHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
-        let outdated = (!xpcClient.daemonVersion.isEmpty && xpcClient.daemonVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash)
-                    || (!xpcClient.opfilterVersion.isEmpty && xpcClient.opfilterVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash)
+        let outdated = !xpcClient.serviceVersion.isEmpty
+            && xpcClient.serviceVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash
         return outdated ? .outdated : .healthy
     }
 }

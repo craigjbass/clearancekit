@@ -8,28 +8,28 @@ import Combine
 
 /// View-layer cache of the active policy.
 ///
-/// The daemon (running as root) is the authoritative store. This class holds a
-/// local copy pushed down via XPC and forwards all mutations up to the daemon.
-/// There is no local disk I/O — the daemon owns persistence.
+/// The opfilter service (running as root) is the authoritative store. This class
+/// holds a local copy pushed down via XPC and forwards all mutations up to opfilter.
+/// There is no local disk I/O — opfilter owns persistence.
 @MainActor
 final class PolicyStore: ObservableObject {
     static let shared = PolicyStore()
 
-    /// Compile-time baseline rules. These are enforced by the daemon first and
+    /// Compile-time baseline rules. These are enforced by opfilter first and
     /// cannot be modified through the GUI.
     @Published private(set) var baselineRules: [FAARule] = faaPolicy
 
     /// Rules delivered via MDM or a .mobileconfig profile. Read-only in the GUI;
-    /// the authoritative snapshot is pushed by the daemon via `receivedManagedRules(_:)`.
+    /// the authoritative snapshot is pushed by opfilter via `receivedManagedRules(_:)`.
     @Published private(set) var managedRules: [FAARule] = []
 
-    /// User-configurable rules managed by the daemon. Mutations are sent over XPC;
+    /// User-configurable rules managed by opfilter. Mutations are sent over XPC;
     /// the authoritative snapshot is pushed back via `receivedUserRules(_:)`.
     @Published private(set) var userRules: [FAARule] = []
 
     private init() {}
 
-    // MARK: - Daemon push
+    // MARK: - Service push
 
     func receivedManagedRules(_ rules: [FAARule]) {
         managedRules = rules

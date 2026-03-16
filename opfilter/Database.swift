@@ -1,6 +1,6 @@
 //
 //  Database.swift
-//  clearancekit-daemon
+//  opfilter
 //
 //  SQLite-backed persistent store for user rules and allowlist entries.
 //  Replaces the previous JSON file storage while maintaining ECDSA signature

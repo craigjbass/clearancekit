@@ -7,19 +7,18 @@
 
 import Foundation
 
-XPCClient.shared.start()
 ProcessTree.shared.buildInitialTree()
 
 let interactor = FilterInteractor(initialRules: faaPolicy)
 let adapter = ESInboundAdapter(interactor: interactor)
-adapter.start(initialRules: faaPolicy)
+let server = XPCServer(interactor: interactor, adapter: adapter)
 
-XPCClient.shared.onPolicyUpdate = { rules in
-    adapter.updatePolicy(rules)
+interactor.onEvent = { event in
+    server.handleEvent(event)
 }
 
-XPCClient.shared.onAllowlistUpdate = { entries in
-    interactor.updateAllowlist(entries)
-}
+adapter.start(initialRules: server.mergedRules())
+server.setMonitoringActive(true)
+server.start()
 
 dispatchMain()
