@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-notarize:
-    runs-on: macos-latest
+    runs-on: macos-26
     permissions:
       id-token: write      # required for GitHub attestation
       contents: write      # required to upload release assets
