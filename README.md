@@ -2,6 +2,10 @@
 
 clearancekit monitors file system activity and enforces per-process allow/deny policies on macOS. It surfaces deny events from the Endpoint Security framework in a native SwiftUI interface, letting you build and refine policies without writing configuration files.
 
+![clearancekit in action](Screenshots/recording.gif)
+
+![App protections](Screenshots/app-protections.png)
+
 ## Installation
 
 Download the latest DMG from the [Releases](../../releases) page, open it, and drag clearancekit to Applications.
