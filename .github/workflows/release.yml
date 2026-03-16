@@ -75,7 +75,7 @@ jobs:
             -size 200m \
             -fs HFS+ \
             -layout SPUD \
-            -ov -format UDRW \
+            -ov \
             build/clearancekit-staging.dmg
 
           # Mount it and copy in the app + an Applications symlink
