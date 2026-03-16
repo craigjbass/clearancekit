@@ -17,6 +17,8 @@ public let appleTeamID = "apple"
 // MARK: - PolicyDecision
 
 public enum PolicyDecision {
+    /// Process is on the global allowlist — bypasses all rules.
+    case globallyAllowed
     /// Path not covered by any rule — default allow.
     case noRuleApplies
     /// Covered by a rule and a specific criterion matched.
@@ -36,6 +38,8 @@ public enum PolicyDecision {
 
     public var reason: String {
         switch self {
+        case .globallyAllowed:
+            return "Globally allowed"
         case .noRuleApplies:
             return "No rule applies — default allow"
         case .allowed(let criterion):
@@ -260,4 +264,21 @@ public func checkFAAPolicy(
         return .denied(ruleID: rule.id, rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
+}
+
+// MARK: - Unified access evaluation
+
+public func evaluateAccess(
+    rules: [FAARule],
+    allowlist: [AllowlistEntry],
+    path: String,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    ancestors: [AncestorInfo] = []
+) -> PolicyDecision {
+    if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
+        return .globallyAllowed
+    }
+    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
 }

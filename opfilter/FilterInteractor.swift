@@ -65,26 +65,23 @@ final class FilterInteractor {
 
     private func handleOpenFile(_ fileEvent: OpenFileEvent) {
         let allowlist = allowlistStorage.withLock { $0 }
-        if isGloballyAllowed(
-            allowlist: allowlist,
-            processPath: fileEvent.processPath,
-            signingID: fileEvent.signingID,
-            teamID: fileEvent.teamID
-        ) {
-            fileEvent.respond(true)
-            return
-        }
-
         let rules = rulesStorage.withLock { $0 }
         let ancestors = ProcessTree.shared.ancestors(ofPID: fileEvent.processID)
-        let decision = checkFAAPolicy(
+        let decision = evaluateAccess(
             rules: rules,
+            allowlist: allowlist,
             path: fileEvent.path,
             processPath: fileEvent.processPath,
             teamID: fileEvent.teamID,
             signingID: fileEvent.signingID,
             ancestors: ancestors
         )
+
+        if case .globallyAllowed = decision {
+            fileEvent.respond(true)
+            return
+        }
+
         let allowed = decision.isAllowed
 
         // Respond immediately — the ES deadline is strict and all work after

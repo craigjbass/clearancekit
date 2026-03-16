@@ -248,134 +248,10 @@ struct AllowlistEntryTests {
     }
 }
 
-// MARK: - isGloballyAllowed
+// MARK: - evaluateAccess
 
-@Suite("isGloballyAllowed")
-struct GlobalAllowlistTests {
-
-    // MARK: Code-signing-based entries
-
-    @Test("platform binary allowed by signing ID")
-    func platformBinaryAllowedBySigningID() {
-        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", signingID: "com.apple.finder", teamID: ""))
-    }
-
-    @Test("platform binary rejected when team ID is non-empty")
-    func platformBinaryRejectedWithTeamID() {
-        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.apple.finder", teamID: "SOMETEAM"))
-    }
-
-    @Test("third-party app allowed by team and signing ID")
-    func thirdPartyAllowedByTeamAndSigningID() {
-        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Applications/AcmeBackup.app/Contents/MacOS/AcmeBackup", signingID: "com.acme.backup", teamID: "ACME99"))
-    }
-
-    @Test("third-party app rejected when team ID mismatches")
-    func thirdPartyRejectedWrongTeam() {
-        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.acme.backup", teamID: "EVIL77"))
-    }
-
-    @Test("signing ID mismatch rejected even if path matches another entry")
-    func signingIDMismatchRejected() {
-        let allowlist = [AllowlistEntry(signingID: "com.apple.mds", platformBinary: true)]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.evil.impersonator", teamID: ""))
-    }
-
-    // MARK: Path-based entries
-
-    @Test("process allowed by exact path match")
-    func allowedByPathMatch() {
-        let allowlist = [AllowlistEntry(processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect")]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect", signingID: "", teamID: ""))
-    }
-
-    @Test("path-based entry rejects different path")
-    func pathEntryRejectsDifferentPath() {
-        let allowlist = [AllowlistEntry(processPath: "/usr/bin/allowed")]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/disallowed", signingID: "", teamID: ""))
-    }
-
-    @Test("path-based entry does not do prefix matching")
-    func pathEntryNoPrefixMatching() {
-        let allowlist = [AllowlistEntry(processPath: "/usr/bin/tool")]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/tool-extended", signingID: "", teamID: ""))
-    }
-
-    @Test("path-based platform binary entry requires empty team")
-    func pathBasedPlatformBinaryEnforcesTeam() {
-        let allowlist = [AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/XProtect", signingID: "", teamID: ""))
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/XProtect", signingID: "", teamID: "TEAM"))
-    }
-
-    // MARK: Mixed allowlists
-
-    @Test("mixed allowlist — signing entry matches")
-    func mixedAllowlistSigningMatch() {
-        let allowlist = [
-            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
-            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
-        ]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared", signingID: "com.apple.mdworker", teamID: ""))
-    }
-
-    @Test("mixed allowlist — path entry matches when signing doesn't")
-    func mixedAllowlistPathFallback() {
-        let allowlist = [
-            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
-            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
-        ]
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/usr/libexec/custom-scanner", signingID: "com.custom.scanner", teamID: "CUSTOM"))
-    }
-
-    @Test("mixed allowlist — neither entry matches")
-    func mixedAllowlistNeitherMatches() {
-        let allowlist = [
-            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
-            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
-        ]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/evil/binary", signingID: "com.evil", teamID: "EVIL"))
-    }
-
-    @Test("multi-tier allowlist with baseline, managed, and user entries")
-    func multiTierAllowlist() {
-        let baseline = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
-        let managed = [AllowlistEntry(signingID: "com.corp.agent", teamID: "CORP88")]
-        let user = [AllowlistEntry(processPath: "/usr/local/bin/dev-tool")]
-        let merged = baseline + managed + user
-
-        #expect(isGloballyAllowed(allowlist: merged, processPath: "/System/Finder", signingID: "com.apple.finder", teamID: ""))
-        #expect(isGloballyAllowed(allowlist: merged, processPath: "/opt/corp/agent", signingID: "com.corp.agent", teamID: "CORP88"))
-        #expect(isGloballyAllowed(allowlist: merged, processPath: "/usr/local/bin/dev-tool", signingID: "", teamID: ""))
-        #expect(!isGloballyAllowed(allowlist: merged, processPath: "/unknown", signingID: "com.unknown", teamID: "UNK"))
-    }
-
-    // MARK: Edge cases
-
-    @Test("empty allowlist rejects everything")
-    func emptyAllowlistRejectsAll() {
-        #expect(!isGloballyAllowed(allowlist: [], processPath: "/anything", signingID: "anything", teamID: ""))
-    }
-
-    @Test("unsigned process matches path-based entry but not signing-based entry")
-    func unsignedProcessMatchesPathOnly() {
-        let allowlist = [
-            AllowlistEntry(signingID: "com.apple.finder", platformBinary: true),
-            AllowlistEntry(processPath: "/usr/bin/unsigned-tool"),
-        ]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/unknown", signingID: "", teamID: ""))
-        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/unsigned-tool", signingID: "", teamID: ""))
-    }
-}
-
-// MARK: - checkFAAPolicy
-
-@Suite("checkFAAPolicy")
-struct PolicyEvaluationTests {
+@Suite("evaluateAccess")
+struct AccessEvaluationTests {
     let ruleID = UUID()
 
     private func ruleProtecting(
@@ -395,46 +271,248 @@ struct PolicyEvaluationTests {
         )
     }
 
-    // MARK: No rule applies
+    private func decide(
+        rules: [FAARule] = [],
+        allowlist: [AllowlistEntry] = [],
+        path: String = "/unrelated",
+        processPath: String = "/bin/test",
+        teamID: String = "",
+        signingID: String = "",
+        ancestors: [AncestorInfo] = []
+    ) -> PolicyDecision {
+        evaluateAccess(
+            rules: rules,
+            allowlist: allowlist,
+            path: path,
+            processPath: processPath,
+            teamID: teamID,
+            signingID: signingID,
+            ancestors: ancestors
+        )
+    }
 
-    @Test("unprotected path is allowed by default")
-    func unprotectedPathAllowed() {
+    // MARK: Global allowlist — signing-based
+
+    @Test("platform binary on allowlist is globally allowed")
+    func platformBinaryGloballyAllowed() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
         let rules = [ruleProtecting("/protected")]
-        let decision = checkFAAPolicy(rules: rules, path: "/unprotected/file", processPath: "/bin/cat", teamID: "", signingID: "")
-        #expect(decision.isAllowed)
-        #expect(decision.matchedRuleID == nil)
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
     }
 
-    @Test("empty rule set allows everything")
-    func emptyRuleSetAllowsAll() {
-        let decision = checkFAAPolicy(rules: [], path: "/anything", processPath: "/anything", teamID: "", signingID: "")
-        #expect(decision.isAllowed)
+    @Test("platform binary with non-empty team ID is not globally allowed")
+    func platformBinaryWrongTeamNotAllowed() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/anything", teamID: "SOMETEAM", signingID: "com.apple.finder")
+        #expect(!decision.isAllowed)
     }
 
-    // MARK: Allowed by process path
-
-    @Test("allowed by process path")
-    func allowedByProcessPath() {
-        let rules = [ruleProtecting("/protected", allowedProcessPaths: ["/usr/bin/safe"])]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/usr/bin/safe", teamID: "", signingID: "")
-        #expect(decision.isAllowed)
+    @Test("third-party app on allowlist by team + signing ID is globally allowed")
+    func thirdPartyGloballyAllowed() {
+        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/Applications/AcmeBackup", teamID: "ACME99", signingID: "com.acme.backup")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
     }
 
-    @Test("denied when process path not in allowed list")
-    func deniedWhenProcessPathNotAllowed() {
-        let rules = [ruleProtecting("/protected", allowedProcessPaths: ["/usr/bin/safe"])]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/usr/bin/evil", teamID: "", signingID: "")
+    @Test("third-party app with wrong team ID falls through to policy")
+    func thirdPartyWrongTeamHitsPolicy() {
+        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/anything", teamID: "EVIL77", signingID: "com.acme.backup")
         #expect(!decision.isAllowed)
         #expect(decision.matchedRuleID == ruleID)
     }
 
-    // MARK: Allowed by signature
+    // MARK: Global allowlist — path-based
+
+    @Test("process on allowlist by path is globally allowed")
+    func pathBasedGloballyAllowed() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/libexec/xprotect")]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/usr/libexec/xprotect")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("path-based allowlist entry rejects different path — falls through to policy")
+    func pathMismatchHitsPolicy() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/libexec/xprotect")]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/usr/bin/evil")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("path-based allowlist does not prefix match")
+    func pathAllowlistNoPrefixMatch() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/bin/tool")]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/usr/bin/tool-extended")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("path-based platform binary allowlist entry requires empty team")
+    func pathPlatformBinaryEnforcesTeam() {
+        let allowlist = [AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)]
+        let rules = [ruleProtecting("/protected")]
+
+        let allowed = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/Library/Apple/XProtect")
+        guard case .globallyAllowed = allowed else {
+            Issue.record("Expected .globallyAllowed, got \(allowed)")
+            return
+        }
+
+        let denied = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/Library/Apple/XProtect", teamID: "TEAM")
+        #expect(!denied.isAllowed)
+    }
+
+    // MARK: Global allowlist — mixed and multi-tier
+
+    @Test("mixed allowlist — signing entry bypasses policy")
+    func mixedAllowlistSigningBypasses() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/mdworker", signingID: "com.apple.mdworker")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("mixed allowlist — path entry bypasses policy when signing doesn't match")
+    func mixedAllowlistPathBypasses() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/usr/libexec/custom-scanner", teamID: "CUSTOM", signingID: "com.custom.scanner")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("mixed allowlist — neither entry matches, falls through to policy")
+    func mixedAllowlistNeitherMatchesFallsThrough() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/evil/binary", teamID: "EVIL", signingID: "com.evil")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("multi-tier allowlist: baseline + managed + user entries")
+    func multiTierAllowlist() {
+        let baseline = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let managed = [AllowlistEntry(signingID: "com.corp.agent", teamID: "CORP88")]
+        let user = [AllowlistEntry(processPath: "/usr/local/bin/dev-tool")]
+        let allowlist = baseline + managed + user
+        let rules = [ruleProtecting("/protected")]
+
+        let finderDecision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        guard case .globallyAllowed = finderDecision else {
+            Issue.record("Expected Finder to be globally allowed")
+            return
+        }
+
+        let corpDecision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/opt/corp/agent", teamID: "CORP88", signingID: "com.corp.agent")
+        guard case .globallyAllowed = corpDecision else {
+            Issue.record("Expected corp agent to be globally allowed")
+            return
+        }
+
+        let devToolDecision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/usr/local/bin/dev-tool")
+        guard case .globallyAllowed = devToolDecision else {
+            Issue.record("Expected dev-tool to be globally allowed")
+            return
+        }
+
+        let unknownDecision = decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/unknown", teamID: "UNK", signingID: "com.unknown")
+        #expect(!unknownDecision.isAllowed)
+    }
+
+    // MARK: Global allowlist bypasses policy completely
+
+    @Test("allowlisted process bypasses even a deny-all rule")
+    func allowlistBypassesDenyAll() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let denyAllRule = FAARule(protectedPathPrefix: "/protected")
+        let decision = decide(rules: [denyAllRule], allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Allowlisted process should bypass deny-all rule")
+            return
+        }
+    }
+
+    @Test("non-allowlisted process hitting unprotected path is noRuleApplies")
+    func nonAllowlistedUnprotectedPath() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let rules = [ruleProtecting("/protected")]
+        let decision = decide(rules: rules, allowlist: allowlist, path: "/unprotected/file", processPath: "/usr/bin/cat", teamID: "TEAM", signingID: "com.cat")
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    // MARK: Policy evaluation — no rule applies
+
+    @Test("unprotected path is allowed by default")
+    func unprotectedPathAllowed() {
+        let decision = decide(rules: [ruleProtecting("/protected")], path: "/unprotected/file", processPath: "/bin/cat")
+        #expect(decision.isAllowed)
+        #expect(decision.matchedRuleID == nil)
+    }
+
+    @Test("empty rules and empty allowlist allows everything")
+    func emptyRulesAndAllowlistAllowsAll() {
+        let decision = decide(path: "/anything", processPath: "/anything")
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    // MARK: Policy evaluation — allowed by process path
+
+    @Test("allowed by process path in rule")
+    func allowedByProcessPath() {
+        let rules = [ruleProtecting("/protected", allowedProcessPaths: ["/usr/bin/safe"])]
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/usr/bin/safe")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("denied when process path not in rule's allowed list")
+    func deniedWhenProcessPathNotAllowed() {
+        let rules = [ruleProtecting("/protected", allowedProcessPaths: ["/usr/bin/safe"])]
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/usr/bin/evil")
+        #expect(!decision.isAllowed)
+        #expect(decision.matchedRuleID == ruleID)
+    }
+
+    // MARK: Policy evaluation — allowed by signature
 
     @Test("allowed by exact signature")
     func allowedByExactSignature() {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")
         let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM1", signingID: "com.example.app")
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM1", signingID: "com.example.app")
         #expect(decision.isAllowed)
     }
 
@@ -442,16 +520,15 @@ struct PolicyEvaluationTests {
     func allowedByWildcardSignature() {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "*")
         let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM1", signingID: "com.anything")
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM1", signingID: "com.anything")
         #expect(decision.isAllowed)
     }
 
-    @Test("Apple platform binary gets resolved team ID")
+    @Test("Apple platform binary gets resolved team ID in policy")
     func applePlatformBinaryResolution() {
         let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.finder")
         let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
-        // Empty teamID → resolved to appleTeamID
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/System/Finder", teamID: "", signingID: "com.apple.finder")
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
         #expect(decision.isAllowed)
     }
 
@@ -459,17 +536,17 @@ struct PolicyEvaluationTests {
     func deniedWhenSignatureMismatch() {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")
         let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM2", signingID: "com.evil")
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/anything", teamID: "TEAM2", signingID: "com.evil")
         #expect(!decision.isAllowed)
     }
 
-    // MARK: Allowed by ancestor
+    // MARK: Policy evaluation — allowed by ancestor
 
     @Test("allowed by ancestor process path")
     func allowedByAncestorProcessPath() {
         let rules = [ruleProtecting("/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])]
         let ancestors = [AncestorInfo(path: "/usr/bin/parent", teamID: "", signingID: "")]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/usr/bin/child", teamID: "", signingID: "", ancestors: ancestors)
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/usr/bin/child", ancestors: ancestors)
         #expect(decision.isAllowed)
     }
 
@@ -478,7 +555,7 @@ struct PolicyEvaluationTests {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "*")
         let rules = [ruleProtecting("/protected", allowedAncestorSignatures: [sig])]
         let ancestors = [AncestorInfo(path: "/some/parent", teamID: "TEAM1", signingID: "com.parent")]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/child", teamID: "", signingID: "", ancestors: ancestors)
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/child", ancestors: ancestors)
         #expect(decision.isAllowed)
     }
 
@@ -487,7 +564,7 @@ struct PolicyEvaluationTests {
         let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.launchd")
         let rules = [ruleProtecting("/protected", allowedAncestorSignatures: [sig])]
         let ancestors = [AncestorInfo(path: "/sbin/launchd", teamID: "", signingID: "com.apple.launchd")]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/child", teamID: "SOMETEAM", signingID: "com.child", ancestors: ancestors)
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/child", teamID: "SOMETEAM", signingID: "com.child", ancestors: ancestors)
         #expect(decision.isAllowed)
     }
 
@@ -495,17 +572,17 @@ struct PolicyEvaluationTests {
     func deniedWhenNoAncestorMatches() {
         let rules = [ruleProtecting("/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])]
         let ancestors = [AncestorInfo(path: "/usr/bin/other", teamID: "", signingID: "")]
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/child", teamID: "", signingID: "", ancestors: ancestors)
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/child", ancestors: ancestors)
         #expect(!decision.isAllowed)
     }
 
-    // MARK: First match wins
+    // MARK: Policy evaluation — first match wins
 
     @Test("first matching rule wins — earlier allow beats later deny")
     func firstRuleWins() {
         let allowRule = FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/usr/bin/safe"])
         let denyAllRule = FAARule(protectedPathPrefix: "/protected")
-        let decision = checkFAAPolicy(rules: [allowRule, denyAllRule], path: "/protected/file", processPath: "/usr/bin/safe", teamID: "", signingID: "")
+        let decision = decide(rules: [allowRule, denyAllRule], path: "/protected/file", processPath: "/usr/bin/safe")
         #expect(decision.isAllowed)
     }
 
@@ -513,52 +590,51 @@ struct PolicyEvaluationTests {
     func firstDenyWins() {
         let denyAllRule = FAARule(protectedPathPrefix: "/protected")
         let allowRule = FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/usr/bin/safe"])
-        let decision = checkFAAPolicy(rules: [denyAllRule, allowRule], path: "/protected/file", processPath: "/usr/bin/safe", teamID: "", signingID: "")
+        let decision = decide(rules: [denyAllRule, allowRule], path: "/protected/file", processPath: "/usr/bin/safe")
         #expect(!decision.isAllowed)
     }
 
-    // MARK: Deny reason
+    // MARK: Policy evaluation — deny reason
 
     @Test("deny reason includes rule and criteria")
     func denyReasonContent() {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "com.allowed")
         let rules = [ruleProtecting("/secret", allowedSignatures: [sig])]
-        let decision = checkFAAPolicy(rules: rules, path: "/secret/file", processPath: "/evil", teamID: "BAD", signingID: "com.evil")
+        let decision = decide(rules: rules, path: "/secret/file", processPath: "/evil", teamID: "BAD", signingID: "com.evil")
         #expect(decision.reason.contains("/secret"))
         #expect(decision.reason.contains("TEAM1:com.allowed"))
     }
 
-    // MARK: Wildcard path rules
+    // MARK: Policy evaluation — wildcard path rules
 
     @Test("wildcard rule protects matching paths")
     func wildcardRuleProtectsMatchingPaths() {
         let rules = [ruleProtecting("/Users/*/Documents", allowedProcessPaths: ["/usr/bin/safe"])]
-        let decision = checkFAAPolicy(rules: rules, path: "/Users/admin/Documents/secret.txt", processPath: "/usr/bin/evil", teamID: "", signingID: "")
+        let decision = decide(rules: rules, path: "/Users/admin/Documents/secret.txt", processPath: "/usr/bin/evil")
         #expect(!decision.isAllowed)
     }
 
     @Test("wildcard rule allows matching process")
     func wildcardRuleAllowsMatchingProcess() {
         let rules = [ruleProtecting("/Users/*/Documents", allowedProcessPaths: ["/usr/bin/safe"])]
-        let decision = checkFAAPolicy(rules: rules, path: "/Users/admin/Documents/secret.txt", processPath: "/usr/bin/safe", teamID: "", signingID: "")
+        let decision = decide(rules: rules, path: "/Users/admin/Documents/secret.txt", processPath: "/usr/bin/safe")
         #expect(decision.isAllowed)
     }
 
     @Test("wildcard rule does not apply to non-matching paths")
     func wildcardRuleIgnoresNonMatchingPaths() {
         let rules = [ruleProtecting("/Users/*/Documents", allowedProcessPaths: ["/usr/bin/safe"])]
-        let decision = checkFAAPolicy(rules: rules, path: "/Users/admin/Downloads/file.txt", processPath: "/usr/bin/evil", teamID: "", signingID: "")
-        #expect(decision.isAllowed) // no rule applies
+        let decision = decide(rules: rules, path: "/Users/admin/Downloads/file.txt", processPath: "/usr/bin/evil")
+        #expect(decision.isAllowed)
     }
 
-    // MARK: Multiple criteria
+    // MARK: Policy evaluation — multiple criteria
 
     @Test("process path checked before signature")
     func processPathCheckedFirst() {
         let sig = ProcessSignature(teamID: "TEAM1", signingID: "*")
         let rules = [ruleProtecting("/protected", allowedProcessPaths: ["/usr/bin/safe"], allowedSignatures: [sig])]
-        // Process matches by path — should report process path as the matched criterion
-        let decision = checkFAAPolicy(rules: rules, path: "/protected/file", processPath: "/usr/bin/safe", teamID: "TEAM1", signingID: "com.x")
+        let decision = decide(rules: rules, path: "/protected/file", processPath: "/usr/bin/safe", teamID: "TEAM1", signingID: "com.x")
         #expect(decision.isAllowed)
         #expect(decision.reason.contains("process path"))
     }
