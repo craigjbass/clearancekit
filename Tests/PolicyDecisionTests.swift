@@ -152,6 +152,9 @@ struct ProcessSignatureTests {
 
 @Suite("AllowlistEntry.matches")
 struct AllowlistEntryTests {
+
+    // MARK: Signing-ID-based entries
+
     @Test("signing ID match")
     func signingIDMatch() {
         let entry = AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)
@@ -170,6 +173,33 @@ struct AllowlistEntryTests {
         #expect(!entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: "SOMETEAM"))
     }
 
+    @Test("third-party signing ID with matching team")
+    func thirdPartySigningWithTeam() {
+        let entry = AllowlistEntry(signingID: "com.acme.tool", teamID: "ACME99")
+        #expect(entry.matches(processPath: "/Applications/Acme.app/Contents/MacOS/Acme", signingID: "com.acme.tool", teamID: "ACME99"))
+    }
+
+    @Test("third-party signing ID with wrong team rejected")
+    func thirdPartySigningWrongTeam() {
+        let entry = AllowlistEntry(signingID: "com.acme.tool", teamID: "ACME99")
+        #expect(!entry.matches(processPath: "/anything", signingID: "com.acme.tool", teamID: "EVIL77"))
+    }
+
+    @Test("signing ID entry without team constraint accepts any team")
+    func signingIDNoTeamConstraint() {
+        let entry = AllowlistEntry(signingID: "com.example.app")
+        #expect(entry.matches(processPath: "", signingID: "com.example.app", teamID: "ANYTEAM"))
+        #expect(entry.matches(processPath: "", signingID: "com.example.app", teamID: ""))
+    }
+
+    @Test("signing ID takes priority over process path in same entry")
+    func signingIDPriorityOverPath() {
+        let entry = AllowlistEntry(signingID: "com.example.app", processPath: "/usr/bin/example")
+        #expect(entry.matches(processPath: "/wrong/path", signingID: "com.example.app", teamID: ""))
+    }
+
+    // MARK: Path-based entries
+
     @Test("path-based match")
     func pathBasedMatch() {
         let entry = AllowlistEntry(processPath: "/usr/bin/something")
@@ -181,6 +211,28 @@ struct AllowlistEntryTests {
         let entry = AllowlistEntry(processPath: "/usr/bin/something")
         #expect(!entry.matches(processPath: "/usr/bin/other", signingID: "", teamID: ""))
     }
+
+    @Test("path-based match is exact — no prefix matching")
+    func pathBasedExactOnly() {
+        let entry = AllowlistEntry(processPath: "/usr/bin/tool")
+        #expect(!entry.matches(processPath: "/usr/bin/tool-extra", signingID: "", teamID: ""))
+        #expect(!entry.matches(processPath: "/usr/bin/tool/child", signingID: "", teamID: ""))
+    }
+
+    @Test("path-based entry ignores signing identity")
+    func pathBasedIgnoresSigningID() {
+        let entry = AllowlistEntry(processPath: "/usr/bin/tool")
+        #expect(entry.matches(processPath: "/usr/bin/tool", signingID: "com.evil.malware", teamID: "EVIL"))
+    }
+
+    @Test("path-based entry with platform binary flag requires empty team")
+    func pathBasedPlatformBinary() {
+        let entry = AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)
+        #expect(entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: ""))
+        #expect(!entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: "TEAM"))
+    }
+
+    // MARK: Edge cases
 
     @Test("team ID constraint enforced for non-platform-binary")
     func teamIDConstraint() {
@@ -200,21 +252,123 @@ struct AllowlistEntryTests {
 
 @Suite("isGloballyAllowed")
 struct GlobalAllowlistTests {
-    @Test("allowed process passes")
-    func allowedProcessPasses() {
+
+    // MARK: Code-signing-based entries
+
+    @Test("platform binary allowed by signing ID")
+    func platformBinaryAllowedBySigningID() {
         let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
         #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", signingID: "com.apple.finder", teamID: ""))
     }
 
-    @Test("unknown process rejected")
-    func unknownProcessRejected() {
+    @Test("platform binary rejected when team ID is non-empty")
+    func platformBinaryRejectedWithTeamID() {
         let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
-        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/evil", signingID: "com.evil.app", teamID: "EVIL"))
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.apple.finder", teamID: "SOMETEAM"))
     }
+
+    @Test("third-party app allowed by team and signing ID")
+    func thirdPartyAllowedByTeamAndSigningID() {
+        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Applications/AcmeBackup.app/Contents/MacOS/AcmeBackup", signingID: "com.acme.backup", teamID: "ACME99"))
+    }
+
+    @Test("third-party app rejected when team ID mismatches")
+    func thirdPartyRejectedWrongTeam() {
+        let allowlist = [AllowlistEntry(signingID: "com.acme.backup", teamID: "ACME99")]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.acme.backup", teamID: "EVIL77"))
+    }
+
+    @Test("signing ID mismatch rejected even if path matches another entry")
+    func signingIDMismatchRejected() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.mds", platformBinary: true)]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/anything", signingID: "com.evil.impersonator", teamID: ""))
+    }
+
+    // MARK: Path-based entries
+
+    @Test("process allowed by exact path match")
+    func allowedByPathMatch() {
+        let allowlist = [AllowlistEntry(processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect")]
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect", signingID: "", teamID: ""))
+    }
+
+    @Test("path-based entry rejects different path")
+    func pathEntryRejectsDifferentPath() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/bin/allowed")]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/disallowed", signingID: "", teamID: ""))
+    }
+
+    @Test("path-based entry does not do prefix matching")
+    func pathEntryNoPrefixMatching() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/bin/tool")]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/tool-extended", signingID: "", teamID: ""))
+    }
+
+    @Test("path-based platform binary entry requires empty team")
+    func pathBasedPlatformBinaryEnforcesTeam() {
+        let allowlist = [AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)]
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/XProtect", signingID: "", teamID: ""))
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/Library/Apple/XProtect", signingID: "", teamID: "TEAM"))
+    }
+
+    // MARK: Mixed allowlists
+
+    @Test("mixed allowlist — signing entry matches")
+    func mixedAllowlistSigningMatch() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared", signingID: "com.apple.mdworker", teamID: ""))
+    }
+
+    @Test("mixed allowlist — path entry matches when signing doesn't")
+    func mixedAllowlistPathFallback() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/usr/libexec/custom-scanner", signingID: "com.custom.scanner", teamID: "CUSTOM"))
+    }
+
+    @Test("mixed allowlist — neither entry matches")
+    func mixedAllowlistNeitherMatches() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
+        ]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/evil/binary", signingID: "com.evil", teamID: "EVIL"))
+    }
+
+    @Test("multi-tier allowlist with baseline, managed, and user entries")
+    func multiTierAllowlist() {
+        let baseline = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let managed = [AllowlistEntry(signingID: "com.corp.agent", teamID: "CORP88")]
+        let user = [AllowlistEntry(processPath: "/usr/local/bin/dev-tool")]
+        let merged = baseline + managed + user
+
+        #expect(isGloballyAllowed(allowlist: merged, processPath: "/System/Finder", signingID: "com.apple.finder", teamID: ""))
+        #expect(isGloballyAllowed(allowlist: merged, processPath: "/opt/corp/agent", signingID: "com.corp.agent", teamID: "CORP88"))
+        #expect(isGloballyAllowed(allowlist: merged, processPath: "/usr/local/bin/dev-tool", signingID: "", teamID: ""))
+        #expect(!isGloballyAllowed(allowlist: merged, processPath: "/unknown", signingID: "com.unknown", teamID: "UNK"))
+    }
+
+    // MARK: Edge cases
 
     @Test("empty allowlist rejects everything")
     func emptyAllowlistRejectsAll() {
         #expect(!isGloballyAllowed(allowlist: [], processPath: "/anything", signingID: "anything", teamID: ""))
+    }
+
+    @Test("unsigned process matches path-based entry but not signing-based entry")
+    func unsignedProcessMatchesPathOnly() {
+        let allowlist = [
+            AllowlistEntry(signingID: "com.apple.finder", platformBinary: true),
+            AllowlistEntry(processPath: "/usr/bin/unsigned-tool"),
+        ]
+        #expect(!isGloballyAllowed(allowlist: allowlist, processPath: "/unknown", signingID: "", teamID: ""))
+        #expect(isGloballyAllowed(allowlist: allowlist, processPath: "/usr/bin/unsigned-tool", signingID: "", teamID: ""))
     }
 }
 
