@@ -72,8 +72,7 @@ struct clearancekitApp: App {
         switch menuBarStatus {
         case .healthy:      return "checkmark.shield"
         case .outdated:     return "exclamationmark.shield"
-        case .disconnected: return "exclamationmark.shield"
-        case .notWorking:   return "shield.slash"
+        case .disconnected: return "shield.slash"
         }
     }
 
@@ -82,17 +81,15 @@ struct clearancekitApp: App {
         case .healthy:      return .primary
         case .outdated:     return .orange
         case .disconnected: return .red
-        case .notWorking:   return .red
         }
     }
 
     private enum MenuBarStatus {
-        case healthy, outdated, disconnected, notWorking
+        case healthy, outdated, disconnected
     }
 
     private var menuBarStatus: MenuBarStatus {
         guard xpcClient.isConnected else { return .disconnected }
-        guard xpcClient.isMonitoringActive else { return .notWorking }
         let appHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
         let outdated = !xpcClient.serviceVersion.isEmpty
             && xpcClient.serviceVersion.trimmingCharacters(in: CharacterSet(charactersIn: "+")) != appHash

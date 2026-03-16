@@ -14,7 +14,6 @@ final class XPCClient: NSObject, ObservableObject {
     static let shared = XPCClient()
 
     @Published private(set) var isConnected = false
-    @Published private(set) var isMonitoringActive = false
     @Published private(set) var hasServiceVersionMismatch = false
     @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
@@ -118,7 +117,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection?.invalidate()
         connection = nil
         isConnected = false
-        isMonitoringActive = false
+
         NSLog("XPCClient: Disconnected")
     }
 
@@ -126,7 +125,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection?.invalidate()
         connection = nil
         isConnected = false
-        isMonitoringActive = false
+
         NSLog("XPCClient: Connection lost, scheduling reconnect")
         scheduleReconnect()
     }
@@ -136,7 +135,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection?.invalidate()
         connection = nil
         isConnected = false
-        isMonitoringActive = false
+
         stopReconnectTimer()
         NSLog("XPCClient: Service version mismatch — stopped reconnecting. Reactivate the system extension to resolve.")
     }
@@ -300,14 +299,6 @@ extension XPCClient: ClientProtocol {
             if !event.accessAllowed {
                 self.sendDenyNotificationIfNeeded(for: event)
             }
-        }
-    }
-
-    nonisolated func monitoringStatusChanged(_ isActive: Bool) {
-        NSLog("XPCClient: Monitoring status changed: %@", isActive ? "active" : "inactive")
-        Task { @MainActor in
-            self.isMonitoringActive = isActive
-            if isActive { self.fetchVersionInfo() }
         }
     }
 

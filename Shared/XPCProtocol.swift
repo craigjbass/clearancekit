@@ -179,7 +179,7 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
 
 // MARK: - Service Protocol (exposed by opfilter)
 //
-// Called by the GUI app:  registerClient / unregisterClient / isMonitoringActive /
+// Called by the GUI app:  registerClient / unregisterClient /
 //                          fetchRecentEvents / addRule / updateRule / removeRule / requestResync
 
 @objc(ServiceProtocol)
@@ -187,7 +187,6 @@ public protocol ServiceProtocol {
     // GUI registration
     func registerClient(withReply reply: @escaping (Bool) -> Void)
     func unregisterClient(withReply reply: @escaping (Bool) -> Void)
-    func isMonitoringActive(withReply reply: @escaping (Bool) -> Void)
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void)
 
     // Version query — GUI asks for opfilter build version to detect stale components.
@@ -217,7 +216,6 @@ public protocol ServiceProtocol {
 @objc(ClientProtocol)
 public protocol ClientProtocol {
     func folderOpened(_ event: FolderOpenEvent)
-    func monitoringStatusChanged(_ isActive: Bool)
     // Opfilter pushes the authoritative rule snapshots on connect (via requestResync)
     // and whenever the respective tier changes.
     func managedRulesUpdated(_ rulesData: NSData)

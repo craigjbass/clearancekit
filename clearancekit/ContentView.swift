@@ -196,15 +196,11 @@ struct SetupView: View {
     }
 
     private var statusColor: Color {
-        if xpcClient.isConnected && xpcClient.isMonitoringActive { return .green }
-        if xpcClient.isConnected { return .yellow }
-        return .red
+        xpcClient.isConnected ? .green : .red
     }
 
     private var statusText: String {
-        if xpcClient.isConnected && xpcClient.isMonitoringActive { return "Connected - Monitoring Active" }
-        if xpcClient.isConnected { return "Connected - Monitoring Inactive" }
-        return "Disconnected"
+        xpcClient.isConnected ? "Connected" : "Disconnected"
     }
 }
 

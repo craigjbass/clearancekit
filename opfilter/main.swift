@@ -18,7 +18,6 @@ interactor.onEvent = { event in
 }
 
 adapter.start(initialRules: server.mergedRules())
-server.setMonitoringActive(true)
 server.start()
 
 dispatchMain()

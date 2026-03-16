@@ -15,7 +15,6 @@ final class XPCServer: NSObject {
     private var listener: NSXPCListener?
     private let lock = NSLock()
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
-    private var monitoringActive = false
     private var recentEvents: [FolderOpenEvent] = []
     private var managedRules: [FAARule] = []
     private var userRules: [FAARule] = []
@@ -53,10 +52,6 @@ final class XPCServer: NSObject {
     }
 
     // MARK: - Direct filter integration
-
-    func setMonitoringActive(_ active: Bool) {
-        broadcastMonitoringStatus(active)
-    }
 
     func handleEvent(_ event: FolderOpenEvent) {
         broadcastEvent(event)
@@ -128,20 +123,6 @@ final class XPCServer: NSObject {
         lock.lock()
         defer { lock.unlock() }
         return recentEvents
-    }
-
-    fileprivate func broadcastMonitoringStatus(_ isActive: Bool) {
-        monitoringActive = isActive
-        lock.lock()
-        let clients = Array(guiClients.values)
-        lock.unlock()
-        for conn in clients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.monitoringStatusChanged(isActive)
-        }
-    }
-
-    fileprivate func currentMonitoringStatus() -> Bool {
-        monitoringActive
     }
 
     // MARK: - Rule mutations
@@ -372,10 +353,6 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let conn = connection, let server else { reply(false); return }
         server.removeClient(conn)
         reply(true)
-    }
-
-    func isMonitoringActive(withReply reply: @escaping (Bool) -> Void) {
-        reply(server?.currentMonitoringStatus() ?? false)
     }
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
