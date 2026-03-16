@@ -79,8 +79,8 @@ jobs:
             build/clearancekit-staging.dmg
 
           # Mount it and copy in the app + an Applications symlink
-          MOUNT=$(hdiutil attach -readwrite -noverify build/clearancekit-staging.dmg \
-            | grep -E '^/dev/' | awk '{print $3}')
+          hdiutil attach -readwrite -noverify build/clearancekit-staging.dmg
+          MOUNT="/Volumes/clearancekit"
           cp -R "build/export/clearancekit.app" "$MOUNT/"
           ln -s /Applications "$MOUNT/Applications"
 
