@@ -1,6 +1,8 @@
-# clearancekit
+# ClearanceKit
 
-clearancekit monitors file system activity and enforces per-process allow/deny policies on macOS. It surfaces deny events from the Endpoint Security framework in a native SwiftUI interface, letting you build and refine policies without writing configuration files.
+ClearanceKit monitors file system activity and enforces per-process allow/deny policies on macOS. It surfaces deny events from the Endpoint Security framework in a native SwiftUI interface, letting you build and refine policies without writing configuration files.
+
+It also supports process ancestry checking as part of these policies, which allows policies that allow sub-processes that are typical 'living off the land' tools. Note that policies with ancestry checks is more resource intensive so it is recommended to scope paths as tightly as possible. 
 
 ![clearancekit in action](Screenshots/recording.gif)
 
