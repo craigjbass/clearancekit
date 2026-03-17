@@ -134,6 +134,7 @@ final class DiscoverySession: ObservableObject {
     private var timer: Timer?
     private var cancellable: AnyCancellable?
     private var seenPaths: Set<String> = []
+    private var signaturesByPath: [String: Set<ProcessSignature>] = [:]
     private var previousEventCount = 0
 
     init(appInfo: AppBundleInfo) {
@@ -151,10 +152,15 @@ final class DiscoverySession: ObservableObject {
         XPCClient.shared.endDiscovery()
     }
 
-    func buildRules() -> [FAARule] {
-        let effectiveTeamID = appInfo.teamID.isEmpty ? appleTeamID : appInfo.teamID
-        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: appInfo.signingID)
-        return capturedPaths.map { FAARule(protectedPathPrefix: $0, allowedSignatures: [signature]) }
+    func buildDraft() -> ProtectionDraft {
+        let entries = capturedPaths.map { path -> ProtectionDraft.PathEntry in
+            var sigs = Set<ProcessSignature>()
+            for (seenPath, seenSigs) in signaturesByPath where seenPath == path || seenPath.hasPrefix(path + "/") {
+                sigs.formUnion(seenSigs)
+            }
+            return ProtectionDraft.PathEntry(prefix: path, signatures: Array(sigs))
+        }
+        return ProtectionDraft(appInfo: appInfo, entries: entries)
     }
 
     private func subscribe() {
@@ -170,7 +176,7 @@ final class DiscoverySession: ObservableObject {
             previousEventCount = newCount
             return
         }
-        let newEvents = events.prefix(newCount - previousEventCount)
+        let newEvents = Array(events.prefix(newCount - previousEventCount))
         previousEventCount = newCount
 
         for event in newEvents where matchesApp(event) {
@@ -178,6 +184,17 @@ final class DiscoverySession: ObservableObject {
             guard isInterestingPath(dir), isSpecificEnough(dir) else { continue }
             seenPaths.insert(dir)
         }
+
+        for event in newEvents {
+            guard !event.signingID.isEmpty else { continue }
+            let dir = normalizedParentDirectory(of: event.path)
+            guard let trackedPath = seenPaths.first(where: { dir == $0 || dir.hasPrefix($0 + "/") }) else { continue }
+            let effectiveTeamID = event.teamID.isEmpty ? appleTeamID : event.teamID
+            signaturesByPath[trackedPath, default: []].insert(
+                ProcessSignature(teamID: effectiveTeamID, signingID: event.signingID)
+            )
+        }
+
         capturedPaths = deduplicatedPaths()
     }
 

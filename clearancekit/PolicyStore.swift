@@ -113,6 +113,17 @@ final class PolicyStore: ObservableObject {
         }
     }
 
+    func replaceAll(_ oldRules: [FAARule], with newRules: [FAARule], reason: String) async throws {
+        try await BiometricAuth.authenticate(reason: reason)
+        let oldIDs = Set(oldRules.map(\.id))
+        userRules.removeAll { oldIDs.contains($0.id) }
+        for rule in oldRules { XPCClient.shared.removeRule(ruleID: rule.id) }
+        for rule in newRules {
+            userRules.append(rule)
+            XPCClient.shared.addRule(rule)
+        }
+    }
+
     func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
         try await BiometricAuth.authenticate(reason: "Allow this ancestor process")

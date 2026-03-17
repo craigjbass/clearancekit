@@ -62,9 +62,9 @@ final class AppProtectionStore: ObservableObject {
         save()
     }
 
-    func finalizeDiscovery(_ session: DiscoverySession) async throws {
-        let rules = session.buildRules()
-        precondition(!rules.isEmpty, "finalizeDiscovery called with no captured paths — button should be disabled")
+    func finalizeDiscovery(_ draft: ProtectionDraft, for session: DiscoverySession) async throws {
+        let rules = draft.toRules()
+        precondition(!rules.isEmpty, "finalizeDiscovery called with empty draft — button should be disabled")
 
         let protection = AppProtection(
             id: UUID(),
@@ -81,6 +81,25 @@ final class AppProtectionStore: ObservableObject {
         save()
         session.complete()
         activeDiscovery = nil
+    }
+
+    func update(_ protection: AppProtection, from draft: ProtectionDraft) async throws {
+        guard let index = protections.firstIndex(where: { $0.id == protection.id }) else { return }
+
+        let newRules = draft.toRules()
+
+        if protections[index].isEnabled {
+            let oldRules = protections[index].ruleIDs.compactMap { ruleID in
+                PolicyStore.shared.userRules.first { $0.id == ruleID }
+            }
+            try await PolicyStore.shared.replaceAll(oldRules, with: newRules, reason: "Update \(protection.appName) protection")
+        } else {
+            try await BiometricAuth.authenticate(reason: "Update \(protection.appName) protection")
+        }
+
+        protections[index].ruleIDs = newRules.map(\.id)
+        protections[index].snapshotRules = newRules
+        save()
     }
 
     func cancelDiscovery() {

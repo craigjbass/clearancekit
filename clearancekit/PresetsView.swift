@@ -129,6 +129,8 @@ struct PresetsView: View {
 private struct DiscoverySessionRow: View {
     let session: DiscoverySession
     @State private var isFinalizing = false
+    @State private var showFettle = false
+    @State private var fettleDraft: ProtectionDraft?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -189,18 +191,29 @@ private struct DiscoverySessionRow: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Create Protection") {
-                        isFinalizing = true
-                        Task {
-                            defer { isFinalizing = false }
-                            try? await AppProtectionStore.shared.finalizeDiscovery(session)
-                        }
+                    Button("Review…") {
+                        fettleDraft = session.buildDraft()
+                        showFettle = true
                     }
                     .disabled(isFinalizing)
                 }
             }
         }
         .padding(.vertical, 6)
+        .sheet(isPresented: $showFettle) {
+            if let draft = fettleDraft {
+                ProtectionFettleView(initialDraft: draft, saveLabel: "Create Protection") { finalDraft in
+                    showFettle = false
+                    isFinalizing = true
+                    Task {
+                        defer { isFinalizing = false }
+                        try? await AppProtectionStore.shared.finalizeDiscovery(finalDraft, for: session)
+                    }
+                } onCancel: {
+                    showFettle = false
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -231,6 +244,8 @@ private struct DiscoverySessionRow: View {
 private struct CustomProtectionRow: View {
     let protection: AppProtection
     @State private var isToggling = false
+    @State private var isUpdating = false
+    @State private var showFettle = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -249,6 +264,13 @@ private struct CustomProtectionRow: View {
             Spacer()
 
             Button {
+                showFettle = true
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+
+            Button {
                 Task { try? await AppProtectionStore.shared.remove(protection) }
             } label: {
                 Image(systemName: "trash")
@@ -263,11 +285,40 @@ private struct CustomProtectionRow: View {
             .labelsHidden()
             .disabled(isToggling)
         }
+        .sheet(isPresented: $showFettle) {
+            ProtectionFettleView(initialDraft: draftForEditing, saveLabel: "Save") { updatedDraft in
+                showFettle = false
+                isUpdating = true
+                Task {
+                    defer { isUpdating = false }
+                    try? await AppProtectionStore.shared.update(protection, from: updatedDraft)
+                }
+            } onCancel: {
+                showFettle = false
+            }
+        }
     }
 
     private var protectionSummary: String {
         let count = protection.ruleIDs.count
         return count == 1 ? "1 protected path" : "\(count) protected paths"
+    }
+
+    private var draftForEditing: ProtectionDraft {
+        let currentRules = protection.ruleIDs.compactMap { ruleID in
+            PolicyStore.shared.userRules.first { $0.id == ruleID }
+        }
+        let rules = currentRules.isEmpty ? (protection.snapshotRules ?? []) : currentRules
+        let info = AppBundleInfo(
+            appName: protection.appName,
+            bundleID: protection.bundleID,
+            appPath: protection.appBundlePath,
+            teamID: "",
+            signingID: "",
+            appGroups: [],
+            isSandboxed: false
+        )
+        return ProtectionDraft.from(rules: rules, appInfo: info)
     }
 
     private func toggle(on: Bool) {
