@@ -145,6 +145,11 @@ final class XPCClient: NSObject, ObservableObject {
         logger.error("XPCClient: Service version mismatch — stopped reconnecting. Reactivate the system extension to resolve.")
     }
 
+    func reconnectAfterExtensionActivation() {
+        hasServiceVersionMismatch = false
+        connect()
+    }
+
     private func scheduleReconnect() {
         guard reconnectTimer == nil else { return }
 
