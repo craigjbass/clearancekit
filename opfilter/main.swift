@@ -17,7 +17,7 @@ interactor.onEvent = { event in
     server.handleEvent(event)
 }
 
-adapter.start(initialRules: server.mergedRules())
+adapter.start(initialRules: server.mergedRules(), onXProtectChanged: { server.handleXProtectChange() })
 server.start()
 
 dispatchMain()

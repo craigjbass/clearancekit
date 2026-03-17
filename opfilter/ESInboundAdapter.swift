@@ -10,6 +10,8 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "es-adapter")
 
 final class ESInboundAdapter {
+    static let xprotectPath = "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS"
+
     private let interactor: FilterInteractor
     private var client: OpaquePointer?
     private var policyPrefixes: Set<String> = []
@@ -19,17 +21,21 @@ final class ESInboundAdapter {
         self.interactor = interactor
     }
 
-    func start(initialRules: [FAARule]) {
+    func start(initialRules: [FAARule], onXProtectChanged: @escaping () -> Void) {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
-            // If path data is unavailable for an open event, deny at the adapter boundary
-            // before constructing a domain event.
-            if message.pointee.event_type == ES_EVENT_TYPE_AUTH_OPEN,
-               message.pointee.event.open.file.pointee.path.data == nil {
+            switch message.pointee.event_type {
+            case ES_EVENT_TYPE_NOTIFY_WRITE, ES_EVENT_TYPE_NOTIFY_RENAME, ES_EVENT_TYPE_NOTIFY_UNLINK:
+                guard Self.isXProtectEvent(message) else { return }
+                onXProtectChanged()
+            case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
+                // If path data is unavailable for an open event, deny at the adapter boundary
+                // before constructing a domain event.
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
+            default:
+                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             }
-            interactor.handle(Self.filterEvent(from: message, esClient: esClient))
         }
 
         guard res == ES_NEW_CLIENT_RESULT_SUCCESS else {
@@ -48,6 +54,9 @@ final class ESInboundAdapter {
             ES_EVENT_TYPE_NOTIFY_FORK,
             ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_EXIT,
+            ES_EVENT_TYPE_NOTIFY_WRITE,
+            ES_EVENT_TYPE_NOTIFY_RENAME,
+            ES_EVENT_TYPE_NOTIFY_UNLINK,
         ]
         guard es_subscribe(client!, eventTypes, UInt32(eventTypes.count)) == ES_RETURN_SUCCESS else {
             logger.fault("Failed to subscribe to ES events")
@@ -97,6 +106,24 @@ final class ESInboundAdapter {
         for prefix in policyPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
+        // XProtect path is permanently muted so write/rename/unlink events are always delivered.
+        // It is intentionally kept outside policyPrefixes so policy diffs never unmute it.
+        es_mute_path(client, Self.xprotectPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+    }
+
+    private static func isXProtectEvent(_ message: UnsafePointer<es_message_t>) -> Bool {
+        let token: es_string_token_t
+        switch message.pointee.event_type {
+        case ES_EVENT_TYPE_NOTIFY_WRITE:
+            token = message.pointee.event.write.target.pointee.path
+        case ES_EVENT_TYPE_NOTIFY_RENAME:
+            token = message.pointee.event.rename.source.pointee.path
+        case ES_EVENT_TYPE_NOTIFY_UNLINK:
+            token = message.pointee.event.unlink.target.pointee.path
+        default:
+            return false
+        }
+        return string(from: token).hasPrefix(xprotectPath)
     }
 
     private static func filterEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FilterEvent {
