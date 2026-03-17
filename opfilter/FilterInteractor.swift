@@ -20,7 +20,37 @@ struct OpenFileEvent {
     let uid: uid_t
     let gid: gid_t
     let ttyPath: String?
+    let deadline: UInt64
     let respond: (Bool) -> Void
+}
+
+// MARK: - MachTime
+
+private enum MachTime {
+    /// How far before the ES deadline we stop waiting, in nanoseconds.
+    static let safetyMarginNanoseconds: UInt64 = 100_000_000 // 100 ms
+
+    /// Timebase ratio, computed once for the process lifetime.
+    private static let timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    /// Mach-unit equivalent of `safetyMarginNanoseconds`.
+    static let safetyMarginMachUnits: UInt64 = {
+        safetyMarginNanoseconds * UInt64(timebase.denom) / UInt64(timebase.numer)
+    }()
+
+    static func cutoff(for deadline: UInt64) -> UInt64 {
+        guard deadline >= safetyMarginMachUnits else { return 0 }
+        return deadline - safetyMarginMachUnits
+    }
+
+    static func nanoseconds(from start: UInt64, to end: UInt64) -> UInt64 {
+        guard end >= start else { return 0 }
+        return (end - start) * UInt64(timebase.numer) / UInt64(timebase.denom)
+    }
 }
 
 // MARK: - FilterEvent
@@ -67,6 +97,7 @@ final class FilterInteractor {
     }
 
     private func handleOpenFile(_ fileEvent: OpenFileEvent) {
+        let dwellNanoseconds = waitForPID(fileEvent.processID, deadline: fileEvent.deadline)
         let allowlist = allowlistStorage.withLock { $0 }
         let rules = rulesStorage.withLock { $0 }
         let ancestors = ProcessTree.shared.ancestors(ofPID: fileEvent.processID)
@@ -91,7 +122,7 @@ final class FilterInteractor {
         // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
         fileEvent.respond(allowed)
 
-        logDecision(decision, for: fileEvent, ancestors: ancestors)
+        logDecision(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds)
 
         if !allowed {
             writeDenialToTTY(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
@@ -115,7 +146,17 @@ final class FilterInteractor {
         }
     }
 
-    private func logDecision(_ decision: PolicyDecision, for fileEvent: OpenFileEvent, ancestors: [AncestorInfo]) {
+    private func waitForPID(_ pid: pid_t, deadline: UInt64) -> UInt64 {
+        let start = mach_absolute_time()
+        let cutoff = MachTime.cutoff(for: deadline)
+        while mach_absolute_time() < cutoff {
+            guard !ProcessTree.shared.contains(pid: pid) else { break }
+            sched_yield()
+        }
+        return MachTime.nanoseconds(from: start, to: mach_absolute_time())
+    }
+
+    private func logDecision(_ decision: PolicyDecision, for fileEvent: OpenFileEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
         let operationID = UUID()
         let decisionTag = decision.isAllowed ? "ALLOW" : "DENIED"
         let processName = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
@@ -143,6 +184,7 @@ final class FilterInteractor {
             "team_id=\(fileEvent.teamID)",
             "codesigning_id=\(fileEvent.signingID)",
             "ancestry_tree=\(ancestryTree)",
+            "dwell_ns=\(dwellNanoseconds)",
         ].joined(separator: "|")
 
         logger.log("\(line, privacy: .public)")

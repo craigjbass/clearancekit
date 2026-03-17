@@ -39,6 +39,10 @@ final class ProcessTree: @unchecked Sendable {
         storage.withLock { $0[pid] = nil }
     }
 
+    func contains(pid: pid_t) -> Bool {
+        storage.withLock { $0[pid] != nil }
+    }
+
     /// Returns ancestor chain for the given PID, from immediate parent upward,
     /// stopping when a PID is not present in the tree or when launchd (PID 1) is reached.
     func ancestors(ofPID pid: pid_t) -> [AncestorInfo] {

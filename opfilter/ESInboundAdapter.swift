@@ -134,6 +134,7 @@ final class ESInboundAdapter {
             uid: uid_t(process.audit_token.val.1),
             gid: gid_t(process.audit_token.val.2),
             ttyPath: ttyPath,
+            deadline: message.pointee.deadline,
             respond: respond
         )
     }
