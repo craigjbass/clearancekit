@@ -185,6 +185,33 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
     }
 }
 
+// MARK: - SignatureIssueNotification
+
+@objc(SignatureIssueNotification)
+public class SignatureIssueNotification: NSObject, NSSecureCoding {
+    public static var supportsSecureCoding: Bool { true }
+
+    @objc public let suspectRulesData: NSData?
+    @objc public let suspectAllowlistData: NSData?
+
+    public init(suspectRulesData: NSData?, suspectAllowlistData: NSData?) {
+        self.suspectRulesData = suspectRulesData
+        self.suspectAllowlistData = suspectAllowlistData
+        super.init()
+    }
+
+    public required init?(coder: NSCoder) {
+        self.suspectRulesData = coder.decodeObject(of: NSData.self, forKey: "suspectRulesData")
+        self.suspectAllowlistData = coder.decodeObject(of: NSData.self, forKey: "suspectAllowlistData")
+        super.init()
+    }
+
+    public func encode(with coder: NSCoder) {
+        coder.encode(suspectRulesData, forKey: "suspectRulesData")
+        coder.encode(suspectAllowlistData, forKey: "suspectAllowlistData")
+    }
+}
+
 // MARK: - Service Protocol (exposed by opfilter)
 //
 // Called by the GUI app:  registerClient / unregisterClient /
@@ -222,6 +249,12 @@ public protocol ServiceProtocol {
     // for apps that have no policy rules yet. Call endDiscovery when done.
     func beginDiscovery(withReply reply: @escaping () -> Void)
     func endDiscovery(withReply reply: @escaping () -> Void)
+
+    // Database signature issue resolution. Called after the GUI presents the
+    // issue to the user and obtains Touch ID authorisation. If approved is true,
+    // opfilter re-signs the suspect data and loads it. If false, opfilter clears
+    // all user rules and allowlist entries.
+    func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void)
 }
 
 // MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
@@ -235,4 +268,7 @@ public protocol ClientProtocol {
     func userRulesUpdated(_ rulesData: NSData)
     func managedAllowlistUpdated(_ allowlistData: NSData)
     func userAllowlistUpdated(_ allowlistData: NSData)
+    // Opfilter calls this when it loads data that cannot be verified. The GUI
+    // must present the issue to the user and call resolveSignatureIssue.
+    func signatureIssueDetected(_ issue: SignatureIssueNotification)
 }

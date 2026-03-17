@@ -12,6 +12,13 @@ import SQLite3
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+// MARK: - DatabaseLoadResult
+
+enum DatabaseLoadResult<T> {
+    case ok([T])
+    case suspect([T])
+}
+
 // MARK: - SQLiteBinding
 
 enum SQLiteBinding {
@@ -157,7 +164,7 @@ final class Database {
 
     // MARK: - User Rules
 
-    func loadUserRules() -> [FAARule] {
+    func loadUserRulesResult() -> DatabaseLoadResult<FAARule> {
         var rules: [FAARule] = []
         query("""
             SELECT id, protected_path_prefix,
@@ -167,14 +174,14 @@ final class Database {
         """) { stmt in
             rules.append(ruleFromRow(stmt))
         }
-
-        guard verifySignature(table: "user_rules", content: canonicalRulesJSON(rules)) else {
-            NSLog("Database: Signature verification failed for user_rules — returning empty")
-            return []
+        switch checkSignature(table: "user_rules", content: canonicalRulesJSON(rules)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d user rule(s)", rules.count)
+            return .ok(rules)
+        case .suspect:
+            NSLog("Database: Signature verification failed for user_rules — %d suspect rule(s)", rules.count)
+            return .suspect(rules)
         }
-
-        NSLog("Database: Loaded %d user rule(s)", rules.count)
-        return rules
     }
 
     func saveUserRules(_ rules: [FAARule]) {
@@ -217,7 +224,7 @@ final class Database {
 
     // MARK: - User Allowlist
 
-    func loadUserAllowlist() -> [AllowlistEntry] {
+    func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry> {
         var entries: [AllowlistEntry] = []
         query("""
             SELECT id, signing_id, process_path, platform_binary, team_id
@@ -225,14 +232,14 @@ final class Database {
         """) { stmt in
             entries.append(allowlistEntryFromRow(stmt))
         }
-
-        guard verifySignature(table: "user_allowlist", content: canonicalAllowlistJSON(entries)) else {
-            NSLog("Database: Signature verification failed for user_allowlist — returning empty")
-            return []
+        switch checkSignature(table: "user_allowlist", content: canonicalAllowlistJSON(entries)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d user allowlist entry/entries", entries.count)
+            return .ok(entries)
+        case .suspect:
+            NSLog("Database: Signature verification failed for user_allowlist — %d suspect entry/entries", entries.count)
+            return .suspect(entries)
         }
-
-        NSLog("Database: Loaded %d user allowlist entry/entries", entries.count)
-        return entries
     }
 
     func saveUserAllowlist(_ entries: [AllowlistEntry]) {
@@ -270,6 +277,12 @@ final class Database {
 
     // MARK: - Signature verification
 
+    private enum SignatureCheckResult {
+        case verified
+        case uninitialized
+        case suspect
+    }
+
     private func updateSignature(table: String, content: Data) {
         guard let signature = try? PolicySigner.sign(content) else {
             NSLog("Database: Failed to sign %@ content", table)
@@ -283,20 +296,16 @@ final class Database {
 
     private func tableHasRows(_ table: String) -> Bool {
         switch table {
-        case "user_rules":
-            var found = false
-            query("SELECT 1 FROM user_rules LIMIT 1") { _ in found = true }
-            return found
-        case "user_allowlist":
-            var found = false
-            query("SELECT 1 FROM user_allowlist LIMIT 1") { _ in found = true }
-            return found
-        default:
-            preconditionFailure("Unexpected table name: \(table)")
+        case "user_rules":    break
+        case "user_allowlist": break
+        default: preconditionFailure("Unexpected table name: \(table)")
         }
+        var found = false
+        query("SELECT 1 FROM \(table) LIMIT 1") { _ in found = true }
+        return found
     }
 
-    private func verifySignature(table: String, content: Data) -> Bool {
+    private func checkSignature(table: String, content: Data) -> SignatureCheckResult {
         var signature: Data?
         query("SELECT signature FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
             guard let blobPtr = sqlite3_column_blob(stmt, 0) else { return }
@@ -305,19 +314,19 @@ final class Database {
         }
         guard let sig = signature else {
             guard !tableHasRows(table) else {
-                NSLog("Database: No signature for %@ but table has rows — rejecting as tampered", table)
-                return false
+                NSLog("Database: No signature for %@ but table has rows — treating as suspect", table)
+                return .suspect
             }
             NSLog("Database: No signature for %@ — signing now", table)
             updateSignature(table: table, content: content)
-            return true
+            return .uninitialized
         }
         do {
             try PolicySigner.verify(content, signature: sig)
-            return true
+            return .verified
         } catch {
             NSLog("Database: Signature verification FAILED for %@ (%@)", table, "\(error)")
-            return false
+            return .suspect
         }
     }
 

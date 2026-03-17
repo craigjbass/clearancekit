@@ -14,6 +14,18 @@ import os
 // Logger is Sendable and immutable so this is safe.
 private nonisolated(unsafe) let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
 
+// MARK: - PendingSignatureIssue
+
+struct PendingSignatureIssue: Identifiable, Equatable {
+    let id = UUID()
+    let suspectRules: [FAARule]
+    let suspectAllowlist: [AllowlistEntry]
+
+    static func == (lhs: PendingSignatureIssue, rhs: PendingSignatureIssue) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 @MainActor
 final class XPCClient: NSObject, ObservableObject {
     static let shared = XPCClient()
@@ -22,6 +34,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var hasServiceVersionMismatch = false
     @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
+    @Published private(set) var pendingSignatureIssue: PendingSignatureIssue? = nil
 
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
@@ -63,6 +76,12 @@ final class XPCClient: NSObject, ObservableObject {
         conn.exportedInterface?.setClasses(
             eventClasses,
             for: #selector(ClientProtocol.folderOpened(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        conn.exportedInterface?.setClasses(
+            NSSet(array: [SignatureIssueNotification.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.signatureIssueDetected(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -266,6 +285,19 @@ final class XPCClient: NSObject, ObservableObject {
         service.endDiscovery { }
     }
 
+    // MARK: - Signature issue resolution
+
+    func resolveSignatureIssue(approved: Bool) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: resolveSignatureIssue error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.resolveSignatureIssue(approved: approved) { [weak self] in
+            Task { @MainActor in
+                self?.pendingSignatureIssue = nil
+            }
+        }
+    }
+
     // MARK: - Events
 
     private func sendDenyNotificationIfNeeded(for event: FolderOpenEvent) {
@@ -353,6 +385,41 @@ extension XPCClient: ClientProtocol {
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedManagedEntries(entries)
+        }
+    }
+
+    nonisolated func signatureIssueDetected(_ issue: SignatureIssueNotification) {
+        let rules: [FAARule]
+        let allowlist: [AllowlistEntry]
+
+        if let data = issue.suspectRulesData {
+            guard let decoded = try? JSONDecoder().decode([FAARule].self, from: data as Data) else {
+                logger.fault("XPCClient: Failed to decode suspect rules — version mismatch, invalidating connection")
+                Task { @MainActor in self.handleServiceVersionMismatch() }
+                return
+            }
+            rules = decoded
+        } else {
+            rules = []
+        }
+
+        if let data = issue.suspectAllowlistData {
+            guard let decoded = try? JSONDecoder().decode([AllowlistEntry].self, from: data as Data) else {
+                logger.fault("XPCClient: Failed to decode suspect allowlist — version mismatch, invalidating connection")
+                Task { @MainActor in self.handleServiceVersionMismatch() }
+                return
+            }
+            allowlist = decoded
+        } else {
+            allowlist = []
+        }
+
+        logger.warning("XPCClient: Signature issue received — \(rules.count) suspect rule(s), \(allowlist.count) suspect allowlist entry/entries")
+        Task { @MainActor in
+            self.pendingSignatureIssue = PendingSignatureIssue(
+                suspectRules: rules,
+                suspectAllowlist: allowlist
+            )
         }
     }
 

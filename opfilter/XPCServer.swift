@@ -24,6 +24,8 @@ final class XPCServer: NSObject {
     private var xprotectEntries: [AllowlistEntry] = []
     private var managedAllowlist: [AllowlistEntry] = []
     private var userAllowlist: [AllowlistEntry] = []
+    private var pendingSuspectUserRules: [FAARule]? = nil
+    private var pendingSuspectUserAllowlist: [AllowlistEntry]? = nil
     private let maxHistoryCount = 1000
     private let database: Database
     private let interactor: FilterInteractor
@@ -35,9 +37,25 @@ final class XPCServer: NSObject {
         self.adapter = adapter
         self.database = Database(directory: dataDirectory)
 
-        userRules = database.loadUserRules()
+        switch database.loadUserRulesResult() {
+        case .ok(let rules):
+            userRules = rules
+        case .suspect(let rules):
+            userRules = []
+            pendingSuspectUserRules = rules
+            logger.warning("XPCServer: Signature issue for user_rules — awaiting GUI resolution")
+        }
+
+        switch database.loadUserAllowlistResult() {
+        case .ok(let entries):
+            userAllowlist = entries
+        case .suspect(let entries):
+            userAllowlist = []
+            pendingSuspectUserAllowlist = entries
+            logger.warning("XPCServer: Signature issue for user_allowlist — awaiting GUI resolution")
+        }
+
         managedRules = ManagedPolicyLoader.load()
-        userAllowlist = database.loadUserAllowlist()
         managedAllowlist = ManagedAllowlistLoader.load()
         xprotectEntries = enumerateXProtectEntries()
         let xprotectCount = xprotectEntries.count
@@ -116,8 +134,30 @@ final class XPCServer: NSObject {
         lock.lock()
         guiClients[ObjectIdentifier(connection)] = connection
         let count = guiClients.count
+        let hasIssue = pendingSuspectUserRules != nil || pendingSuspectUserAllowlist != nil
         lock.unlock()
         logger.debug("XPCServer: GUI client registered. Active clients: \(count)")
+        if hasIssue {
+            pushSignatureIssueTo(connection)
+        }
+    }
+
+    private func pushSignatureIssueTo(_ connection: NSXPCConnection) {
+        lock.lock()
+        let suspectRules = pendingSuspectUserRules
+        let suspectAllowlist = pendingSuspectUserAllowlist
+        lock.unlock()
+
+        guard let rulesData = try? JSONEncoder().encode(suspectRules ?? []),
+              let allowlistData = try? JSONEncoder().encode(suspectAllowlist ?? []) else {
+            logger.fault("XPCServer: Failed to encode suspect data — cannot push signature issue to GUI")
+            return
+        }
+        let notification = SignatureIssueNotification(
+            suspectRulesData: rulesData as NSData,
+            suspectAllowlistData: allowlistData as NSData
+        )
+        (connection.remoteObjectProxy as? ClientProtocol)?.signatureIssueDetected(notification)
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
@@ -193,6 +233,39 @@ final class XPCServer: NSObject {
     fileprivate func endDiscovery() {
         adapter.setDiscoveryPaths([])
         logger.info("XPCServer: Discovery mode deactivated")
+    }
+
+    fileprivate func resolveSignatureIssue(approved: Bool) {
+        lock.lock()
+        let suspectRules = pendingSuspectUserRules
+        let suspectAllowlist = pendingSuspectUserAllowlist
+        pendingSuspectUserRules = nil
+        pendingSuspectUserAllowlist = nil
+        lock.unlock()
+
+        if approved {
+            let rules = suspectRules ?? []
+            let allowlist = suspectAllowlist ?? []
+            applyUserData(rules: rules, allowlist: allowlist)
+            logger.info("XPCServer: Signature issue approved — re-signed \(rules.count) rule(s) and \(allowlist.count) allowlist entry/entries")
+        } else {
+            applyUserData(rules: [], allowlist: [])
+            logger.info("XPCServer: Signature issue rejected — cleared user rules and allowlist")
+        }
+
+        applyPolicyToFilter()
+        applyAllowlistToFilter()
+        broadcastUserRulesToAllGUIClients()
+        broadcastUserAllowlistToAllGUIClients()
+    }
+
+    private func applyUserData(rules: [FAARule], allowlist: [AllowlistEntry]) {
+        lock.lock()
+        userRules = rules
+        userAllowlist = allowlist
+        lock.unlock()
+        database.saveUserRules(rules)
+        database.saveUserAllowlist(allowlist)
     }
 
     // MARK: - Resync
@@ -344,6 +417,12 @@ extension XPCServer: NSXPCListenerDelegate {
             argumentIndex: 0,
             ofReply: false
         )
+        remoteInterface.setClasses(
+            NSSet(array: [SignatureIssueNotification.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.signatureIssueDetected(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
         newConnection.remoteObjectInterface = remoteInterface
 
         newConnection.invalidationHandler = { [weak self, weak newConnection] in
@@ -461,5 +540,10 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         DispatchQueue.global(qos: .userInitiated).async {
             reply(ProcessEnumerator.enumerateAll())
         }
+    }
+
+    func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void) {
+        server?.resolveSignatureIssue(approved: approved)
+        reply()
     }
 }
