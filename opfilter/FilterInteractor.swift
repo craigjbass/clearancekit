@@ -238,8 +238,8 @@ final class FilterInteractor {
             "user=\(userName)",
             "gid=\(fileEvent.gid)",
             "group=\(groupName)",
-            "team_id=\(resolveTeamID(fileEvent.teamID))",
-            "codesigning_id=\(fileEvent.signingID)",
+            "team_id=\(resolveTeamID(teamID: fileEvent.teamID, signingID: fileEvent.signingID))",
+            "codesigning_id=\(resolveSigningID(teamID: fileEvent.teamID, signingID: fileEvent.signingID))",
             "ancestry_tree=\(ancestryTree)",
             "dwell_ns=\(dwellNanoseconds)",
         ].joined(separator: "|")
@@ -260,13 +260,20 @@ final class FilterInteractor {
         guard !ancestors.isEmpty else { return "()" }
         let entries = ancestors.map { ancestor -> String in
             let user = resolveUserName(uid: ancestor.uid)
-            return "user=\(user),signature=\(resolveTeamID(ancestor.teamID)):\(ancestor.signingID)"
+            let team = resolveTeamID(teamID: ancestor.teamID, signingID: ancestor.signingID)
+            let signing = resolveSigningID(teamID: ancestor.teamID, signingID: ancestor.signingID)
+            return "user=\(user),signature=\(team):\(signing)"
         }
         return entries.map { "(\($0))" }.joined(separator: "->")
     }
 
-    private func resolveTeamID(_ teamID: String) -> String {
-        teamID.isEmpty ? appleTeamID : teamID
+    private func resolveTeamID(teamID: String, signingID: String) -> String {
+        if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
+        return teamID.isEmpty ? appleTeamID : teamID
+    }
+
+    private func resolveSigningID(teamID: String, signingID: String) -> String {
+        teamID.isEmpty && signingID.isEmpty ? invalidSignature : signingID
     }
 
     private func resolveUserName(uid: uid_t) -> String {

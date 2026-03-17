@@ -16,7 +16,10 @@ private struct SnapshotProcess: Identifiable {
     let uid: uid_t
 
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
-    var displayTeamID: String { teamID.isEmpty ? "Apple" : teamID }
+    var displayTeamID: String {
+        if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
+        return teamID.isEmpty ? "Apple" : teamID
+    }
 
     var appBundlePath: String? {
         let parts = path.components(separatedBy: "/")
@@ -149,7 +152,11 @@ private struct ProcessNodeRow: View {
                     Text("Team: \(p.displayTeamID)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if !p.signingID.isEmpty {
+                    if p.teamID.isEmpty && p.signingID.isEmpty {
+                        Text("Signing: \(invalidSignature)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if !p.signingID.isEmpty {
                         Text("Signing: \(p.signingID)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
