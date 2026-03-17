@@ -49,11 +49,11 @@ ClearanceKit policies reference a Team ID and Signing ID, not a hash. When Apple
 
 ## Installation
 
-Download the latest DMG from the [Releases](../../releases) page, open it, and drag clearancekit to Applications.
+Download the latest DMG from the [Releases](https://github.com/craigjbass/clearancekit/releases/latest) page, open it, and drag clearancekit to Applications.
 
 On first launch you will be prompted to activate the system extension and grant Full Disk Access — both are required for Endpoint Security to function.
 
-ClearanceKit has no auto-update mechanism. This is a deliberate decision: an app that monitors what other processes do on your machine should not itself be making network calls you did not initiate. Check the [Releases](../../releases) page manually for updates.
+ClearanceKit has no auto-update mechanism. This is a deliberate decision: an app that monitors what other processes do on your machine should not itself be making network calls you did not initiate. Check the [Releases](https://github.com/craigjbass/clearancekit/releases/latest) page manually for updates.
 
 ## Architecture
 
