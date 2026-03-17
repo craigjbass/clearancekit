@@ -66,6 +66,8 @@ struct RuleEditView: View {
                     StringListEditor(values: $draft.allowedAncestorProcessPaths)
                 } header: {
                     pickerSectionHeader("Allowed Ancestor Process Paths", target: .ancestor)
+                } footer: {
+                    ancestryWarning
                 }
                 Section {
                     StringListEditor(values: $draft.allowedAncestorSignatures, placeholder: "teamID:signingID")
@@ -109,6 +111,18 @@ struct RuleEditView: View {
             } onCancel: {
                 processPicker = nil
             }
+        }
+    }
+
+    private var hasAncestorCriteria: Bool {
+        !draft.allowedAncestorProcessPaths.isEmpty || !draft.allowedAncestorSignatures.isEmpty
+    }
+
+    @ViewBuilder
+    private var ancestryWarning: some View {
+        if hasAncestorCriteria {
+            Label("Ancestry rules require process tree lookups which are more CPU intensive. Use a narrow protected path to minimise performance impact.", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
         }
     }
 
