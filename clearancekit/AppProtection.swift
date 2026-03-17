@@ -159,8 +159,9 @@ final class DiscoverySession: ObservableObject {
 
     private func subscribe() {
         cancellable = XPCClient.shared.$events
-            .receive(on: RunLoop.main)
-            .sink { [weak self] events in self?.ingest(events) }
+            .sink { [weak self] events in
+                Task { @MainActor [weak self] in self?.ingest(events) }
+            }
     }
 
     private func ingest(_ events: [FolderOpenEvent]) {

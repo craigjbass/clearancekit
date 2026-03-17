@@ -133,6 +133,9 @@ private struct DiscoverySessionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: session.appInfo.appPath))
+                    .resizable()
+                    .frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(session.appInfo.appName)
