@@ -6,4 +6,4 @@ The latest one (as in current build). I might introduce a better release version
 
 ## Reporting a Vulnerability
 
-Report the vulnerability through GitHub and I will liaise.
+Report the vulnerability through the GitHub Security tab "Report a vulnerability" and I will liaise.
