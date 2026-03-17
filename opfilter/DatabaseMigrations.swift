@@ -142,7 +142,11 @@ private func decodeJSONStringArray(_ json: String) -> [String] {
 }
 
 private func encodeJSONStringArray(_ array: [String]) -> String {
-    String(data: try! JSONEncoder().encode(array), encoding: .utf8)!
+    guard let encoded = try? JSONEncoder().encode(array),
+          let string = String(data: encoded, encoding: .utf8) else {
+        fatalError("DatabaseMigrations: Failed to JSON-encode string array — [String] must always be encodable")
+    }
+    return string
 }
 
 // MARK: - JSON import helpers
