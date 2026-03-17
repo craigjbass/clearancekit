@@ -175,7 +175,11 @@ final class FilterInteractor {
         // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
         fileEvent.respond(allowed)
 
-        logDecision(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds)
+        // Best-efforts ancestry for logging — the tree may have been populated
+        // since the decision was made, so re-query unconditionally.
+        let logAncestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
+
+        logDecision(decision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds)
 
         if !allowed {
             writeDenialToTTY(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
@@ -190,7 +194,7 @@ final class FilterInteractor {
             signingID: fileEvent.signingID,
             accessAllowed: allowed,
             decisionReason: decision.reason,
-            ancestors: ancestors,
+            ancestors: logAncestors,
             matchedRuleID: decision.matchedRuleID
         )
         let callback = onEvent
