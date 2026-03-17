@@ -10,9 +10,12 @@ import Combine
 import UserNotifications
 import os
 
+// nonisolated(unsafe): prevents @MainActor inference on this file-scope constant.
+// Logger is Sendable and immutable so this is safe.
+private nonisolated(unsafe) let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
+
 @MainActor
 final class XPCClient: NSObject, ObservableObject {
-    private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
     static let shared = XPCClient()
 
     @Published private(set) var isConnected = false

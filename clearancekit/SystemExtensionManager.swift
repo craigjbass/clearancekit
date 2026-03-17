@@ -11,9 +11,12 @@ import Combine
 import os
 @preconcurrency import SystemExtensions
 
+// nonisolated(unsafe): prevents @MainActor inference on this file-scope constant.
+// Logger is Sendable and immutable so this is safe.
+private nonisolated(unsafe) let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
+
 @MainActor
 final class SystemExtensionManager: NSObject, ObservableObject {
-    private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
     static let shared = SystemExtensionManager()
 
     @Published private(set) var extensionStatus: ExtensionStatus = .unknown
