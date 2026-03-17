@@ -127,7 +127,7 @@ struct PresetsView: View {
 // MARK: - DiscoverySessionRow
 
 private struct DiscoverySessionRow: View {
-    @ObservedObject var session: DiscoverySession
+    let session: DiscoverySession
     @State private var isFinalizing = false
 
     var body: some View {

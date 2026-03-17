@@ -16,12 +16,20 @@ final class AppProtectionStore: ObservableObject {
     static let shared = AppProtectionStore()
 
     @Published private(set) var protections: [AppProtection] = []
-    @Published private(set) var activeDiscovery: DiscoverySession?
+    @Published private(set) var activeDiscovery: DiscoverySession? {
+        didSet { forwardDiscoveryChanges() }
+    }
 
     private let storageKey = "AppProtections"
+    private var discoveryCancellable: AnyCancellable?
 
     private init() {
         load()
+    }
+
+    private func forwardDiscoveryChanges() {
+        discoveryCancellable = activeDiscovery?.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     func add(from appURL: URL) async throws {
