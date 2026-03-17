@@ -12,6 +12,7 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 struct OpenFileEvent {
     let path: String
+    let processIdentity: ProcessIdentity
     let processID: pid_t
     let parentPID: pid_t
     let processPath: String
@@ -58,7 +59,7 @@ private enum MachTime {
 enum FilterEvent {
     case fork(child: ProcessRecord)
     case exec(newImage: ProcessRecord)
-    case exit(pid: pid_t)
+    case exit(identity: ProcessIdentity)
     case openFile(OpenFileEvent)
 }
 
@@ -89,18 +90,18 @@ final class FilterInteractor {
             ProcessTree.shared.insert(child)
         case .exec(let newImage):
             ProcessTree.shared.insert(newImage)
-        case .exit(let pid):
-            ProcessTree.shared.remove(pid: pid)
+        case .exit(let identity):
+            ProcessTree.shared.remove(identity: identity)
         case .openFile(let fileEvent):
             handleOpenFile(fileEvent)
         }
     }
 
     private func handleOpenFile(_ fileEvent: OpenFileEvent) {
-        let dwellNanoseconds = waitForPID(fileEvent.processID, deadline: fileEvent.deadline)
+        let dwellNanoseconds = waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
         let allowlist = allowlistStorage.withLock { $0 }
         let rules = rulesStorage.withLock { $0 }
-        let ancestors = ProcessTree.shared.ancestors(ofPID: fileEvent.processID)
+        let ancestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
         let decision = evaluateAccess(
             rules: rules,
             allowlist: allowlist,
@@ -146,11 +147,11 @@ final class FilterInteractor {
         }
     }
 
-    private func waitForPID(_ pid: pid_t, deadline: UInt64) -> UInt64 {
+    private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) -> UInt64 {
         let start = mach_absolute_time()
         let cutoff = MachTime.cutoff(for: deadline)
         while mach_absolute_time() < cutoff {
-            guard !ProcessTree.shared.contains(pid: pid) else { break }
+            guard !ProcessTree.shared.contains(identity: identity) else { break }
             sched_yield()
         }
         return MachTime.nanoseconds(from: start, to: mach_absolute_time())

@@ -10,11 +10,18 @@ import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "process-tree")
 
+// MARK: - ProcessIdentity
+
+struct ProcessIdentity: Hashable {
+    let pid: pid_t
+    let pidVersion: UInt32
+}
+
 // MARK: - ProcessRecord
 
 struct ProcessRecord {
-    let pid: pid_t
-    let parentPID: pid_t
+    let identity: ProcessIdentity
+    let parentIdentity: ProcessIdentity
     let path: String
     let teamID: String
     let signingID: String
@@ -27,46 +34,87 @@ struct ProcessRecord {
 final class ProcessTree: @unchecked Sendable {
     static let shared = ProcessTree()
 
-    private let storage = OSAllocatedUnfairLock(initialState: [pid_t: ProcessRecord]())
+    private let storage = OSAllocatedUnfairLock(initialState: [ProcessIdentity: ProcessRecord]())
+
+    /// Reverse index: PID → current ProcessIdentity. Kept in sync with `storage`
+    /// so that lookups from initial-scan entries (pidversion 0 parent references)
+    /// can resolve to the live ES-sourced identity.
+    private let pidIndex = OSAllocatedUnfairLock(initialState: [pid_t: ProcessIdentity]())
 
     private init() {}
 
     func insert(_ record: ProcessRecord) {
-        storage.withLock { $0[record.pid] = record }
+        storage.withLock { tree in
+            // Remove any stale entry for the same PID (e.g. initial-scan placeholder
+            // being replaced by a live ES event with the real pidversion).
+            if let existing = pidIndex.withLock({ $0[record.identity.pid] }), existing != record.identity {
+                tree[existing] = nil
+            }
+            tree[record.identity] = record
+        }
+        pidIndex.withLock { $0[record.identity.pid] = record.identity }
     }
 
-    func remove(pid: pid_t) {
-        storage.withLock { $0[pid] = nil }
+    func remove(identity: ProcessIdentity) {
+        storage.withLock { tree in
+            tree[identity] = nil
+            // Also remove any stale placeholder that shares the PID.
+            if let indexed = pidIndex.withLock({ $0[identity.pid] }), indexed != identity {
+                tree[indexed] = nil
+            }
+        }
+        pidIndex.withLock { $0[identity.pid] = nil }
     }
 
-    func contains(pid: pid_t) -> Bool {
-        storage.withLock { $0[pid] != nil }
+    func contains(identity: ProcessIdentity) -> Bool {
+        storage.withLock { $0[identity] != nil }
     }
 
-    /// Returns ancestor chain for the given PID, from immediate parent upward,
-    /// stopping when a PID is not present in the tree or a cycle is detected.
-    func ancestors(ofPID pid: pid_t) -> [AncestorInfo] {
+    /// Returns ancestor chain for the given process, from immediate parent upward,
+    /// stopping when a process is not present in the tree or a cycle is detected.
+    func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] {
         storage.withLock { tree in
             var result: [AncestorInfo] = []
-            var currentPID = pid
-            var seen: Set<pid_t> = [currentPID]
+            var current = identity
+            var seen: Set<ProcessIdentity> = [current]
 
-            while let record = tree[currentPID] {
-                guard !seen.contains(record.parentPID) else { break }
-                seen.insert(record.parentPID)
-                guard let parent = tree[record.parentPID] else { break }
+            while let record = lookup(current, in: tree) {
+                let parentKey = resolve(record.parentIdentity, in: tree)
+                guard !seen.contains(parentKey) else { break }
+                seen.insert(parentKey)
+                guard let parent = lookup(parentKey, in: tree) else { break }
                 result.append(AncestorInfo(path: parent.path, teamID: parent.teamID, signingID: parent.signingID, uid: parent.uid, gid: parent.gid))
-                currentPID = record.parentPID
+                current = parentKey
             }
 
             return result
         }
     }
 
+    /// Look up a record by exact identity first, falling back to the PID index
+    /// (handles initial-scan entries whose pidversion is 0).
+    private func lookup(_ identity: ProcessIdentity, in tree: [ProcessIdentity: ProcessRecord]) -> ProcessRecord? {
+        if let record = tree[identity] { return record }
+        guard let indexed = pidIndex.withLock({ $0[identity.pid] }) else { return nil }
+        return tree[indexed]
+    }
+
+    /// Resolve an identity to the canonical one stored in the PID index, so that
+    /// parent references from initial-scan entries (pidversion 0) find the live record.
+    private func resolve(_ identity: ProcessIdentity, in tree: [ProcessIdentity: ProcessRecord]) -> ProcessIdentity {
+        if tree[identity] != nil { return identity }
+        guard let indexed = pidIndex.withLock({ $0[identity.pid] }), tree[indexed] != nil else { return identity }
+        return indexed
+    }
+
     /// Populates the tree by scanning all processes currently running on the system.
     /// This is inherently racy — processes may start or exit during enumeration —
     /// but NOTIFY_FORK / NOTIFY_EXEC / NOTIFY_EXIT events keep it accurate
     /// once the ES client is subscribed.
+    ///
+    /// Initial-scan entries use pidversion 0 because `proc_listallpids` does not
+    /// expose audit-token pidversions. Live ES events carry the real pidversion
+    /// and will replace these placeholder entries as processes fork/exec.
     func buildInitialTree() {
         let estimatedCount = proc_listallpids(nil, 0)
         guard estimatedCount > 0 else { return }
@@ -77,7 +125,7 @@ final class ProcessTree: @unchecked Sendable {
         let actualCount = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
         guard actualCount > 0 else { return }
 
-        var records: [pid_t: ProcessRecord] = [:]
+        var records: [ProcessIdentity: ProcessRecord] = [:]
         records.reserveCapacity(actualCount)
 
         for pid in pids.prefix(actualCount) where pid > 0 {
@@ -85,6 +133,8 @@ final class ProcessTree: @unchecked Sendable {
             guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { continue }
 
             let parentPID = pid_t(bsdInfo.pbi_ppid)
+            let identity = ProcessIdentity(pid: pid, pidVersion: 0)
+            let parentIdentity = ProcessIdentity(pid: parentPID, pidVersion: 0)
 
             var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN))
@@ -97,11 +147,13 @@ final class ProcessTree: @unchecked Sendable {
                 (teamID, signingID) = ("", "")
             }
 
-            records[pid] = ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID, uid: bsdInfo.pbi_uid, gid: bsdInfo.pbi_gid)
+            records[identity] = ProcessRecord(identity: identity, parentIdentity: parentIdentity, path: path, teamID: teamID, signingID: signingID, uid: bsdInfo.pbi_uid, gid: bsdInfo.pbi_gid)
         }
 
         let snapshot = records
+        let index = Dictionary(uniqueKeysWithValues: snapshot.keys.map { ($0.pid, $0) })
         storage.withLock { $0 = snapshot }
+        pidIndex.withLock { $0 = index }
         logger.info("ProcessTree: initial scan complete — \(snapshot.count) processes")
     }
 }
@@ -112,8 +164,14 @@ final class ProcessTree: @unchecked Sendable {
 /// All fields are sourced from the ES-provided data; no secondary proc_pidinfo call needed.
 func processRecord(from esProcess: UnsafeMutablePointer<es_process_t>) -> ProcessRecord {
     let process = esProcess.pointee
-    let pid = pid_t(process.audit_token.val.5)
-    let parentPID = pid_t(process.parent_audit_token.val.5)
+    let identity = ProcessIdentity(
+        pid: pid_t(process.audit_token.val.5),
+        pidVersion: process.audit_token.val.7
+    )
+    let parentIdentity = ProcessIdentity(
+        pid: pid_t(process.parent_audit_token.val.5),
+        pidVersion: process.parent_audit_token.val.7
+    )
 
     let path: String
     if let data = process.executable.pointee.path.data {
@@ -139,7 +197,7 @@ func processRecord(from esProcess: UnsafeMutablePointer<es_process_t>) -> Proces
     let uid = uid_t(process.audit_token.val.1)
     let gid = gid_t(process.audit_token.val.2)
 
-    return ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID, uid: uid, gid: gid)
+    return ProcessRecord(identity: identity, parentIdentity: parentIdentity, path: path, teamID: teamID, signingID: signingID, uid: uid, gid: gid)
 }
 
 // MARK: - Code signing helpers

@@ -106,7 +106,8 @@ final class ESInboundAdapter {
         case ES_EVENT_TYPE_NOTIFY_EXEC:
             return .exec(newImage: processRecord(from: message.pointee.event.exec.target))
         case ES_EVENT_TYPE_NOTIFY_EXIT:
-            return .exit(pid: pid_t(message.pointee.process.pointee.audit_token.val.5))
+            let token = message.pointee.process.pointee.audit_token
+            return .exit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
         case ES_EVENT_TYPE_AUTH_OPEN:
             return .openFile(openFileEvent(from: message, esClient: esClient))
         default:
@@ -124,9 +125,15 @@ final class ESInboundAdapter {
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, allowed)
         }
 
+        let processIdentity = ProcessIdentity(
+            pid: pid_t(bitPattern: process.audit_token.val.5),
+            pidVersion: process.audit_token.val.7
+        )
+
         return OpenFileEvent(
             path: string(from: file.path),
-            processID: pid_t(bitPattern: process.audit_token.val.5),
+            processIdentity: processIdentity,
+            processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
             processPath: string(from: process.executable.pointee.path),
             teamID: string(from: process.team_id),
