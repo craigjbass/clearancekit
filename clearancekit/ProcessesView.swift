@@ -18,7 +18,7 @@ private struct SnapshotProcess: Identifiable {
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
     var displayTeamID: String {
         if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
-        return teamID.isEmpty ? "Apple" : teamID
+        return teamID.isEmpty ? "apple" : teamID
     }
 
     var appBundlePath: String? {

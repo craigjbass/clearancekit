@@ -257,7 +257,7 @@ struct EventRow: View {
         }
         let hasNoSignature = event.teamID.isEmpty && event.signingID.isEmpty
         HStack {
-            Text("Team: \(hasNoSignature ? invalidSignature : (event.teamID.isEmpty ? "Apple" : event.teamID))")
+            Text("Team: \(hasNoSignature ? invalidSignature : (event.teamID.isEmpty ? "apple" : event.teamID))")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if hasNoSignature {
@@ -297,7 +297,7 @@ struct EventRow: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                         HStack {
-                            Text("Team: \(ancestorHasNoSignature ? invalidSignature : (ancestor.teamID.isEmpty ? "Apple" : ancestor.teamID))")
+                            Text("Team: \(ancestorHasNoSignature ? invalidSignature : (ancestor.teamID.isEmpty ? "apple" : ancestor.teamID))")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             if ancestorHasNoSignature {
