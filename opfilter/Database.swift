@@ -183,8 +183,8 @@ final class Database {
             for rule in rules {
                 insertRule(rule)
             }
+            updateSignature(table: "user_rules", content: canonicalRulesJSON(rules))
         }
-        updateSignature(table: "user_rules", content: canonicalRulesJSON(rules))
     }
 
     private func insertRule(_ rule: FAARule) {
@@ -241,8 +241,8 @@ final class Database {
             for entry in entries {
                 insertAllowlistEntry(entry)
             }
+            updateSignature(table: "user_allowlist", content: canonicalAllowlistJSON(entries))
         }
-        updateSignature(table: "user_allowlist", content: canonicalAllowlistJSON(entries))
     }
 
     private func insertAllowlistEntry(_ entry: AllowlistEntry) {
