@@ -70,6 +70,7 @@ final class FilterInteractor {
 
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
+    private let processTree: ProcessTreeProtocol
 
     /// AUTH_OPEN events are dispatched here so the ES callback thread stays
     /// free to deliver NOTIFY_EXEC / NOTIFY_FORK / NOTIFY_EXIT events.
@@ -77,9 +78,10 @@ final class FilterInteractor {
     /// that populate the ProcessTree.
     private let authQueue = DispatchQueue(label: "uk.craigbass.clearancekit.auth-open", attributes: .concurrent)
 
-    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist) {
+    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
+        self.processTree = processTree
     }
 
     func updatePolicy(_ rules: [FAARule]) {
@@ -95,14 +97,14 @@ final class FilterInteractor {
         case .fork(let child):
             let name = URL(fileURLWithPath: child.path).lastPathComponent
             logger.debug("FORK pid=\(child.identity.pid) pidversion=\(child.identity.pidVersion) process=\(name, privacy: .public)")
-            ProcessTree.shared.insert(child)
+            processTree.insert(child)
         case .exec(let newImage):
             let name = URL(fileURLWithPath: newImage.path).lastPathComponent
             logger.debug("EXEC pid=\(newImage.identity.pid) pidversion=\(newImage.identity.pidVersion) process=\(name, privacy: .public)")
-            ProcessTree.shared.insert(newImage)
+            processTree.insert(newImage)
         case .exit(let identity):
             logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
-            ProcessTree.shared.remove(identity: identity)
+            processTree.remove(identity: identity)
         case .openFile(let fileEvent):
             authQueue.async { self.handleOpenFile(fileEvent) }
         }
@@ -147,7 +149,7 @@ final class FilterInteractor {
             // the tree, then look up ancestors for evaluation.
             dwellNanoseconds = waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
 
-            guard ProcessTree.shared.contains(identity: fileEvent.processIdentity) else {
+            guard processTree.contains(identity: fileEvent.processIdentity) else {
                 // Process never appeared before the deadline — fail safe.
                 ancestors = []
                 decision = .denied(
@@ -159,7 +161,7 @@ final class FilterInteractor {
                 break
             }
 
-            ancestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
+            ancestors = processTree.ancestors(of: fileEvent.processIdentity)
             decision = checkFAAPolicy(
                 rules: rules, path: fileEvent.path,
                 processPath: fileEvent.processPath,
@@ -177,7 +179,7 @@ final class FilterInteractor {
 
         // Best-efforts ancestry for logging — the tree may have been populated
         // since the decision was made, so re-query unconditionally.
-        let logAncestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
+        let logAncestors = processTree.ancestors(of: fileEvent.processIdentity)
 
         logDecision(decision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds)
 
@@ -207,7 +209,7 @@ final class FilterInteractor {
         let start = mach_absolute_time()
         let cutoff = MachTime.cutoff(for: deadline)
         while mach_absolute_time() < cutoff {
-            guard !ProcessTree.shared.contains(identity: identity) else { break }
+            guard !processTree.contains(identity: identity) else { break }
             sched_yield()
         }
         return MachTime.nanoseconds(from: start, to: mach_absolute_time())

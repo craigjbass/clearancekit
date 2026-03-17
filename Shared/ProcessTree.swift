@@ -28,9 +28,18 @@ struct ProcessRecord {
     let gid: gid_t
 }
 
+// MARK: - ProcessTreeProtocol
+
+protocol ProcessTreeProtocol: AnyObject {
+    func insert(_ record: ProcessRecord)
+    func remove(identity: ProcessIdentity)
+    func contains(identity: ProcessIdentity) -> Bool
+    func ancestors(of identity: ProcessIdentity) -> [AncestorInfo]
+}
+
 // MARK: - ProcessTree
 
-final class ProcessTree: @unchecked Sendable {
+final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     static let shared = ProcessTree()
 
     private let storage = OSAllocatedUnfairLock(initialState: [ProcessIdentity: ProcessRecord]())
