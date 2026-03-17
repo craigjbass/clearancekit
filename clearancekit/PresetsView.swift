@@ -11,6 +11,7 @@ struct PresetsView: View {
     @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var errorMessage: String?
     @State private var isUpdatingAll = false
+    @State private var showAppPicker = false
 
     private var driftedPresets: [AppPreset] {
         builtInPresets.filter { $0.hasDrifted(in: policyStore.userRules) }
@@ -78,18 +79,25 @@ struct PresetsView: View {
 
     private var addApplicationButton: some View {
         Button {
-            let panel = NSOpenPanel()
-            panel.canChooseFiles = true
-            panel.canChooseDirectories = false
-            panel.allowsMultipleSelection = false
-            panel.allowedContentTypes = [.application]
-            panel.directoryURL = URL(fileURLWithPath: "/Applications")
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            addProtection(from: url)
+            showAppPicker = true
         } label: {
-            Label("Add Application…", systemImage: "plus.app")
+            HStack {
+                Label("Add Application…", systemImage: "plus.app")
+                Spacer()
+                Text("or drag from Finder")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .buttonStyle(.borderless)
+        .sheet(isPresented: $showAppPicker) {
+            AppPickerView { url in
+                showAppPicker = false
+                addProtection(from: url)
+            } onCancel: {
+                showAppPicker = false
+            }
+        }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
