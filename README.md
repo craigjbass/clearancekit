@@ -41,6 +41,10 @@ macOS code signatures are cryptographic. Every policy in ClearanceKit can requir
 
 This means ClearanceKit policies express intent like "only the Safari binary signed by Apple may read Safari's cookie store", and that guarantee holds even if an attacker controls the file system.
 
+The maintenance burden difference is significant in practice. Linux file integrity tools such as IMA/EVM, AIDE, and Tripwire identify trusted binaries by their SHA256 hash. Every software update — including security patches — produces a new hash, which invalidates any policy that referenced the old one. On an active development machine where package managers are run daily, this means policies go stale constantly. The tools that update most frequently, such as language runtimes and CLI utilities, are exactly the ones most likely to be targeted in a supply chain attack, so keeping the allowlist current requires continuous manual effort and is easily neglected.
+
+ClearanceKit policies reference a Team ID and Signing ID, not a hash. When Apple ships a Safari update, or when a developer releases a new version of their tool, the signing identity is unchanged — the same Developer ID certificate is used to sign every release. A policy written once remains valid indefinitely across all future updates from that developer. The only time a policy needs revisiting is when you deliberately change which software you trust, not simply because that software was updated.
+
 ## Installation
 
 Download the latest DMG from the [Releases](../../releases) page, open it, and drag clearancekit to Applications.
