@@ -8,6 +8,9 @@
 //
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "xpc-server")
 
 private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
@@ -37,7 +40,7 @@ final class XPCServer: NSObject {
         userAllowlist = database.loadUserAllowlist()
         managedAllowlist = ManagedAllowlistLoader.load()
         xprotectEntries = enumerateXProtectEntries()
-        NSLog("XPCServer: Discovered %d XProtect allowlist entry/entries", xprotectEntries.count)
+        logger.info("XPCServer: Discovered \(xprotectEntries.count) XProtect allowlist entry/entries")
 
         super.init()
 
@@ -49,7 +52,7 @@ final class XPCServer: NSObject {
         listener = NSXPCListener(machServiceName: XPCConstants.serviceName)
         listener?.delegate = self
         listener?.resume()
-        NSLog("XPCServer: Listening on %@", XPCConstants.serviceName)
+        logger.info("XPCServer: Listening on \(XPCConstants.serviceName, privacy: .public)")
 
         let watcher = XProtectWatcher { [weak self] in self?.handleXProtectChange() }
         watcher.start()
@@ -68,7 +71,7 @@ final class XPCServer: NSObject {
         xprotectEntries = reloaded
         lock.unlock()
         applyAllowlistToFilter()
-        NSLog("XPCServer: XProtect bundle changed — reloaded %d entry/entries", reloaded.count)
+        logger.info("XPCServer: XProtect bundle changed — reloaded \(reloaded.count) entry/entries")
     }
 
     // MARK: - Direct filter integration
@@ -113,7 +116,7 @@ final class XPCServer: NSObject {
         guiClients[ObjectIdentifier(connection)] = connection
         let count = guiClients.count
         lock.unlock()
-        NSLog("XPCServer: GUI client registered. Active clients: %d", count)
+        logger.debug("XPCServer: GUI client registered. Active clients: \(count)")
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
@@ -121,7 +124,7 @@ final class XPCServer: NSObject {
         guiClients.removeValue(forKey: ObjectIdentifier(connection))
         let count = guiClients.count
         lock.unlock()
-        NSLog("XPCServer: Client removed. GUI clients: %d", count)
+        logger.debug("XPCServer: Client removed. GUI clients: \(count)")
     }
 
     // MARK: - Event broadcasting
@@ -158,7 +161,7 @@ final class XPCServer: NSObject {
         lock.lock()
         guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else {
             lock.unlock()
-            NSLog("XPCServer: updateRule — rule %@ not found", rule.id.uuidString)
+            logger.error("XPCServer: updateRule — rule \(rule.id.uuidString, privacy: .public) not found")
             return
         }
         userRules[index] = rule
@@ -183,12 +186,12 @@ final class XPCServer: NSObject {
 
     fileprivate func beginDiscovery() {
         adapter.setDiscoveryPaths(["/Users"])
-        NSLog("XPCServer: Discovery mode activated")
+        logger.info("XPCServer: Discovery mode activated")
     }
 
     fileprivate func endDiscovery() {
         adapter.setDiscoveryPaths([])
-        NSLog("XPCServer: Discovery mode deactivated")
+        logger.info("XPCServer: Discovery mode deactivated")
     }
 
     // MARK: - Resync
@@ -348,17 +351,17 @@ extension XPCServer: NSXPCListenerDelegate {
         }
         newConnection.interruptionHandler = { [weak self, weak newConnection] in
             guard let conn = newConnection else { return }
-            NSLog("XPCServer: Connection interrupted")
+            logger.error("XPCServer: Connection interrupted")
             self?.removeClient(conn)
         }
 
         guard ConnectionValidator.validate(newConnection) else {
-            NSLog("XPCServer: Rejected connection — validation failed")
+            logger.error("XPCServer: Rejected connection — validation failed")
             return false
         }
 
         newConnection.resume()
-        NSLog("XPCServer: Accepted connection (protocol v%@)", XPCConstants.protocolVersion)
+        logger.debug("XPCServer: Accepted connection (protocol v\(XPCConstants.protocolVersion, privacy: .public)")
         return true
     }
 }

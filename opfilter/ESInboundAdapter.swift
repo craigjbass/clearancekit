@@ -54,7 +54,7 @@ final class ESInboundAdapter {
             exit(EXIT_FAILURE)
         }
 
-        logger.log("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
+        logger.info("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
     }
 
     /// Applies an updated policy: diffs the effective muted prefix set (policy ∪ discovery),
@@ -66,7 +66,7 @@ final class ESInboundAdapter {
         applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
         interactor.updatePolicy(rules)
-        logger.log("ESInboundAdapter: policy updated — \(rules.count) rule(s), cache cleared")
+        logger.info("ESInboundAdapter: policy updated — \(rules.count) rule(s), cache cleared")
     }
 
     /// Temporarily widens monitoring to deliver events for paths with no policy rules.
@@ -77,17 +77,17 @@ final class ESInboundAdapter {
         discoveryPrefixes = Set(paths)
         applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
-        logger.log("ESInboundAdapter: discovery paths updated — \(paths.count) path(s)")
+        logger.info("ESInboundAdapter: discovery paths updated — \(paths.count) path(s)")
     }
 
     private func applyPrefixDiff(from old: Set<String>, to new: Set<String>, client: OpaquePointer) {
         for prefix in old.subtracting(new) {
             es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.log("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
+            logger.debug("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
         }
         for prefix in new.subtracting(old) {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.log("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
+            logger.debug("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
         }
     }
 
@@ -127,9 +127,12 @@ final class ESInboundAdapter {
         return OpenFileEvent(
             path: string(from: file.path),
             processID: pid_t(bitPattern: process.audit_token.val.5),
+            parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
             processPath: string(from: process.executable.pointee.path),
             teamID: string(from: process.team_id),
             signingID: string(from: process.signing_id),
+            uid: uid_t(process.audit_token.val.1),
+            gid: gid_t(process.audit_token.val.2),
             ttyPath: ttyPath,
             respond: respond
         )

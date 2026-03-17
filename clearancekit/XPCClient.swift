@@ -8,6 +8,9 @@
 import Foundation
 import Combine
 import UserNotifications
+import os
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
 
 @MainActor
 final class XPCClient: NSObject, ObservableObject {
@@ -31,7 +34,7 @@ final class XPCClient: NSObject, ObservableObject {
     func connect() {
         guard connection == nil else { return }
 
-        NSLog("XPCClient: Connecting to %@", XPCConstants.serviceName)
+        logger.debug("XPCClient: Connecting to \(XPCConstants.serviceName, privacy: .public)")
 
         let conn = NSXPCConnection(machServiceName: XPCConstants.serviceName, options: [])
         let eventClasses = NSSet(array: [FolderOpenEvent.self, AncestorInfo.self, NSArray.self, NSDate.self, NSString.self, NSUUID.self]) as! Set<AnyHashable>
@@ -70,7 +73,7 @@ final class XPCClient: NSObject, ObservableObject {
 
         conn.interruptionHandler = { [weak self] in
             Task { @MainActor in
-                NSLog("XPCClient: Connection interrupted")
+                logger.error("XPCClient: Connection interrupted")
                 self?.handleDisconnection()
             }
         }
@@ -79,12 +82,12 @@ final class XPCClient: NSObject, ObservableObject {
         connection = conn
 
         guard let service = conn.remoteObjectProxyWithErrorHandler({ [weak self] error in
-            NSLog("XPCClient: Remote object error: %@", error.localizedDescription)
+            logger.error("XPCClient: Remote object error: \(error.localizedDescription, privacy: .public)")
             Task { @MainActor in
                 self?.handleDisconnection()
             }
         }) as? ServiceProtocol else {
-            NSLog("XPCClient: Failed to get remote object proxy")
+            logger.error("XPCClient: Failed to get remote object proxy")
             handleDisconnection()
             return
         }
@@ -92,14 +95,14 @@ final class XPCClient: NSObject, ObservableObject {
         service.registerClient { [weak self] success in
             Task { @MainActor in
                 if success {
-                    NSLog("XPCClient: Successfully registered with service")
+                    logger.debug("XPCClient: Successfully registered with service")
                     self?.isConnected = true
                     self?.hasServiceVersionMismatch = false
                     self?.stopReconnectTimer()
                     self?.fetchVersionInfo()
                     self?.requestResync()
                 } else {
-                    NSLog("XPCClient: Failed to register with service")
+                    logger.error("XPCClient: Failed to register with service")
                     self?.handleDisconnection()
                 }
             }
@@ -118,7 +121,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection = nil
         isConnected = false
 
-        NSLog("XPCClient: Disconnected")
+        logger.debug("XPCClient: Disconnected")
     }
 
     private func handleDisconnection() {
@@ -126,7 +129,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection = nil
         isConnected = false
 
-        NSLog("XPCClient: Connection lost, scheduling reconnect")
+        logger.error("XPCClient: Connection lost, scheduling reconnect")
         scheduleReconnect()
     }
 
@@ -137,7 +140,7 @@ final class XPCClient: NSObject, ObservableObject {
         isConnected = false
 
         stopReconnectTimer()
-        NSLog("XPCClient: Service version mismatch — stopped reconnecting. Reactivate the system extension to resolve.")
+        logger.error("XPCClient: Service version mismatch — stopped reconnecting. Reactivate the system extension to resolve.")
     }
 
     private func scheduleReconnect() {
@@ -157,20 +160,20 @@ final class XPCClient: NSObject, ObservableObject {
 
     private func fetchVersionInfo() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: fetchVersionInfo error: %@", error.localizedDescription)
+            logger.error("XPCClient: fetchVersionInfo error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
 
         service.fetchVersionInfo { [weak self] version in
             Task { @MainActor in
                 self?.serviceVersion = version as String
-                NSLog("XPCClient: service v%@", version)
+                logger.info("XPCClient: service v\(version as String, privacy: .public)")
             }
         }
     }
 
     func requestResync() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: requestResync error: %@", error.localizedDescription)
+            logger.error("XPCClient: requestResync error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
 
         service.requestResync { }
@@ -181,29 +184,29 @@ final class XPCClient: NSObject, ObservableObject {
     func addRule(_ rule: FAARule) {
         guard let data = try? JSONEncoder().encode(rule) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: addRule error: %@", error.localizedDescription)
+            logger.error("XPCClient: addRule error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.addRule(data as NSData) { success in
-            if !success { NSLog("XPCClient: addRule rejected by service") }
+            if !success { logger.error("XPCClient: addRule rejected by service") }
         }
     }
 
     func updateRule(_ rule: FAARule) {
         guard let data = try? JSONEncoder().encode(rule) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: updateRule error: %@", error.localizedDescription)
+            logger.error("XPCClient: updateRule error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.updateRule(data as NSData) { success in
-            if !success { NSLog("XPCClient: updateRule rejected by service") }
+            if !success { logger.error("XPCClient: updateRule rejected by service") }
         }
     }
 
     func removeRule(ruleID: UUID) {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: removeRule error: %@", error.localizedDescription)
+            logger.error("XPCClient: removeRule error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.removeRule(ruleID as NSUUID) { success in
-            if !success { NSLog("XPCClient: removeRule rejected by service") }
+            if !success { logger.error("XPCClient: removeRule rejected by service") }
         }
     }
 
@@ -212,19 +215,19 @@ final class XPCClient: NSObject, ObservableObject {
     func addAllowlistEntry(_ entry: AllowlistEntry) {
         guard let data = try? JSONEncoder().encode(entry) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: addAllowlistEntry error: %@", error.localizedDescription)
+            logger.error("XPCClient: addAllowlistEntry error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.addAllowlistEntry(data as NSData) { success in
-            if !success { NSLog("XPCClient: addAllowlistEntry rejected by service") }
+            if !success { logger.error("XPCClient: addAllowlistEntry rejected by service") }
         }
     }
 
     func removeAllowlistEntry(entryID: UUID) {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: removeAllowlistEntry error: %@", error.localizedDescription)
+            logger.error("XPCClient: removeAllowlistEntry error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.removeAllowlistEntry(entryID as NSUUID) { success in
-            if !success { NSLog("XPCClient: removeAllowlistEntry rejected by service") }
+            if !success { logger.error("XPCClient: removeAllowlistEntry rejected by service") }
         }
     }
 
@@ -233,7 +236,7 @@ final class XPCClient: NSObject, ObservableObject {
     func fetchProcessList() async -> [RunningProcessInfo] {
         await withCheckedContinuation { continuation in
             guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-                NSLog("XPCClient: fetchProcessList error: %@", error.localizedDescription)
+                logger.error("XPCClient: fetchProcessList error: \(error.localizedDescription, privacy: .public)")
                 continuation.resume(returning: [])
             }) as? ServiceProtocol else {
                 continuation.resume(returning: [])
@@ -249,14 +252,14 @@ final class XPCClient: NSObject, ObservableObject {
 
     func beginDiscovery() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: beginDiscovery error: %@", error.localizedDescription)
+            logger.error("XPCClient: beginDiscovery error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.beginDiscovery { }
     }
 
     func endDiscovery() {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
-            NSLog("XPCClient: endDiscovery error: %@", error.localizedDescription)
+            logger.error("XPCClient: endDiscovery error: \(error.localizedDescription, privacy: .public)")
         }) as? ServiceProtocol else { return }
         service.endDiscovery { }
     }
@@ -278,7 +281,7 @@ final class XPCClient: NSObject, ObservableObject {
         content.userInfo = ["eventID": event.eventID.uuidString]
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
-            if let error { NSLog("XPCClient: notification error: %@", error.localizedDescription) }
+            if let error { logger.error("XPCClient: notification error: \(error.localizedDescription, privacy: .public)") }
         }
     }
 
@@ -289,7 +292,7 @@ final class XPCClient: NSObject, ObservableObject {
     func fetchHistoricEvents() {
         guard let conn = connection,
               let service = conn.remoteObjectProxyWithErrorHandler({ error in
-                  NSLog("XPCClient: fetchHistoricEvents error: %@", error.localizedDescription)
+                  logger.error("XPCClient: fetchHistoricEvents error: \(error.localizedDescription, privacy: .public)")
               }) as? ServiceProtocol else {
             return
         }
@@ -309,7 +312,7 @@ final class XPCClient: NSObject, ObservableObject {
 
 extension XPCClient: ClientProtocol {
     nonisolated func folderOpened(_ event: FolderOpenEvent) {
-        NSLog("XPCClient: Received folder open event: %@", event.path)
+        logger.debug("XPCClient: Received folder open event: \(event.path, privacy: .public)")
         Task { @MainActor in
             self.events.insert(event, at: 0)
             if !event.accessAllowed {
@@ -320,7 +323,7 @@ extension XPCClient: ClientProtocol {
 
     nonisolated func managedRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            NSLog("XPCClient: Failed to decode managed rules — version mismatch, invalidating connection")
+            logger.fault("XPCClient: Failed to decode managed rules — version mismatch, invalidating connection")
             Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
@@ -331,7 +334,7 @@ extension XPCClient: ClientProtocol {
 
     nonisolated func userRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([FAARule].self, from: rulesData as Data) else {
-            NSLog("XPCClient: Failed to decode user rules — version mismatch, invalidating connection")
+            logger.fault("XPCClient: Failed to decode user rules — version mismatch, invalidating connection")
             Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
@@ -342,7 +345,7 @@ extension XPCClient: ClientProtocol {
 
     nonisolated func managedAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            NSLog("XPCClient: Failed to decode managed allowlist — version mismatch, invalidating connection")
+            logger.fault("XPCClient: Failed to decode managed allowlist — version mismatch, invalidating connection")
             Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }
@@ -353,7 +356,7 @@ extension XPCClient: ClientProtocol {
 
     nonisolated func userAllowlistUpdated(_ allowlistData: NSData) {
         guard let entries = try? JSONDecoder().decode([AllowlistEntry].self, from: allowlistData as Data) else {
-            NSLog("XPCClient: Failed to decode user allowlist — version mismatch, invalidating connection")
+            logger.fault("XPCClient: Failed to decode user allowlist — version mismatch, invalidating connection")
             Task { @MainActor in self.handleServiceVersionMismatch() }
             return
         }

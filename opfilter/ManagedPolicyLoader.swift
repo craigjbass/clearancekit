@@ -73,6 +73,7 @@ enum ManagedPolicyLoader {
         return FAARule(
             id: id,
             protectedPathPrefix: path,
+            source: .mdm,
             allowedProcessPaths:         dict["AllowedProcessPaths"]         as? [String] ?? [],
             allowedSignatures:           parseSignatures(dict["AllowedSignatures"]         as? [String] ?? []),
             allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],

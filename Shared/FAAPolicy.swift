@@ -14,6 +14,14 @@ import Foundation
 /// this identifier lets policy rules reference them explicitly.
 public let appleTeamID = "apple"
 
+// MARK: - RuleSource
+
+public enum RuleSource: String, Codable, Equatable {
+    case builtin
+    case user
+    case mdm
+}
+
 // MARK: - PolicyDecision
 
 public enum PolicyDecision {
@@ -22,9 +30,9 @@ public enum PolicyDecision {
     /// Path not covered by any rule — default allow.
     case noRuleApplies
     /// Covered by a rule and a specific criterion matched.
-    case allowed(matchedCriterion: String)
+    case allowed(ruleID: UUID, ruleName: String, ruleSource: RuleSource, matchedCriterion: String)
     /// Covered by a rule but no criterion matched — denied.
-    case denied(ruleID: UUID, rule: String, allowedCriteria: String)
+    case denied(ruleID: UUID, ruleName: String, ruleSource: RuleSource, allowedCriteria: String)
 
     public var isAllowed: Bool {
         if case .denied = self { return false }
@@ -32,8 +40,27 @@ public enum PolicyDecision {
     }
 
     public var matchedRuleID: UUID? {
-        if case .denied(let ruleID, _, _) = self { return ruleID }
-        return nil
+        switch self {
+        case .allowed(let ruleID, _, _, _): return ruleID
+        case .denied(let ruleID, _, _, _): return ruleID
+        default: return nil
+        }
+    }
+
+    public var policyName: String {
+        switch self {
+        case .allowed(_, let name, _, _): return name
+        case .denied(_, let name, _, _): return name
+        default: return ""
+        }
+    }
+
+    public var policySource: RuleSource? {
+        switch self {
+        case .allowed(_, _, let source, _): return source
+        case .denied(_, _, let source, _): return source
+        default: return nil
+        }
     }
 
     public var reason: String {
@@ -42,10 +69,10 @@ public enum PolicyDecision {
             return "Globally allowed"
         case .noRuleApplies:
             return "No rule applies — default allow"
-        case .allowed(let criterion):
+        case .allowed(_, _, _, let criterion):
             return "Allowed: matched \(criterion)"
-        case .denied(_, let rule, let criteria):
-            return "Denied by rule \"\(rule)\" — allowed: \(criteria)"
+        case .denied(_, let ruleName, _, let criteria):
+            return "Denied by rule \"\(ruleName)\" — allowed: \(criteria)"
         }
     }
 }
@@ -94,6 +121,7 @@ extension ProcessSignature: CustomStringConvertible {
 public struct FAARule: Identifiable, Codable, Equatable {
     public let id: UUID
     public let protectedPathPrefix: String
+    public let source: RuleSource
 
     /// The literal path prefix passed to `es_mute_path`.
     /// For wildcard patterns this is the last fully-literal directory component;
@@ -107,6 +135,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public init(
         id: UUID = UUID(),
         protectedPathPrefix: String,
+        source: RuleSource = .user,
         allowedProcessPaths: [String] = [],
         allowedSignatures: [ProcessSignature] = [],
         allowedAncestorProcessPaths: [String] = [],
@@ -114,10 +143,26 @@ public struct FAARule: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
+        self.source = source
         self.allowedProcessPaths = allowedProcessPaths
         self.allowedSignatures = allowedSignatures
         self.allowedAncestorProcessPaths = allowedAncestorProcessPaths
         self.allowedAncestorSignatures = allowedAncestorSignatures
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        protectedPathPrefix = try c.decode(String.self, forKey: .protectedPathPrefix)
+        source = (try? c.decode(RuleSource.self, forKey: .source)) ?? .user
+        allowedProcessPaths = (try? c.decode([String].self, forKey: .allowedProcessPaths)) ?? []
+        allowedSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedSignatures)) ?? []
+        allowedAncestorProcessPaths = (try? c.decode([String].self, forKey: .allowedAncestorProcessPaths)) ?? []
+        allowedAncestorSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedAncestorSignatures)) ?? []
     }
 }
 
@@ -134,6 +179,7 @@ public let faaPolicy: [FAARule] = [
     FAARule(
         id: UUID(uuidString: "5DCEA92F-C4FB-4D5D-9E56-FD36D8F330DF")!,
         protectedPathPrefix: "/Library/Application Support/clearancekit",
+        source: .builtin,
         allowedSignatures: [ProcessSignature(teamID: clearancekitTeamID, signingID: "*")]
     ),
 ]
@@ -224,26 +270,26 @@ public func checkFAAPolicy(
         guard pathIsProtected(path, by: rule.protectedPathPrefix) else { continue }
 
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-            return .allowed(matchedCriterion: "process path \(processPath)")
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
         }
 
         // Apple platform binaries carry an empty team ID; resolve to appleTeamID for matching.
         let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
         if !rule.allowedSignatures.isEmpty,
            let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) {
-            return .allowed(matchedCriterion: "identity \(match)")
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
         }
 
         if !rule.allowedAncestorProcessPaths.isEmpty,
            let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-            return .allowed(matchedCriterion: "ancestor process path \(match.path)")
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
         }
 
         if !rule.allowedAncestorSignatures.isEmpty {
             for ancestor in ancestors {
                 let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
                 if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: resolvedAncestorTeamID, signingID: ancestor.signingID) }) {
-                    return .allowed(matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
+                    return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
                 }
             }
         }
@@ -261,7 +307,7 @@ public func checkFAAPolicy(
         if !rule.allowedAncestorSignatures.isEmpty {
             criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
         }
-        return .denied(ruleID: rule.id, rule: rule.protectedPathPrefix, allowedCriteria: criteria.joined(separator: "; "))
+        return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
 }

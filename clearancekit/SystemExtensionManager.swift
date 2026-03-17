@@ -8,7 +8,10 @@
 import AppKit
 import Foundation
 import Combine
+import os
 @preconcurrency import SystemExtensions
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
 
 @MainActor
 final class SystemExtensionManager: NSObject, ObservableObject {
@@ -45,7 +48,7 @@ final class SystemExtensionManager: NSObject, ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             OSSystemExtensionManager.shared.submitRequest(request)
         }
-        NSLog("SystemExtensionManager: Submitted activation request for %@", Self.extensionBundleIdentifier)
+        logger.info("SystemExtensionManager: Submitted activation request for \(Self.extensionBundleIdentifier, privacy: .public)")
     }
 
     func deactivateExtension() {
@@ -62,25 +65,25 @@ final class SystemExtensionManager: NSObject, ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             OSSystemExtensionManager.shared.submitRequest(request)
         }
-        NSLog("SystemExtensionManager: Submitted deactivation request for %@", Self.extensionBundleIdentifier)
+        logger.info("SystemExtensionManager: Submitted deactivation request for \(Self.extensionBundleIdentifier, privacy: .public)")
     }
 }
 
 extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
     nonisolated func request(_ request: OSSystemExtensionRequest, actionForReplacingExtension existing: OSSystemExtensionProperties, withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction {
-        NSLog("SystemExtensionManager: Replacing extension %@ with %@", existing.bundleVersion, ext.bundleVersion)
+        logger.info("SystemExtensionManager: Replacing extension \(existing.bundleVersion, privacy: .public) with \(ext.bundleVersion, privacy: .public)")
         return .replace
     }
 
     nonisolated func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
-        NSLog("SystemExtensionManager: User approval required - check System Settings > Privacy & Security")
+        logger.info("SystemExtensionManager: User approval required - check System Settings > Privacy & Security")
         Task { @MainActor in
             self.statusMessage = "Approval required - check System Settings"
         }
     }
 
     nonisolated func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
-        NSLog("SystemExtensionManager: Request finished with result: %d", result.rawValue)
+        logger.info("SystemExtensionManager: Request finished with result: \(result.rawValue)")
         Task { @MainActor in
             switch result {
             case .completed:
@@ -97,7 +100,7 @@ extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
     }
 
     nonisolated func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
-        NSLog("SystemExtensionManager: Request failed with error: %@", error.localizedDescription)
+        logger.error("SystemExtensionManager: Request failed with error: \(error.localizedDescription, privacy: .public)")
         Task { @MainActor in
             self.extensionStatus = .failed
             self.statusMessage = "Failed: \(error.localizedDescription)"

@@ -5,6 +5,9 @@
 
 import Foundation
 import Combine
+import os
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "app-protection-store")
 
 @MainActor
 final class AppProtectionStore: ObservableObject {
@@ -120,7 +123,7 @@ final class AppProtectionStore: ObservableObject {
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
         guard let loaded = try? JSONDecoder().decode([AppProtection].self, from: data) else {
-            NSLog("AppProtectionStore: Failed to decode stored protections — clearing (schema change)")
+            logger.error("AppProtectionStore: Failed to decode stored protections — clearing (schema change)")
             UserDefaults.standard.removeObject(forKey: storageKey)
             return
         }

@@ -18,6 +18,8 @@ struct ProcessRecord {
     let path: String
     let teamID: String
     let signingID: String
+    let uid: uid_t
+    let gid: gid_t
 }
 
 // MARK: - ProcessTree
@@ -49,7 +51,7 @@ final class ProcessTree: @unchecked Sendable {
                 guard record.parentPID > 1, !seen.contains(record.parentPID) else { break }
                 seen.insert(record.parentPID)
                 guard let parent = tree[record.parentPID] else { break }
-                result.append(AncestorInfo(path: parent.path, teamID: parent.teamID, signingID: parent.signingID))
+                result.append(AncestorInfo(path: parent.path, teamID: parent.teamID, signingID: parent.signingID, uid: parent.uid, gid: parent.gid))
                 currentPID = record.parentPID
             }
 
@@ -91,12 +93,12 @@ final class ProcessTree: @unchecked Sendable {
                 (teamID, signingID) = ("", "")
             }
 
-            records[pid] = ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID)
+            records[pid] = ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID, uid: bsdInfo.pbi_uid, gid: bsdInfo.pbi_gid)
         }
 
         let snapshot = records
         storage.withLock { $0 = snapshot }
-        logger.log("ProcessTree: initial scan complete — \(snapshot.count) processes")
+        logger.info("ProcessTree: initial scan complete — \(snapshot.count) processes")
     }
 }
 
@@ -130,7 +132,10 @@ func processRecord(from esProcess: UnsafeMutablePointer<es_process_t>) -> Proces
         signingID = ""
     }
 
-    return ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID)
+    let uid = uid_t(process.audit_token.val.1)
+    let gid = gid_t(process.audit_token.val.2)
+
+    return ProcessRecord(pid: pid, parentPID: parentPID, path: path, teamID: teamID, signingID: signingID, uid: uid, gid: gid)
 }
 
 // MARK: - Code signing helpers

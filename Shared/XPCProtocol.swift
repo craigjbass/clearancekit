@@ -25,11 +25,15 @@ public class AncestorInfo: NSObject, NSSecureCoding {
     @objc public let path: String
     @objc public let teamID: String
     @objc public let signingID: String
+    @objc public let uid: UInt32
+    @objc public let gid: UInt32
 
-    public init(path: String, teamID: String, signingID: String) {
+    public init(path: String, teamID: String, signingID: String, uid: UInt32 = 0, gid: UInt32 = 0) {
         self.path = path
         self.teamID = teamID
         self.signingID = signingID
+        self.uid = uid
+        self.gid = gid
         super.init()
     }
 
@@ -38,6 +42,8 @@ public class AncestorInfo: NSObject, NSSecureCoding {
         self.path = path
         self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
         self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
+        self.uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
+        self.gid = UInt32(bitPattern: coder.decodeInt32(forKey: "gid"))
         super.init()
     }
 
@@ -45,6 +51,8 @@ public class AncestorInfo: NSObject, NSSecureCoding {
         coder.encode(path as NSString, forKey: "path")
         coder.encode(teamID as NSString, forKey: "teamID")
         coder.encode(signingID as NSString, forKey: "signingID")
+        coder.encode(Int32(bitPattern: uid), forKey: "uid")
+        coder.encode(Int32(bitPattern: gid), forKey: "gid")
     }
 }
 
