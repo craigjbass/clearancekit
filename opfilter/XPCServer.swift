@@ -40,7 +40,8 @@ final class XPCServer: NSObject {
         userAllowlist = database.loadUserAllowlist()
         managedAllowlist = ManagedAllowlistLoader.load()
         xprotectEntries = enumerateXProtectEntries()
-        logger.info("XPCServer: Discovered \(xprotectEntries.count) XProtect allowlist entry/entries")
+        let xprotectCount = xprotectEntries.count
+        logger.info("XPCServer: Discovered \(xprotectCount) XProtect allowlist entry/entries")
 
         super.init()
 

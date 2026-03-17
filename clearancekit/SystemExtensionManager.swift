@@ -11,10 +11,9 @@ import Combine
 import os
 @preconcurrency import SystemExtensions
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
-
 @MainActor
 final class SystemExtensionManager: NSObject, ObservableObject {
+    private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
     static let shared = SystemExtensionManager()
 
     @Published private(set) var extensionStatus: ExtensionStatus = .unknown

@@ -7,10 +7,9 @@ import Foundation
 import Combine
 import os
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "app-protection-store")
-
 @MainActor
 final class AppProtectionStore: ObservableObject {
+    private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "app-protection-store")
     static let shared = AppProtectionStore()
 
     @Published private(set) var protections: [AppProtection] = []
