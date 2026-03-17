@@ -360,8 +360,7 @@ final class Database {
     }
 
     private func decodeStringArray(_ json: String) -> [String] {
-        guard let jsonData = json.data(using: .utf8),
-              let array = try? JSONDecoder().decode([String].self, from: jsonData) else {
+        guard let array = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
             NSLog("Database: Failed to decode string array from JSON: %@", json)
             return []
         }
@@ -377,8 +376,7 @@ final class Database {
     }
 
     private func decodeSignatureArray(_ json: String) -> [ProcessSignature] {
-        guard let jsonData = json.data(using: .utf8),
-              let array = try? JSONDecoder().decode([ProcessSignature].self, from: jsonData) else {
+        guard let array = try? JSONDecoder().decode([ProcessSignature].self, from: Data(json.utf8)) else {
             NSLog("Database: Failed to decode signature array from JSON: %@", json)
             return []
         }
