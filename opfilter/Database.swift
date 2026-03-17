@@ -324,40 +324,56 @@ final class Database {
     }
 
     private func encodeStringArray(_ array: [String]) -> String {
-        String(data: try! JSONEncoder().encode(array), encoding: .utf8)!
+        guard let encoded = try? JSONEncoder().encode(array),
+              let string = String(data: encoded, encoding: .utf8) else {
+            fatalError("Database: Failed to JSON-encode string array — [String] must always be encodable")
+        }
+        return string
     }
 
     private func decodeStringArray(_ json: String) -> [String] {
-        guard let decoded = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
+        guard let jsonData = json.data(using: .utf8),
+              let array = try? JSONDecoder().decode([String].self, from: jsonData) else {
             NSLog("Database: Failed to decode string array from JSON: %@", json)
             return []
         }
-        return decoded
+        return array
     }
 
     private func encodeSignatureArray(_ sigs: [ProcessSignature]) -> String {
-        String(data: try! JSONEncoder().encode(sigs), encoding: .utf8)!
+        guard let encoded = try? JSONEncoder().encode(sigs),
+              let string = String(data: encoded, encoding: .utf8) else {
+            fatalError("Database: Failed to JSON-encode signature array — [ProcessSignature] must always be encodable")
+        }
+        return string
     }
 
     private func decodeSignatureArray(_ json: String) -> [ProcessSignature] {
-        guard let decoded = try? JSONDecoder().decode([ProcessSignature].self, from: Data(json.utf8)) else {
+        guard let jsonData = json.data(using: .utf8),
+              let array = try? JSONDecoder().decode([ProcessSignature].self, from: jsonData) else {
             NSLog("Database: Failed to decode signature array from JSON: %@", json)
             return []
         }
-        return decoded
+        return array
     }
 
     private func canonicalRulesJSON(_ rules: [FAARule]) -> Data {
         let sorted = rules.sorted { $0.id.uuidString < $1.id.uuidString }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        return try! encoder.encode(sorted)
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode rules for signature — [FAARule] must always be encodable")
+        }
+        return encoded
     }
 
     private func canonicalAllowlistJSON(_ entries: [AllowlistEntry]) -> Data {
         let sorted = entries.sorted { $0.id.uuidString < $1.id.uuidString }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        return try! encoder.encode(sorted)
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode allowlist for signature — [AllowlistEntry] must always be encodable")
+        }
+        return encoded
     }
 }
