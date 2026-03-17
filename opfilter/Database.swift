@@ -165,7 +165,9 @@ final class Database {
                    allowed_ancestor_process_paths, allowed_ancestor_signatures
             FROM user_rules ORDER BY rowid
         """) { stmt in
-            rules.append(ruleFromRow(stmt))
+            if let rule = ruleFromRow(stmt) {
+                rules.append(rule)
+            }
         }
 
         guard verifySignature(table: "user_rules", content: canonicalRulesJSON(rules)) else {
@@ -204,9 +206,14 @@ final class Database {
         ])
     }
 
-    private func ruleFromRow(_ stmt: OpaquePointer) -> FAARule {
-        FAARule(
-            id: UUID(uuidString: columnText(stmt, 0))!,
+    private func ruleFromRow(_ stmt: OpaquePointer) -> FAARule? {
+        let rawID = columnText(stmt, 0)
+        guard let id = UUID(uuidString: rawID) else {
+            NSLog("Database: Skipping user_rules row — invalid UUID %@", rawID)
+            return nil
+        }
+        return FAARule(
+            id: id,
             protectedPathPrefix: columnText(stmt, 1),
             allowedProcessPaths: decodeStringArray(columnText(stmt, 2)),
             allowedSignatures: decodeSignatureArray(columnText(stmt, 3)),
@@ -223,7 +230,9 @@ final class Database {
             SELECT id, signing_id, process_path, platform_binary, team_id
             FROM user_allowlist ORDER BY rowid
         """) { stmt in
-            entries.append(allowlistEntryFromRow(stmt))
+            if let entry = allowlistEntryFromRow(stmt) {
+                entries.append(entry)
+            }
         }
 
         guard verifySignature(table: "user_allowlist", content: canonicalAllowlistJSON(entries)) else {
@@ -258,9 +267,14 @@ final class Database {
         ])
     }
 
-    private func allowlistEntryFromRow(_ stmt: OpaquePointer) -> AllowlistEntry {
-        AllowlistEntry(
-            id: UUID(uuidString: columnText(stmt, 0))!,
+    private func allowlistEntryFromRow(_ stmt: OpaquePointer) -> AllowlistEntry? {
+        let rawID = columnText(stmt, 0)
+        guard let id = UUID(uuidString: rawID) else {
+            NSLog("Database: Skipping user_allowlist row — invalid UUID %@", rawID)
+            return nil
+        }
+        return AllowlistEntry(
+            id: id,
             signingID: columnText(stmt, 1),
             processPath: columnText(stmt, 2),
             platformBinary: sqlite3_column_int(stmt, 3) != 0,
@@ -314,7 +328,11 @@ final class Database {
     }
 
     private func decodeStringArray(_ json: String) -> [String] {
-        try! JSONDecoder().decode([String].self, from: json.data(using: .utf8)!)
+        guard let decoded = try? JSONDecoder().decode([String].self, from: Data(json.utf8)) else {
+            NSLog("Database: Failed to decode string array from JSON: %@", json)
+            return []
+        }
+        return decoded
     }
 
     private func encodeSignatureArray(_ sigs: [ProcessSignature]) -> String {
@@ -322,7 +340,11 @@ final class Database {
     }
 
     private func decodeSignatureArray(_ json: String) -> [ProcessSignature] {
-        try! JSONDecoder().decode([ProcessSignature].self, from: json.data(using: .utf8)!)
+        guard let decoded = try? JSONDecoder().decode([ProcessSignature].self, from: Data(json.utf8)) else {
+            NSLog("Database: Failed to decode signature array from JSON: %@", json)
+            return []
+        }
+        return decoded
     }
 
     private func canonicalRulesJSON(_ rules: [FAARule]) -> Data {
