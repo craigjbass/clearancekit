@@ -52,10 +52,12 @@ final class ProcessTree: @unchecked Sendable {
             // being replaced by a live ES event with the real pidversion).
             if let existing = pidIndex.withLock({ $0[record.identity.pid] }), existing != record.identity {
                 tree[existing] = nil
+                logger.debug("ProcessTree: replaced stale entry pid=\(existing.pid) pidversion=\(existing.pidVersion) with pidversion=\(record.identity.pidVersion)")
             }
             tree[record.identity] = record
         }
         pidIndex.withLock { $0[record.identity.pid] = record.identity }
+        logger.debug("ProcessTree: insert pid=\(record.identity.pid) pidversion=\(record.identity.pidVersion) parent_pid=\(record.parentIdentity.pid) parent_pidversion=\(record.parentIdentity.pidVersion) path=\(record.path, privacy: .public)")
     }
 
     /// Schedules deferred eviction of a process record. The entry is retained
@@ -77,7 +79,7 @@ final class ProcessTree: @unchecked Sendable {
     }
 
     func contains(identity: ProcessIdentity) -> Bool {
-        storage.withLock { $0[identity] != nil }
+        storage.withLock { lookup(identity, in: $0) != nil }
     }
 
     /// Returns ancestor chain for the given process, from immediate parent upward,

@@ -71,6 +71,12 @@ final class FilterInteractor {
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
 
+    /// AUTH_OPEN events are dispatched here so the ES callback thread stays
+    /// free to deliver NOTIFY_EXEC / NOTIFY_FORK / NOTIFY_EXIT events.
+    /// Without this, dwelling in waitForProcess would block the very events
+    /// that populate the ProcessTree.
+    private let authQueue = DispatchQueue(label: "uk.craigbass.clearancekit.auth-open", attributes: .concurrent)
+
     init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
@@ -93,7 +99,7 @@ final class FilterInteractor {
         case .exit(let identity):
             ProcessTree.shared.remove(identity: identity)
         case .openFile(let fileEvent):
-            handleOpenFile(fileEvent)
+            authQueue.async { self.handleOpenFile(fileEvent) }
         }
     }
 
@@ -143,7 +149,7 @@ final class FilterInteractor {
                     ruleID: matchingRule.id,
                     ruleName: matchingRule.protectedPathPrefix,
                     ruleSource: matchingRule.source,
-                    allowedCriteria: "ancestry required but process not found in tree before deadline"
+                    allowedCriteria: "ancestry required but process not found in tree before deadline (pid=\(fileEvent.processIdentity.pid) pidversion=\(fileEvent.processIdentity.pidVersion))"
                 )
                 break
             }
