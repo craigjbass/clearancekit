@@ -281,6 +281,21 @@ final class Database {
         )
     }
 
+    private func tableHasRows(_ table: String) -> Bool {
+        switch table {
+        case "user_rules":
+            var found = false
+            query("SELECT 1 FROM user_rules LIMIT 1") { _ in found = true }
+            return found
+        case "user_allowlist":
+            var found = false
+            query("SELECT 1 FROM user_allowlist LIMIT 1") { _ in found = true }
+            return found
+        default:
+            preconditionFailure("Unexpected table name: \(table)")
+        }
+    }
+
     private func verifySignature(table: String, content: Data) -> Bool {
         var signature: Data?
         query("SELECT signature FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
@@ -289,6 +304,10 @@ final class Database {
             signature = Data(bytes: blobPtr, count: Int(blobLen))
         }
         guard let sig = signature else {
+            guard !tableHasRows(table) else {
+                NSLog("Database: No signature for %@ but table has rows — rejecting as tampered", table)
+                return false
+            }
             NSLog("Database: No signature for %@ — signing now", table)
             updateSignature(table: table, content: content)
             return true
