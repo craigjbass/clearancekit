@@ -4,11 +4,16 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct PolicyView: View {
     @StateObject private var policyStore = PolicyStore.shared
     @State private var editingRule: FAARule? = nil
     @State private var isAddingRule = false
+    @State private var isExporting = false
+    @State private var importPreview: ImportPreviewItem? = nil
+    @State private var importError: String? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,15 +45,62 @@ struct PolicyView: View {
                 isAddingRule = false
             }
         }
+        .sheet(isPresented: $isExporting) {
+            PolicyExportView(rules: policyStore.userRules) {
+                isExporting = false
+            }
+        }
+        .sheet(item: $importPreview) { preview in
+            PolicyImportView(rules: preview.rules) { rules in
+                try await policyStore.addAll(rules, reason: "Import policy rules")
+                importPreview = nil
+            } onDismiss: {
+                importPreview = nil
+            }
+        }
+        .alert("Import Failed", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
     }
 
     private var toolbar: some View {
         HStack {
+            Button("Import Rules…") { openImportPanel() }
             Spacer()
+            Button("Export Rules…") { isExporting = true }
+                .disabled(policyStore.userRules.isEmpty)
             Button("Add Rule") { isAddingRule = true }
         }
         .padding()
         .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func openImportPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.title = "Import Policy Rules"
+        panel.message = "Select a clearancekit policy export file."
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let document = try PolicyExportDocument.decode(from: data)
+            let importedRules = document.rules.map(\.reimportedWithNewID)
+            guard !importedRules.isEmpty else {
+                importError = "The selected file contains no rules."
+                return
+            }
+            importPreview = ImportPreviewItem(rules: importedRules)
+        } catch {
+            importError = "Could not read the selected file: \(error.localizedDescription)"
+        }
     }
 
     @ViewBuilder
@@ -94,6 +146,13 @@ struct PolicyView: View {
             .listStyle(.inset)
         }
     }
+}
+
+// MARK: - ImportPreviewItem
+
+private struct ImportPreviewItem: Identifiable {
+    let id = UUID()
+    let rules: [FAARule]
 }
 
 // MARK: - RuleRow
@@ -153,5 +212,22 @@ private struct RuleRow: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - FAARule import helper
+
+private extension FAARule {
+    /// Returns a copy of the receiver with a fresh UUID, forced to the `.user` source tier.
+    /// Used when importing rules so each import produces an independent rule entry.
+    var reimportedWithNewID: FAARule {
+        FAARule(
+            protectedPathPrefix: protectedPathPrefix,
+            source: .user,
+            allowedProcessPaths: allowedProcessPaths,
+            allowedSignatures: allowedSignatures,
+            allowedAncestorProcessPaths: allowedAncestorProcessPaths,
+            allowedAncestorSignatures: allowedAncestorSignatures
+        )
     }
 }
