@@ -111,10 +111,6 @@ final class ProcessTree: @unchecked Sendable {
     /// This is inherently racy — processes may start or exit during enumeration —
     /// but NOTIFY_FORK / NOTIFY_EXEC / NOTIFY_EXIT events keep it accurate
     /// once the ES client is subscribed.
-    ///
-    /// Initial-scan entries use pidversion 0 because `proc_listallpids` does not
-    /// expose audit-token pidversions. Live ES events carry the real pidversion
-    /// and will replace these placeholder entries as processes fork/exec.
     func buildInitialTree() {
         let estimatedCount = proc_listallpids(nil, 0)
         guard estimatedCount > 0 else { return }
@@ -125,6 +121,17 @@ final class ProcessTree: @unchecked Sendable {
         let actualCount = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size)))
         guard actualCount > 0 else { return }
 
+        // First pass: obtain pidversion for every PID via TASK_AUDIT_TOKEN so
+        // parent identities can be resolved precisely in the second pass.
+        var pidVersions: [pid_t: UInt32] = [:]
+        pidVersions.reserveCapacity(actualCount)
+        for pid in pids.prefix(actualCount) where pid > 0 {
+            if let version = Self.pidVersion(of: pid) {
+                pidVersions[pid] = version
+            }
+        }
+
+        // Second pass: build records keyed by ProcessIdentity.
         var records: [ProcessIdentity: ProcessRecord] = [:]
         records.reserveCapacity(actualCount)
 
@@ -133,8 +140,8 @@ final class ProcessTree: @unchecked Sendable {
             guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0 else { continue }
 
             let parentPID = pid_t(bsdInfo.pbi_ppid)
-            let identity = ProcessIdentity(pid: pid, pidVersion: 0)
-            let parentIdentity = ProcessIdentity(pid: parentPID, pidVersion: 0)
+            let identity = ProcessIdentity(pid: pid, pidVersion: pidVersions[pid] ?? 0)
+            let parentIdentity = ProcessIdentity(pid: parentPID, pidVersion: pidVersions[parentPID] ?? 0)
 
             var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             let pathLen = proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN))
@@ -155,6 +162,23 @@ final class ProcessTree: @unchecked Sendable {
         storage.withLock { $0 = snapshot }
         pidIndex.withLock { $0 = index }
         logger.info("ProcessTree: initial scan complete — \(snapshot.count) processes")
+    }
+
+    /// Obtains the pidversion for a running process via its Mach task audit token.
+    private static func pidVersion(of pid: pid_t) -> UInt32? {
+        var task = mach_port_t()
+        guard task_name_for_pid(mach_task_self_, pid, &task) == KERN_SUCCESS else { return nil }
+        defer { mach_port_deallocate(mach_task_self_, task) }
+
+        var token = audit_token_t()
+        var count = mach_msg_type_number_t(MemoryLayout<audit_token_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &token) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                task_info(task, task_flavor_t(TASK_AUDIT_TOKEN), intPtr, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return token.val.7
     }
 }
 
