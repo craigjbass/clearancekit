@@ -93,10 +93,15 @@ final class FilterInteractor {
     func handle(_ event: FilterEvent) {
         switch event {
         case .fork(let child):
+            let name = URL(fileURLWithPath: child.path).lastPathComponent
+            logger.debug("FORK pid=\(child.identity.pid) pidversion=\(child.identity.pidVersion) process=\(name, privacy: .public)")
             ProcessTree.shared.insert(child)
         case .exec(let newImage):
+            let name = URL(fileURLWithPath: newImage.path).lastPathComponent
+            logger.debug("EXEC pid=\(newImage.identity.pid) pidversion=\(newImage.identity.pidVersion) process=\(name, privacy: .public)")
             ProcessTree.shared.insert(newImage)
         case .exit(let identity):
+            logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
             ProcessTree.shared.remove(identity: identity)
         case .openFile(let fileEvent):
             authQueue.async { self.handleOpenFile(fileEvent) }
