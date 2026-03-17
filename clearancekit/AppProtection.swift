@@ -29,6 +29,7 @@ struct AppProtection: Identifiable, Codable {
 enum AppProtectionError: LocalizedError {
     case inspectionFailed
     case alreadyExists
+    case notConnected
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +37,8 @@ enum AppProtectionError: LocalizedError {
             return "Could not read code signing information from this application."
         case .alreadyExists:
             return "A protection for this application already exists."
+        case .notConnected:
+            return "The policy service is not ready. Please wait a moment and try again."
         }
     }
 }

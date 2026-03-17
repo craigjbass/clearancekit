@@ -90,11 +90,15 @@ final class AppProtectionStore: ObservableObject {
     }
 
     func disable(_ protection: AppProtection) async throws {
+        guard XPCClient.shared.isConnected else { throw AppProtectionError.notConnected }
         guard let index = protections.firstIndex(where: { $0.id == protection.id }) else { return }
 
         // Snapshot current rules to preserve any modifications (e.g. signing IDs added from events)
         let currentRules = protections[index].ruleIDs.compactMap { ruleID in
             PolicyStore.shared.userRules.first { $0.id == ruleID }
+        }
+        guard currentRules.count == protections[index].ruleIDs.count else {
+            throw AppProtectionError.notConnected
         }
         protections[index].snapshotRules = currentRules
 
@@ -104,11 +108,15 @@ final class AppProtectionStore: ObservableObject {
     }
 
     func remove(_ protection: AppProtection) async throws {
+        guard XPCClient.shared.isConnected else { throw AppProtectionError.notConnected }
         guard let index = protections.firstIndex(where: { $0.id == protection.id }) else { return }
 
         if protections[index].isEnabled {
             let currentRules = protections[index].ruleIDs.compactMap { ruleID in
                 PolicyStore.shared.userRules.first { $0.id == ruleID }
+            }
+            guard currentRules.count == protections[index].ruleIDs.count else {
+                throw AppProtectionError.notConnected
             }
             try await PolicyStore.shared.removeAll(currentRules, reason: "Remove \(protection.appName) protection")
         }
