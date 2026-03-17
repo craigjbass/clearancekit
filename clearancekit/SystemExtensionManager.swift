@@ -106,6 +106,7 @@ extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
                 case .activating:
                     self.extensionStatus = .activated
                     self.statusMessage = "Extension activated"
+                    XPCClient.shared.reconnectAfterExtensionActivation()
                 case nil:
                     logger.error("SystemExtensionManager: didFinishWithResult called with no pending action")
                     self.extensionStatus = .unknown

@@ -34,6 +34,7 @@ struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @ObservedObject private var nav = NavigationState.shared
+    @State private var signatureIssue: PendingSignatureIssue? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,6 +63,15 @@ struct ContentView: View {
         .frame(minWidth: 720, minHeight: 480)
         .onAppear {
             xpcClient.connect()
+        }
+        .onChange(of: xpcClient.pendingSignatureIssue) { _, issue in
+            signatureIssue = issue
+        }
+        .sheet(item: $signatureIssue) { issue in
+            DatabaseSignatureIssueView(issue: issue) { approved in
+                xpcClient.resolveSignatureIssue(approved: approved)
+            }
+            .interactiveDismissDisabled()
         }
     }
 }

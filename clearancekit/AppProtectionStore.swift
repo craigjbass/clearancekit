@@ -126,8 +126,12 @@ final class AppProtectionStore: ObservableObject {
     }
 
     private func save() {
-        let data = try! JSONEncoder().encode(protections)
-        UserDefaults.standard.set(data, forKey: storageKey)
+        do {
+            let data = try JSONEncoder().encode(protections)
+            UserDefaults.standard.set(data, forKey: storageKey)
+        } catch {
+            logger.error("AppProtectionStore: Failed to encode protections for persistence: \(error)")
+        }
     }
 
     private func load() {
