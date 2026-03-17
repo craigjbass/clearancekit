@@ -49,6 +49,12 @@ struct clearancekitApp: App {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+        .onChange(of: xpcClient.pendingSignatureIssue) { _, issue in
+            if issue != nil {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
 
         let marketing = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         MenuBarExtra {
