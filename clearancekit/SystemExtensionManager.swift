@@ -26,17 +26,26 @@ final class SystemExtensionManager: NSObject, ObservableObject {
         case unknown
         case notInstalled
         case activating
+        case deactivating
         case activated
         case failed
     }
 
+    private enum PendingAction {
+        case activating
+        case deactivating
+    }
+
     private static let extensionBundleIdentifier = "uk.craigbass.clearancekit.opfilter"
+
+    private var pendingAction: PendingAction?
 
     private override init() {
         super.init()
     }
 
     func activateExtension() {
+        pendingAction = .activating
         extensionStatus = .activating
         statusMessage = "Requesting activation..."
 
@@ -54,7 +63,8 @@ final class SystemExtensionManager: NSObject, ObservableObject {
     }
 
     func deactivateExtension() {
-        extensionStatus = .activating
+        pendingAction = .deactivating
+        extensionStatus = .deactivating
         statusMessage = "Requesting deactivation..."
 
         let request = OSSystemExtensionRequest.deactivationRequest(
@@ -89,8 +99,18 @@ extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
         Task { @MainActor in
             switch result {
             case .completed:
-                self.extensionStatus = .activated
-                self.statusMessage = "Extension activated"
+                switch self.pendingAction {
+                case .deactivating:
+                    self.extensionStatus = .notInstalled
+                    self.statusMessage = "Extension deactivated"
+                case .activating:
+                    self.extensionStatus = .activated
+                    self.statusMessage = "Extension activated"
+                case nil:
+                    logger.error("SystemExtensionManager: didFinishWithResult called with no pending action")
+                    self.extensionStatus = .unknown
+                    self.statusMessage = "Unknown result"
+                }
             case .willCompleteAfterReboot:
                 self.extensionStatus = .activating
                 self.statusMessage = "Reboot required to complete"
@@ -98,6 +118,7 @@ extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
                 self.extensionStatus = .unknown
                 self.statusMessage = "Unknown result"
             }
+            self.pendingAction = nil
         }
     }
 
