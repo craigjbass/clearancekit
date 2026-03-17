@@ -1,8 +1,10 @@
 # ClearanceKit
 
-ClearanceKit enforces per-process file access policies on macOS using the Endpoint Security framework. Deny events are surfaced in a native SwiftUI interface, letting you build and refine rules interactively without writing configuration files.
+Every `npm install`, `pip install`, and `brew upgrade` executes arbitrary native code with your full file system permissions. One compromised package can silently read your SSH keys, AWS credentials, iMessages, and browser cookies. You will not know until it is too late.
 
-It also supports process ancestry checks within policies, which allows rules that permit typical "living off the land" sub-processes. Note that ancestry checks are more resource-intensive, so it is recommended to scope paths as tightly as possible.
+ClearanceKit intercepts every file-open event on macOS and enforces per-process access policies. Any process without an explicit allow rule is blocked. Denied events surface in a native SwiftUI interface so you can review them and build policy as you work — no configuration files required.
+
+Policies are bound to cryptographic code signing identity — the Developer ID certificate and bundle identifier embedded in the binary — not to file paths or hashes. A trojanised binary is denied even if it sits at the expected path. Policies survive software updates without any maintenance, because a developer's signing identity does not change between releases.
 
 ![clearancekit in action](Screenshots/recording.gif)
 
