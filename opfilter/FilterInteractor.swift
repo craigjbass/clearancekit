@@ -98,23 +98,64 @@ final class FilterInteractor {
     }
 
     private func handleOpenFile(_ fileEvent: OpenFileEvent) {
-        let dwellNanoseconds = waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
         let allowlist = allowlistStorage.withLock { $0 }
-        let rules = rulesStorage.withLock { $0 }
-        let ancestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
-        let decision = evaluateAccess(
-            rules: rules,
-            allowlist: allowlist,
-            path: fileEvent.path,
-            processPath: fileEvent.processPath,
-            teamID: fileEvent.teamID,
-            signingID: fileEvent.signingID,
-            ancestors: ancestors
-        )
 
-        if case .globallyAllowed = decision {
+        // Fast path: globally allowlisted processes bypass all rule evaluation.
+        if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             fileEvent.respond(true)
             return
+        }
+
+        let rules = rulesStorage.withLock { $0 }
+        let classification = classifyPath(fileEvent.path, rules: rules)
+
+        let dwellNanoseconds: UInt64
+        let ancestors: [AncestorInfo]
+        let decision: PolicyDecision
+
+        switch classification {
+        case .noRuleApplies:
+            dwellNanoseconds = 0
+            ancestors = []
+            decision = .noRuleApplies
+
+        case .processLevelOnly:
+            // Matching rule has only process-level criteria — evaluate
+            // immediately using data from the AUTH_OPEN event.
+            dwellNanoseconds = 0
+            ancestors = []
+            decision = checkFAAPolicy(
+                rules: rules, path: fileEvent.path,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID
+            )
+
+        case .ancestryRequired(let matchingRule):
+            // Ancestry data is needed. Dwell until the process appears in
+            // the tree, then look up ancestors for evaluation.
+            dwellNanoseconds = waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
+
+            guard ProcessTree.shared.contains(identity: fileEvent.processIdentity) else {
+                // Process never appeared before the deadline — fail safe.
+                ancestors = []
+                decision = .denied(
+                    ruleID: matchingRule.id,
+                    ruleName: matchingRule.protectedPathPrefix,
+                    ruleSource: matchingRule.source,
+                    allowedCriteria: "ancestry required but process not found in tree before deadline"
+                )
+                break
+            }
+
+            ancestors = ProcessTree.shared.ancestors(of: fileEvent.processIdentity)
+            decision = checkFAAPolicy(
+                rules: rules, path: fileEvent.path,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID,
+                ancestors: ancestors
+            )
         }
 
         let allowed = decision.isAllowed

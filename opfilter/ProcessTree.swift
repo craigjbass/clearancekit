@@ -41,6 +41,9 @@ final class ProcessTree: @unchecked Sendable {
     /// can resolve to the live ES-sourced identity.
     private let pidIndex = OSAllocatedUnfairLock(initialState: [pid_t: ProcessIdentity]())
 
+    private static let postExitRetention: TimeInterval = 60
+    private let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction")
+
     private init() {}
 
     func insert(_ record: ProcessRecord) {
@@ -55,15 +58,22 @@ final class ProcessTree: @unchecked Sendable {
         pidIndex.withLock { $0[record.identity.pid] = record.identity }
     }
 
+    /// Schedules deferred eviction of a process record. The entry is retained
+    /// for 60 seconds after exit so ancestor lookups remain available even if
+    /// a parent exits shortly before its child's AUTH_OPEN is processed.
     func remove(identity: ProcessIdentity) {
-        storage.withLock { tree in
-            tree[identity] = nil
-            // Also remove any stale placeholder that shares the PID.
-            if let indexed = pidIndex.withLock({ $0[identity.pid] }), indexed != identity {
-                tree[indexed] = nil
+        evictionQueue.asyncAfter(deadline: .now() + Self.postExitRetention) { [self] in
+            storage.withLock { tree in
+                tree[identity] = nil
+            }
+            pidIndex.withLock { index in
+                // Only clear the PID index if it still points to the exited process.
+                // A new process may have already claimed this PID via insert().
+                if index[identity.pid] == identity {
+                    index[identity.pid] = nil
+                }
             }
         }
-        pidIndex.withLock { $0[identity.pid] = nil }
     }
 
     func contains(identity: ProcessIdentity) -> Bool {

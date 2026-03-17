@@ -132,6 +132,10 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public let allowedAncestorProcessPaths: [String]
     public let allowedAncestorSignatures: [ProcessSignature]
 
+    public var requiresAncestry: Bool {
+        !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
+    }
+
     public init(
         id: UUID = UUID(),
         protectedPathPrefix: String,
@@ -310,6 +314,27 @@ public func checkFAAPolicy(
         return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
+}
+
+// MARK: - Path classification
+
+public enum PathRuleClassification {
+    /// No rule covers this path — default allow, no dwelling needed.
+    case noRuleApplies
+    /// The matching rule has only process-level criteria — can evaluate immediately.
+    case processLevelOnly(matchingRule: FAARule)
+    /// The matching rule requires ancestry data — must dwell for process tree.
+    case ancestryRequired(matchingRule: FAARule)
+}
+
+/// Classifies a file path against the rule set to determine whether ancestry
+/// data is needed before evaluating access. Uses first-match-wins semantics,
+/// matching `checkFAAPolicy`.
+public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassification {
+    guard let matchingRule = rules.first(where: { pathIsProtected(path, by: $0.protectedPathPrefix) }) else {
+        return .noRuleApplies
+    }
+    return matchingRule.requiresAncestry ? .ancestryRequired(matchingRule: matchingRule) : .processLevelOnly(matchingRule: matchingRule)
 }
 
 // MARK: - Unified access evaluation

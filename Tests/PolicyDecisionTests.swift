@@ -639,3 +639,90 @@ struct AccessEvaluationTests {
         #expect(decision.reason.contains("process path"))
     }
 }
+
+// MARK: - FAARule.requiresAncestry
+
+@Suite("FAARule.requiresAncestry")
+struct RequiresAncestryTests {
+    @Test("rule with only process criteria does not require ancestry")
+    func processOnlyRule() {
+        let rule = FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/usr/bin/safe"])
+        #expect(!rule.requiresAncestry)
+    }
+
+    @Test("rule with only signature criteria does not require ancestry")
+    func signatureOnlyRule() {
+        let rule = FAARule(protectedPathPrefix: "/protected", allowedSignatures: [ProcessSignature(teamID: "T", signingID: "*")])
+        #expect(!rule.requiresAncestry)
+    }
+
+    @Test("rule with ancestor process paths requires ancestry")
+    func ancestorPathsRule() {
+        let rule = FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])
+        #expect(rule.requiresAncestry)
+    }
+
+    @Test("rule with ancestor signatures requires ancestry")
+    func ancestorSignaturesRule() {
+        let rule = FAARule(protectedPathPrefix: "/protected", allowedAncestorSignatures: [ProcessSignature(teamID: "T", signingID: "*")])
+        #expect(rule.requiresAncestry)
+    }
+
+    @Test("empty rule does not require ancestry")
+    func emptyRule() {
+        let rule = FAARule(protectedPathPrefix: "/protected")
+        #expect(!rule.requiresAncestry)
+    }
+}
+
+// MARK: - classifyPath
+
+@Suite("classifyPath")
+struct ClassifyPathTests {
+    @Test("unprotected path returns noRuleApplies")
+    func unprotectedPath() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/safe"])]
+        guard case .noRuleApplies = classifyPath("/unrelated/file", rules: rules) else {
+            Issue.record("Expected .noRuleApplies")
+            return
+        }
+    }
+
+    @Test("path matching process-only rule returns processLevelOnly")
+    func processOnlyRuleClassification() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedSignatures: [ProcessSignature(teamID: "T", signingID: "*")])]
+        guard case .processLevelOnly = classifyPath("/protected/file", rules: rules) else {
+            Issue.record("Expected .processLevelOnly")
+            return
+        }
+    }
+
+    @Test("path matching ancestry rule returns ancestryRequired")
+    func ancestryRuleClassification() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])]
+        guard case .ancestryRequired = classifyPath("/protected/file", rules: rules) else {
+            Issue.record("Expected .ancestryRequired")
+            return
+        }
+    }
+
+    @Test("first-match-wins — earlier process-only rule takes precedence")
+    func firstMatchWins() {
+        let rules = [
+            FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/safe"]),
+            FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/parent"]),
+        ]
+        guard case .processLevelOnly = classifyPath("/protected/file", rules: rules) else {
+            Issue.record("Expected .processLevelOnly from first matching rule")
+            return
+        }
+    }
+
+    @Test("empty rules returns noRuleApplies")
+    func emptyRules() {
+        guard case .noRuleApplies = classifyPath("/anything", rules: []) else {
+            Issue.record("Expected .noRuleApplies")
+            return
+        }
+    }
+}
