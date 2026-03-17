@@ -30,7 +30,6 @@ final class XPCServer: NSObject {
     private let database: Database
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
-    private var xprotectWatcher: XProtectWatcher?
 
     init(interactor: FilterInteractor, adapter: ESInboundAdapter) {
         self.interactor = interactor
@@ -72,13 +71,9 @@ final class XPCServer: NSObject {
         listener?.delegate = self
         listener?.resume()
         logger.info("XPCServer: Listening on \(XPCConstants.serviceName, privacy: .public)")
-
-        let watcher = XProtectWatcher { [weak self] in self?.handleXProtectChange() }
-        watcher.start()
-        xprotectWatcher = watcher
     }
 
-    private func handleXProtectChange() {
+    func handleXProtectChange() {
         let reloaded = enumerateXProtectEntries()
         lock.lock()
         let currentPaths = Set(xprotectEntries.map(\.processPath))
