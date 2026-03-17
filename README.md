@@ -33,6 +33,14 @@ What can it reach?
 
 clearancekit places the Endpoint Security framework between every file-open event and the process that triggered it. When a process you did not explicitly allow attempts to read a protected path — your `~/.ssh` directory, your Notes database, your browser profile — clearancekit intercepts the access, denies it, and surfaces it in the UI so you can decide whether to add a policy or investigate further.
 
+### Why code signing makes this stronger than SELinux
+
+SELinux and similar mandatory access control systems bind permissions to file paths and process labels. A policy that says "processes labelled `python_t` may read `/home/user/.aws/credentials`" trusts whatever binary happens to be executing at that label — it has no way to verify that the binary is the real Python interpreter and not a malicious replacement. An attacker who plants a trojanised binary at the expected path, or who hijacks a process through a vulnerability, inherits all of its SELinux permissions.
+
+macOS code signatures are cryptographic. Every policy in ClearanceKit can require a specific Team ID and Signing ID — the Developer ID certificate issued to a specific organisation and the bundle identifier declared in the binary. These are verified by the kernel against the binary's embedded signature at the point the process is created. A malicious `npm postinstall` script, a dylib injected into a legitimate process, or a trojanised replacement binary will carry a different signature — or none at all — and will be denied regardless of where it lives on disk.
+
+This means ClearanceKit policies express intent like "only the Safari binary signed by Apple may read Safari's cookie store", and that guarantee holds even if an attacker controls the file system.
+
 ## Installation
 
 Download the latest DMG from the [Releases](../../releases) page, open it, and drag clearancekit to Applications.
