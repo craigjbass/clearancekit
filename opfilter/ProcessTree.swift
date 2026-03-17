@@ -44,7 +44,7 @@ final class ProcessTree: @unchecked Sendable {
     }
 
     /// Returns ancestor chain for the given PID, from immediate parent upward,
-    /// stopping when a PID is not present in the tree or when launchd (PID 1) is reached.
+    /// stopping when a PID is not present in the tree or a cycle is detected.
     func ancestors(ofPID pid: pid_t) -> [AncestorInfo] {
         storage.withLock { tree in
             var result: [AncestorInfo] = []
@@ -52,7 +52,7 @@ final class ProcessTree: @unchecked Sendable {
             var seen: Set<pid_t> = [currentPID]
 
             while let record = tree[currentPID] {
-                guard record.parentPID > 1, !seen.contains(record.parentPID) else { break }
+                guard !seen.contains(record.parentPID) else { break }
                 seen.insert(record.parentPID)
                 guard let parent = tree[record.parentPID] else { break }
                 result.append(AncestorInfo(path: parent.path, teamID: parent.teamID, signingID: parent.signingID, uid: parent.uid, gid: parent.gid))
