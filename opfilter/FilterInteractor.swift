@@ -181,7 +181,7 @@ final class FilterInteractor {
             "user=\(userName)",
             "gid=\(fileEvent.gid)",
             "group=\(groupName)",
-            "team_id=\(fileEvent.teamID)",
+            "team_id=\(resolveTeamID(fileEvent.teamID))",
             "codesigning_id=\(fileEvent.signingID)",
             "ancestry_tree=\(ancestryTree)",
             "dwell_ns=\(dwellNanoseconds)",
@@ -205,9 +205,13 @@ final class FilterInteractor {
             let name = URL(fileURLWithPath: ancestor.path).lastPathComponent
             let user = resolveUserName(uid: ancestor.uid)
             let group = resolveGroupName(gid: ancestor.gid)
-            return "process=\(name),processpath=\(ancestor.path),uid=\(ancestor.uid),user=\(user),gid=\(ancestor.gid),group=\(group),team_id=\(ancestor.teamID),codesigning_id=\(ancestor.signingID)"
+            return "process=\(name),processpath=\(ancestor.path),uid=\(ancestor.uid),user=\(user),gid=\(ancestor.gid),group=\(group),team_id=\(resolveTeamID(ancestor.teamID)),codesigning_id=\(ancestor.signingID)"
         }
         return entries.map { "(\($0))" }.joined(separator: "->")
+    }
+
+    private func resolveTeamID(_ teamID: String) -> String {
+        teamID.isEmpty ? appleTeamID : teamID
     }
 
     private func resolveUserName(uid: uid_t) -> String {
