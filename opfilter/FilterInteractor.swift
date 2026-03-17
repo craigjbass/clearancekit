@@ -255,10 +255,8 @@ final class FilterInteractor {
     private func formatAncestryTree(_ ancestors: [AncestorInfo]) -> String {
         guard !ancestors.isEmpty else { return "()" }
         let entries = ancestors.map { ancestor -> String in
-            let name = URL(fileURLWithPath: ancestor.path).lastPathComponent
             let user = resolveUserName(uid: ancestor.uid)
-            let group = resolveGroupName(gid: ancestor.gid)
-            return "process=\(name),processpath=\(ancestor.path),uid=\(ancestor.uid),user=\(user),gid=\(ancestor.gid),group=\(group),team_id=\(resolveTeamID(ancestor.teamID)),codesigning_id=\(ancestor.signingID)"
+            return "user=\(user),signature=\(resolveTeamID(ancestor.teamID)):\(ancestor.signingID)"
         }
         return entries.map { "(\($0))" }.joined(separator: "->")
     }
