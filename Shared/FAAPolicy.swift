@@ -14,6 +14,10 @@ import Foundation
 /// this identifier lets policy rules reference them explicitly.
 public let appleTeamID = "apple"
 
+/// Sentinel value displayed when a process has no resolvable code signature —
+/// both teamID and signingID are empty.
+public let invalidSignature = "<invalid>"
+
 // MARK: - RuleSource
 
 public enum RuleSource: String, Codable, Equatable {

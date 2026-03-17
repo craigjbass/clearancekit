@@ -255,11 +255,16 @@ struct EventRow: View {
                     .lineLimit(1)
             }
         }
+        let hasNoSignature = event.teamID.isEmpty && event.signingID.isEmpty
         HStack {
-            Text("Team: \(event.teamID.isEmpty ? "Apple" : event.teamID)")
+            Text("Team: \(hasNoSignature ? invalidSignature : (event.teamID.isEmpty ? "apple" : event.teamID))")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            if !event.signingID.isEmpty {
+            if hasNoSignature {
+                Text("Signing: \(invalidSignature)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if !event.signingID.isEmpty {
                 if canAllowDeny, let ruleID = event.matchedRuleID {
                     allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
                         try await PolicyStore.shared.allowProcess(
@@ -281,6 +286,7 @@ struct EventRow: View {
     private var ancestorsSection: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(Array(event.ancestors.enumerated()), id: \.offset) { index, ancestor in
+                let ancestorHasNoSignature = ancestor.teamID.isEmpty && ancestor.signingID.isEmpty
                 HStack(spacing: 4) {
                     Text(String(repeating: "  ", count: index) + "↳")
                         .font(.caption)
@@ -291,10 +297,14 @@ struct EventRow: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                         HStack {
-                            Text("Team: \(ancestor.teamID.isEmpty ? "Apple" : ancestor.teamID)")
+                            Text("Team: \(ancestorHasNoSignature ? invalidSignature : (ancestor.teamID.isEmpty ? "apple" : ancestor.teamID))")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
-                            if !ancestor.signingID.isEmpty {
+                            if ancestorHasNoSignature {
+                                Text("Signing: \(invalidSignature)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            } else if !ancestor.signingID.isEmpty {
                                 if canAllowDeny, let ruleID = event.matchedRuleID {
                                     allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
                                         try await PolicyStore.shared.allowAncestor(
