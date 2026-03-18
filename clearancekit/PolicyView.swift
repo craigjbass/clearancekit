@@ -92,12 +92,11 @@ struct PolicyView: View {
         do {
             let data = try Data(contentsOf: url)
             let document = try PolicyExportDocument.decode(from: data)
-            let importedRules = document.rules.map(\.reimportedWithNewID)
-            guard !importedRules.isEmpty else {
+            guard !document.rules.isEmpty else {
                 importError = "The selected file contains no rules."
                 return
             }
-            importPreview = ImportPreviewItem(rules: importedRules)
+            importPreview = ImportPreviewItem(rules: document.rules)
         } catch {
             importError = "Could not read the selected file: \(error.localizedDescription)"
         }
@@ -212,22 +211,5 @@ private struct RuleRow: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - FAARule import helper
-
-private extension FAARule {
-    /// Returns a copy of the receiver with a fresh UUID, forced to the `.user` source tier.
-    /// Used when importing rules so each import produces an independent rule entry.
-    var reimportedWithNewID: FAARule {
-        FAARule(
-            protectedPathPrefix: protectedPathPrefix,
-            source: .user,
-            allowedProcessPaths: allowedProcessPaths,
-            allowedSignatures: allowedSignatures,
-            allowedAncestorProcessPaths: allowedAncestorProcessPaths,
-            allowedAncestorSignatures: allowedAncestorSignatures
-        )
     }
 }
