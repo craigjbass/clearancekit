@@ -93,3 +93,112 @@ View extension logs:
 ```
 log stream --predicate 'subsystem == "uk.craigbass.clearancekit.opfilter"' --level debug
 ```
+
+## Managing with MDM
+
+ClearanceKit can receive policy from any MDM solution that delivers Apple Configuration Profile payloads. The managed preferences are read from `/Library/Managed Preferences/uk.craigbass.clearancekit.plist` via `CFPreferences`, so any MDM system that delivers a `com.apple.ManagedClient.preferences` payload for the `uk.craigbass.clearancekit` domain will work.
+
+A reference `.mobileconfig` profile is provided at `scripts/clearancekit-managed-policy.mobileconfig`.
+
+### Generating UUIDs
+
+Every rule, protection, and MDM payload entry requires a unique UUID. **Always generate UUIDs using `uuidgen`** — never invent values by hand or reuse UUIDs from examples. Duplicate or invented UUIDs will cause rules to collide or be silently overwritten.
+
+```
+uuidgen
+```
+
+Run this once for each UUID you need. The output is already in the correct uppercase format.
+
+### FAAPolicy — file access control rules
+
+Delivered as an array under the `FAAPolicy` preference key. Each entry creates a file access rule in the MDM tier (read-only in the GUI).
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `ID` | string | No | Stable UUID for this rule. Omit to auto-derive from `ProtectedPathPrefix`. Always generate with `uuidgen`. |
+| `ProtectedPathPrefix` | string | **Yes** | Path or glob pattern to protect. Supports `*` (within a component), `**` (across levels), and `?`. |
+| `AllowedSignatures` | array of strings | No | Processes allowed by code signing identity, each in `teamID:signingID` format. |
+| `AllowedProcessPaths` | array of strings | No | Processes allowed by executable path. |
+| `AllowedAncestorSignatures` | array of strings | No | Parent processes allowed by signing identity, each in `teamID:signingID` format. |
+| `AllowedAncestorProcessPaths` | array of strings | No | Parent processes allowed by path. |
+
+#### The `teamID:signingID` format
+
+Every signature entry is a colon-separated pair:
+
+- **teamID** — the Apple-issued Team ID embedded in the Developer ID certificate. You can find this in your Apple Developer account or by running `codesign -dv --verbose=4 /path/to/app` and reading the `TeamIdentifier` field.
+- **signingID** — the bundle identifier embedded in the binary's code signature. Visible as `Identifier` in `codesign -dv` output.
+
+Use `apple` as the `teamID` for Apple platform binaries, which carry an empty Team ID in their code signature.
+
+Use `*` as the `signingID` to allow any binary from a given team:
+
+```
+37KMK6XFTT:*                              — any binary signed by team 37KMK6XFTT
+apple:com.apple.Safari                    — Safari signed by Apple
+37KMK6XFTT:uk.craigbass.clearancekit     — clearancekit app only
+```
+
+#### Example
+
+```xml
+<key>FAAPolicy</key>
+<array>
+    <dict>
+        <key>ID</key>
+        <string><!-- uuidgen --></string>
+        <key>ProtectedPathPrefix</key>
+        <string>/Users/*/Documents/company-secrets</string>
+        <key>AllowedSignatures</key>
+        <array>
+            <string>ABCDE12345:com.yourcompany.app</string>
+            <string>apple:com.apple.finder</string>
+        </array>
+    </dict>
+</array>
+```
+
+### GlobalAllowlist — process bypass list
+
+Delivered as an array under the `GlobalAllowlist` preference key. Each entry adds a process to the global allowlist, which bypasses all FAAPolicy rules.
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `ID` | string | No | Stable UUID. Omit to auto-derive. Always generate with `uuidgen`. |
+| `SigningID` | string | One of `SigningID` or `ProcessPath` | Match by code signing identifier. |
+| `ProcessPath` | string | One of `SigningID` or `ProcessPath` | Match by executable path. |
+| `PlatformBinary` | bool | No | If `true`, the process must carry an empty Team ID (Apple platform binary). |
+| `TeamID` | string | No | Additional Team ID constraint when `PlatformBinary` is `false`. |
+
+### AppProtections — named rule groupings
+
+Delivered as an array under the `AppProtections` preference key. Each entry groups one or more `FAAPolicy` rules under a named app protection, which appears read-only in the GUI under **App Protections → Managed**.
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `ID` | string | No | Stable UUID for this protection. Omit to auto-derive from `AppName`. Always generate with `uuidgen`. |
+| `AppName` | string | **Yes** | Display name shown in the clearancekit GUI. |
+| `BundleID` | string | No | Application bundle identifier, used to look up the app icon when the app is installed locally. |
+| `RuleIDs` | array of strings | **Yes** | UUIDs of `FAAPolicy` entries (from the `FAAPolicy` array) that belong to this protection. These must match the `ID` values specified in those rules. |
+
+#### Example
+
+```xml
+<key>AppProtections</key>
+<array>
+    <dict>
+        <key>ID</key>
+        <string><!-- uuidgen --></string>
+        <key>AppName</key>
+        <string>Company Secrets</string>
+        <key>BundleID</key>
+        <string>com.yourcompany.app</string>
+        <key>RuleIDs</key>
+        <array>
+            <!-- Must match the ID of a FAAPolicy entry above -->
+            <string><!-- uuidgen (same as FAAPolicy ID) --></string>
+        </array>
+    </dict>
+</array>
+```

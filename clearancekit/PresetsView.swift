@@ -32,6 +32,14 @@ struct PresetsView: View {
                 }
                 addApplicationButton
             }
+            if !protectionStore.managedProtections.isEmpty {
+                Section("Managed") {
+                    ForEach(protectionStore.managedProtections) { protection in
+                        ManagedProtectionRow(protection: protection)
+                            .padding(.vertical, 6)
+                    }
+                }
+            }
             Section("Built-in") {
                 ForEach(builtInPresets) { preset in
                     PresetRow(preset: preset, userRules: policyStore.userRules)
@@ -336,6 +344,48 @@ private struct CustomProtectionRow: View {
                 // stores only update on success.
             }
         }
+    }
+}
+
+// MARK: - ManagedProtectionRow
+
+private struct ManagedProtectionRow: View {
+    let protection: AppProtection
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(nsImage: protection.icon)
+                .resizable()
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(protection.appName)
+                        .font(.headline)
+                    managedBadge
+                }
+                Text(protectionSummary)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+
+    private var protectionSummary: String {
+        let count = protection.ruleIDs.count
+        return "\(count) protected \(count == 1 ? "path" : "paths")"
+    }
+
+    private var managedBadge: some View {
+        Text("managed")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 

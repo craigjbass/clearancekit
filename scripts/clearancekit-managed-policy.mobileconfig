@@ -8,6 +8,11 @@
     <string>Restricts access to /opt/ur-mum to processes signed by team 37KMK6XFTT.</string>
     <key>PayloadIdentifier</key>
     <string>uk.craigbass.clearancekit.managed-policy</string>
+    <!--
+        Every PayloadUUID must be a unique, randomly generated UUID.
+        Never reuse UUIDs across profiles or invent values by hand.
+        Generate one with: uuidgen
+    -->
     <key>PayloadUUID</key>
     <string>4F8A2C1E-3B7D-4E90-A5F6-8C2D1B9E0347</string>
     <key>PayloadType</key>
@@ -35,6 +40,9 @@
             <string>clearancekit FAA Policy</string>
             <key>PayloadIdentifier</key>
             <string>uk.craigbass.clearancekit.managed-policy.preferences</string>
+            <!--
+                Generate with: uuidgen
+            -->
             <key>PayloadUUID</key>
             <string>7D3F1A8B-C2E4-4690-B8A1-5E9F2C4D7038</string>
             <key>PayloadVersion</key>
@@ -54,16 +62,91 @@
                         <dict>
                             <key>mcx_preference_settings</key>
                             <dict>
+                                <!--
+                                    FAAPolicy — file access control rules.
+
+                                    Each entry protects a path prefix and lists
+                                    which processes are allowed to open files
+                                    under it. All other processes are denied.
+
+                                    ID (optional): stable UUID for this rule.
+                                        Omit to auto-derive from ProtectedPathPrefix.
+                                        When specified, generate with: uuidgen
+
+                                    AllowedSignatures: each entry is a
+                                        "teamID:signingID" string. Use the
+                                        Apple-issued Team ID and the bundle
+                                        identifier embedded in the binary.
+                                        Examples:
+                                          "37KMK6XFTT:*"
+                                              — any binary signed by team 37KMK6XFTT
+                                          "apple:com.apple.Safari"
+                                              — Safari signed by Apple
+                                          "37KMK6XFTT:uk.craigbass.clearancekit"
+                                              — the clearancekit app specifically
+                                        Use "apple" as the teamID for Apple
+                                        platform binaries (those with an empty
+                                        Team ID in their code signature).
+                                -->
                                 <key>FAAPolicy</key>
                                 <array>
                                     <dict>
+                                        <!--
+                                            Generate rule IDs with: uuidgen
+                                        -->
                                         <key>ID</key>
                                         <string>B6E2F9A1-4C3D-5E8F-A071-2B94C6D3E507</string>
                                         <key>ProtectedPathPrefix</key>
                                         <string>/opt/ur-mum</string>
-                                        <key>AllowedTeamIDs</key>
+                                        <!--
+                                            AllowedSignatures uses "teamID:signingID" format.
+                                            "37KMK6XFTT:*" allows any binary from team 37KMK6XFTT.
+                                        -->
+                                        <key>AllowedSignatures</key>
                                         <array>
-                                            <string>37KMK6XFTT</string>
+                                            <string>37KMK6XFTT:*</string>
+                                        </array>
+                                    </dict>
+                                </array>
+
+                                <!--
+                                    AppProtections — named groupings of FAAPolicy
+                                    rules shown in the clearancekit GUI under
+                                    "App Protections → Managed".
+
+                                    Each entry links a display name to one or
+                                    more FAAPolicy rule IDs, letting the GUI
+                                    show which app a set of rules belongs to.
+
+                                    ID (optional): stable UUID for this protection.
+                                        Omit to auto-derive from AppName.
+                                        When specified, generate with: uuidgen
+
+                                    AppName (required): display name shown in the GUI.
+
+                                    BundleID (optional): the application's bundle
+                                        identifier, used to look up the app icon.
+
+                                    RuleIDs (required): UUIDs of FAAPolicy rules
+                                        (from the FAAPolicy array above) that belong
+                                        to this protection. Generate these with:
+                                        uuidgen
+                                -->
+                                <key>AppProtections</key>
+                                <array>
+                                    <dict>
+                                        <!--
+                                            Generate with: uuidgen
+                                        -->
+                                        <key>ID</key>
+                                        <string>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</string>
+                                        <key>AppName</key>
+                                        <string>Example App</string>
+                                        <key>BundleID</key>
+                                        <string>com.example.app</string>
+                                        <key>RuleIDs</key>
+                                        <array>
+                                            <string>B6E2F9A1-4C3D-5E8F-A071-2B94C6D3E507</string>
                                         </array>
                                     </dict>
                                 </array>

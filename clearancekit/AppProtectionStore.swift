@@ -15,7 +15,12 @@ private nonisolated(unsafe) let logger = Logger(subsystem: "uk.craigbass.clearan
 final class AppProtectionStore: ObservableObject {
     static let shared = AppProtectionStore()
 
+    /// User-created app protections persisted in UserDefaults.
     @Published private(set) var protections: [AppProtection] = []
+
+    /// App protections delivered via MDM. Read-only — cannot be edited or deleted.
+    @Published private(set) var managedProtections: [AppProtection] = []
+
     @Published private(set) var activeDiscovery: DiscoverySession? {
         didSet { forwardDiscoveryChanges() }
     }
@@ -25,6 +30,7 @@ final class AppProtectionStore: ObservableObject {
 
     private init() {
         load()
+        managedProtections = ManagedAppProtectionLoader.load()
     }
 
     private func forwardDiscoveryChanges() {
