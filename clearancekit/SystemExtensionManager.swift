@@ -39,9 +39,27 @@ final class SystemExtensionManager: NSObject, ObservableObject {
     private static let extensionBundleIdentifier = "uk.craigbass.clearancekit.opfilter"
 
     private var pendingAction: PendingAction?
+    private var isReplacing = false
 
     private override init() {
         super.init()
+    }
+
+    func replaceExtension() {
+        isReplacing = true
+        pendingAction = .deactivating
+        extensionStatus = .deactivating
+        statusMessage = "Updating..."
+
+        let request = OSSystemExtensionRequest.deactivationRequest(
+            forExtensionWithIdentifier: Self.extensionBundleIdentifier,
+            queue: .main
+        )
+        request.delegate = self
+        DispatchQueue.global(qos: .userInitiated).async {
+            OSSystemExtensionManager.shared.submitRequest(request)
+        }
+        logger.info("SystemExtensionManager: Submitted deactivation request for replacement")
     }
 
     func activateExtension() {
@@ -101,6 +119,11 @@ extension SystemExtensionManager: OSSystemExtensionRequestDelegate {
             case .completed:
                 switch self.pendingAction {
                 case .deactivating:
+                    if self.isReplacing {
+                        self.isReplacing = false
+                        self.activateExtension()
+                        return
+                    }
                     self.extensionStatus = .notInstalled
                     self.statusMessage = "Extension deactivated"
                 case .activating:

@@ -165,13 +165,15 @@ struct SetupView: View {
             Text(extensionManager.statusMessage)
                 .foregroundColor(.secondary)
             if serviceIsOutOfDate {
-                Text("(v\(xpcClient.serviceVersion) — reactivate to update)")
+                Text("v\(xpcClient.serviceVersion)")
                     .foregroundStyle(.orange)
                     .font(.caption)
             }
             Spacer()
             if extensionManager.extensionStatus != .activated {
                 Button("Activate") { extensionManager.activateExtension() }
+            } else if serviceIsOutOfDate {
+                Button("Update") { extensionManager.replaceExtension() }
             } else {
                 Button("Deactivate") { extensionManager.deactivateExtension() }
             }
