@@ -50,6 +50,12 @@ jobs:
           echo "$PP_EXT_BASE64" | base64 --decode \
             > ~/Library/MobileDevice/Provisioning\ Profiles/opfilter.provisionprofile
 
+      - name: Test
+        run: |
+          xcodebuild test \
+            -scheme clearancekitTests \
+            -destination 'platform=macOS'
+
       - name: Archive
         run: |
           xcodebuild archive \
