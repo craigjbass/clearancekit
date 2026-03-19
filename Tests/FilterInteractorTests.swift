@@ -60,8 +60,9 @@ struct FilterInteractorTests {
         processIdentity: ProcessIdentity? = nil,
         deadline: UInt64 = 0,
         respond: @escaping @Sendable (Bool) -> Void
-    ) -> OpenFileEvent {
-        OpenFileEvent(
+    ) -> FileAuthEvent {
+        FileAuthEvent(
+            operation: .open,
             path: path,
             processIdentity: processIdentity ?? identity(pid: 100),
             processID: 100,
@@ -122,7 +123,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == true)
@@ -151,7 +152,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == true)
@@ -178,7 +179,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == false)
@@ -203,7 +204,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == true)
@@ -228,7 +229,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == false)
@@ -253,7 +254,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == false)
@@ -281,7 +282,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.openFile(event))
+        interactor.handle(.fileAuth(event))
         semaphore.wait()
 
         #expect(allowed == true)

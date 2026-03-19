@@ -25,9 +25,16 @@ final class ESInboundAdapter {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
             switch message.pointee.event_type {
-            case ES_EVENT_TYPE_NOTIFY_WRITE, ES_EVENT_TYPE_NOTIFY_RENAME, ES_EVENT_TYPE_NOTIFY_UNLINK:
+            case ES_EVENT_TYPE_NOTIFY_WRITE:
                 guard Self.isXProtectEvent(message) else { return }
                 onXProtectChanged()
+            case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
+                guard !Self.isXProtectEvent(message) else {
+                    es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                    onXProtectChanged()
+                    return
+                }
+                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
                 // If path data is unavailable for an open event, deny at the adapter boundary
                 // before constructing a domain event.
@@ -51,12 +58,17 @@ final class ESInboundAdapter {
 
         let eventTypes: [es_event_type_t] = [
             ES_EVENT_TYPE_AUTH_OPEN,
+            ES_EVENT_TYPE_AUTH_RENAME,
+            ES_EVENT_TYPE_AUTH_UNLINK,
+            ES_EVENT_TYPE_AUTH_LINK,
+            ES_EVENT_TYPE_AUTH_CREATE,
+            ES_EVENT_TYPE_AUTH_TRUNCATE,
+            ES_EVENT_TYPE_AUTH_COPYFILE,
+            ES_EVENT_TYPE_AUTH_READDIR,
             ES_EVENT_TYPE_NOTIFY_FORK,
             ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_EXIT,
             ES_EVENT_TYPE_NOTIFY_WRITE,
-            ES_EVENT_TYPE_NOTIFY_RENAME,
-            ES_EVENT_TYPE_NOTIFY_UNLINK,
         ]
         guard es_subscribe(client!, eventTypes, UInt32(eventTypes.count)) == ES_RETURN_SUCCESS else {
             logger.fault("Failed to subscribe to ES events")
@@ -106,8 +118,8 @@ final class ESInboundAdapter {
         for prefix in policyPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
-        // XProtect path is permanently muted so write/rename/unlink events are always delivered.
-        // It is intentionally kept outside policyPrefixes so policy diffs never unmute it.
+        // XProtect path is permanently muted so NOTIFY_WRITE, AUTH_RENAME, and AUTH_UNLINK events
+        // are always delivered for it. Kept outside policyPrefixes so policy diffs never unmute it.
         es_mute_path(client, Self.xprotectPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
     }
 
@@ -116,9 +128,9 @@ final class ESInboundAdapter {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_NOTIFY_WRITE:
             token = message.pointee.event.write.target.pointee.path
-        case ES_EVENT_TYPE_NOTIFY_RENAME:
+        case ES_EVENT_TYPE_NOTIFY_RENAME, ES_EVENT_TYPE_AUTH_RENAME:
             token = message.pointee.event.rename.source.pointee.path
-        case ES_EVENT_TYPE_NOTIFY_UNLINK:
+        case ES_EVENT_TYPE_NOTIFY_UNLINK, ES_EVENT_TYPE_AUTH_UNLINK:
             token = message.pointee.event.unlink.target.pointee.path
         default:
             return false
@@ -136,29 +148,69 @@ final class ESInboundAdapter {
             let token = message.pointee.process.pointee.audit_token
             return .exit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
         case ES_EVENT_TYPE_AUTH_OPEN:
-            return .openFile(openFileEvent(from: message, esClient: esClient))
+            return .fileAuth(openFileEvent(from: message, esClient: esClient))
+        case ES_EVENT_TYPE_AUTH_RENAME:
+            let path = string(from: message.pointee.event.rename.source.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
+        case ES_EVENT_TYPE_AUTH_UNLINK:
+            let path = string(from: message.pointee.event.unlink.target.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
+        case ES_EVENT_TYPE_AUTH_LINK:
+            let path = string(from: message.pointee.event.link.source.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
+        case ES_EVENT_TYPE_AUTH_CREATE:
+            let path = createEventPath(from: message.pointee.event.create)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
+        case ES_EVENT_TYPE_AUTH_TRUNCATE:
+            let path = string(from: message.pointee.event.truncate.target.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
+        case ES_EVENT_TYPE_AUTH_COPYFILE:
+            let path = string(from: message.pointee.event.copyfile.source.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
+        case ES_EVENT_TYPE_AUTH_READDIR:
+            let path = string(from: message.pointee.event.readdir.target.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
         }
     }
 
-    private static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> OpenFileEvent {
-        let process = message.pointee.process.pointee
-        let file = message.pointee.event.open.file.pointee
-
-        let ttyPath: String? = process.tty.map { string(from: $0.pointee.path) }.flatMap { $0.isEmpty ? nil : $0 }
-
+    private static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
+        let path = string(from: message.pointee.event.open.file.pointee.path)
         let respond: @Sendable (Bool) -> Void = { allowed in
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, allowed)
         }
+        return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, respond: respond)
+    }
 
+    private static func fileAuthEvent(
+        from message: UnsafePointer<es_message_t>,
+        esClient: OpaquePointer,
+        operation: FileOperation,
+        path: String
+    ) -> FileAuthEvent {
+        let respond: @Sendable (Bool) -> Void = { allowed in
+            es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, false)
+        }
+        return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, respond: respond)
+    }
+
+    private static func fileAuthEvent(
+        from message: UnsafePointer<es_message_t>,
+        esClient: OpaquePointer,
+        operation: FileOperation,
+        path: String,
+        respond: @escaping @Sendable (Bool) -> Void
+    ) -> FileAuthEvent {
+        let process = message.pointee.process.pointee
+        let ttyPath: String? = process.tty.map { string(from: $0.pointee.path) }.flatMap { $0.isEmpty ? nil : $0 }
         let processIdentity = ProcessIdentity(
             pid: pid_t(bitPattern: process.audit_token.val.5),
             pidVersion: process.audit_token.val.7
         )
-
-        return OpenFileEvent(
-            path: string(from: file.path),
+        return FileAuthEvent(
+            operation: operation,
+            path: path,
             processIdentity: processIdentity,
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
@@ -171,6 +223,19 @@ final class ESInboundAdapter {
             deadline: message.pointee.deadline,
             respond: respond
         )
+    }
+
+    private static func createEventPath(from event: es_event_create_t) -> String {
+        switch event.destination_type {
+        case ES_DESTINATION_TYPE_EXISTING_FILE:
+            return string(from: event.destination.existing_file.pointee.path)
+        case ES_DESTINATION_TYPE_NEW_PATH:
+            let dir = string(from: event.destination.new_path.dir.pointee.path)
+            let filename = string(from: event.destination.new_path.filename)
+            return "\(dir)/\(filename)"
+        default:
+            return ""
+        }
     }
 
     private static func string(from esString: es_string_token_t) -> String {

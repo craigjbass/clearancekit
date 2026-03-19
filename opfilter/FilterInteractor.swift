@@ -8,9 +8,23 @@ import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "faa")
 
-// MARK: - OpenFileEvent
+// MARK: - FileOperation
 
-struct OpenFileEvent: Sendable {
+enum FileOperation: String {
+    case open     = "open"
+    case rename   = "rename"
+    case unlink   = "unlink"
+    case link     = "link"
+    case create   = "create"
+    case truncate = "truncate"
+    case copyfile = "copyfile"
+    case readdir  = "readdir"
+}
+
+// MARK: - FileAuthEvent
+
+struct FileAuthEvent: Sendable {
+    let operation: FileOperation
     let path: String
     let processIdentity: ProcessIdentity
     let processID: pid_t
@@ -60,7 +74,7 @@ enum FilterEvent {
     case fork(child: ProcessRecord)
     case exec(newImage: ProcessRecord)
     case exit(identity: ProcessIdentity)
-    case openFile(OpenFileEvent)
+    case fileAuth(FileAuthEvent)
 }
 
 // MARK: - FilterInteractor
@@ -99,12 +113,12 @@ final class FilterInteractor: @unchecked Sendable {
         case .exit(let identity):
             logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
             processTree.remove(identity: identity)
-        case .openFile(let fileEvent):
-            Task { await self.handleOpenFile(fileEvent) }
+        case .fileAuth(let fileEvent):
+            Task { await self.handleFileAuth(fileEvent) }
         }
     }
 
-    private func handleOpenFile(_ fileEvent: OpenFileEvent) async {
+    private func handleFileAuth(_ fileEvent: FileAuthEvent) async {
         let allowlist = allowlistStorage.withLock { $0 }
 
         // Fast path: globally allowlisted processes bypass all rule evaluation.
@@ -181,6 +195,8 @@ final class FilterInteractor: @unchecked Sendable {
             writeDenialToTTY(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
         }
 
+        guard fileEvent.operation == .open else { return }
+
         let folderOpenEvent = FolderOpenEvent(
             path: fileEvent.path,
             timestamp: Date(),
@@ -209,7 +225,7 @@ final class FilterInteractor: @unchecked Sendable {
         return MachTime.nanoseconds(from: start, to: mach_absolute_time())
     }
 
-    private func logDecision(_ decision: PolicyDecision, for fileEvent: OpenFileEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
+    private func logDecision(_ decision: PolicyDecision, for fileEvent: FileAuthEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
         let operationID = UUID()
         let decisionTag = decision.isAllowed ? "ALLOW" : "DENIED"
         let processName = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
@@ -223,7 +239,7 @@ final class FilterInteractor: @unchecked Sendable {
             "policy_version=\(policyVersion)",
             "policy_name=\(decision.policyName)",
             "path=\(fileEvent.path)",
-            "access_type=open",
+            "access_type=\(fileEvent.operation.rawValue)",
             "decision=\(decisionTag)",
             "operation_id=\(operationID.uuidString)",
             "pid=\(fileEvent.processID)",
