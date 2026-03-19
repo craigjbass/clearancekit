@@ -13,8 +13,12 @@ struct PresetsView: View {
     @State private var isUpdatingAll = false
     @State private var showAppPicker = false
 
+    private var installedPresets: [AppPreset] {
+        builtInPresets.filter(\.isInstalled)
+    }
+
     private var driftedPresets: [AppPreset] {
-        builtInPresets.filter { $0.hasDrifted(in: policyStore.userRules) }
+        installedPresets.filter { $0.hasDrifted(in: policyStore.userRules) }
     }
 
     var body: some View {
@@ -41,7 +45,7 @@ struct PresetsView: View {
                 }
             }
             Section("Built-in") {
-                ForEach(builtInPresets) { preset in
+                ForEach(installedPresets) { preset in
                     PresetRow(preset: preset, userRules: policyStore.userRules)
                         .padding(.vertical, 6)
                 }
