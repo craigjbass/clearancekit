@@ -63,6 +63,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     public static var supportsSecureCoding: Bool { true }
 
     @objc public let eventID: UUID
+    @objc public let operation: String
     @objc public let path: String
     @objc public let timestamp: Date
     @objc public let processID: Int32
@@ -75,6 +76,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     public let matchedRuleID: UUID?
 
     public init(
+        operation: String = "open",
         path: String,
         timestamp: Date,
         processID: Int32,
@@ -88,6 +90,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         eventID: UUID = UUID()
     ) {
         self.eventID = eventID
+        self.operation = operation
         self.path = path
         self.timestamp = timestamp
         self.processID = processID
@@ -108,6 +111,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
             return nil
         }
         self.eventID = (coder.decodeObject(of: NSUUID.self, forKey: "eventID") as UUID?) ?? UUID()
+        self.operation = (coder.decodeObject(of: NSString.self, forKey: "operation") as String?) ?? "open"
         self.path = path
         self.timestamp = timestamp
         self.processID = coder.decodeInt32(forKey: "processID")
@@ -124,6 +128,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
 
     public func encode(with coder: NSCoder) {
         coder.encode(eventID as NSUUID, forKey: "eventID")
+        coder.encode(operation as NSString, forKey: "operation")
         coder.encode(path as NSString, forKey: "path")
         coder.encode(timestamp as NSDate, forKey: "timestamp")
         coder.encode(processID, forKey: "processID")

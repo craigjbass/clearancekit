@@ -195,9 +195,8 @@ final class FilterInteractor: @unchecked Sendable {
             writeDenialToTTY(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
         }
 
-        guard fileEvent.operation == .open else { return }
-
         let folderOpenEvent = FolderOpenEvent(
+            operation: fileEvent.operation.rawValue,
             path: fileEvent.path,
             timestamp: Date(),
             processID: fileEvent.processID,

@@ -157,6 +157,9 @@ struct EventRow: View {
                     Text(event.path)
                         .font(.system(.caption, design: .monospaced))
                         .lineLimit(1)
+                    if event.operation != "open" {
+                        operationBadge
+                    }
                     Text(isBaselineEvent ? "baseline" : "managed")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -209,6 +212,9 @@ struct EventRow: View {
                 Text(event.path)
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(1)
+                if event.operation != "open" {
+                    operationBadge
+                }
                 Spacer()
                 Text(event.accessAllowed ? "Allowed" : "Denied")
                     .font(.caption)
@@ -238,6 +244,18 @@ struct EventRow: View {
             RoundedRectangle(cornerRadius: 4)
                 .fill(event.accessAllowed ? Color.green.opacity(0.05) : Color.red.opacity(0.1))
         )
+    }
+
+    // MARK: - Operation badge
+
+    private var operationBadge: some View {
+        Text(event.operation)
+            .font(.caption2)
+            .foregroundStyle(.purple)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.purple.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     // MARK: - Shared detail sections
