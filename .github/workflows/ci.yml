@@ -17,4 +17,6 @@ jobs:
         run: |
           xcodebuild test \
             -scheme clearancekitTests \
-            -destination 'platform=macOS'
+            -destination 'platform=macOS' \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
