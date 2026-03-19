@@ -8,7 +8,7 @@ import Foundation
 
 // MARK: - FakeProcessTree
 
-private final class FakeProcessTree: ProcessTreeProtocol {
+private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     private(set) var insertedIdentities: [ProcessIdentity] = []
     private(set) var removedIdentities: [ProcessIdentity] = []
     var containsResult = false
@@ -59,7 +59,7 @@ struct FilterInteractorTests {
         signingID: String = "",
         processIdentity: ProcessIdentity? = nil,
         deadline: UInt64 = 0,
-        respond: @escaping (Bool) -> Void
+        respond: @escaping @Sendable (Bool) -> Void
     ) -> OpenFileEvent {
         OpenFileEvent(
             path: path,

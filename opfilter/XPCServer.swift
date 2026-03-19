@@ -14,7 +14,7 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
-final class XPCServer: NSObject {
+final class XPCServer: NSObject, @unchecked Sendable {
     private var listener: NSXPCListener?
     private let lock = NSLock()
     private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
@@ -74,18 +74,20 @@ final class XPCServer: NSObject {
     }
 
     func handleXProtectChange() {
-        let reloaded = enumerateXProtectEntries()
-        lock.lock()
-        let currentPaths = Set(xprotectEntries.map(\.processPath))
-        let newPaths = Set(reloaded.map(\.processPath))
-        guard currentPaths != newPaths else {
+        Task {
+            let reloaded = enumerateXProtectEntries()
+            lock.lock()
+            let currentPaths = Set(xprotectEntries.map(\.processPath))
+            let newPaths = Set(reloaded.map(\.processPath))
+            guard currentPaths != newPaths else {
+                lock.unlock()
+                return
+            }
+            xprotectEntries = reloaded
             lock.unlock()
-            return
+            applyAllowlistToFilter()
+            logger.info("XPCServer: XProtect bundle changed — reloaded \(reloaded.count) entry/entries")
         }
-        xprotectEntries = reloaded
-        lock.unlock()
-        applyAllowlistToFilter()
-        logger.info("XPCServer: XProtect bundle changed — reloaded \(reloaded.count) entry/entries")
     }
 
     // MARK: - Direct filter integration
@@ -265,20 +267,23 @@ final class XPCServer: NSObject {
 
     // MARK: - Resync
 
-    fileprivate func requestResync(requestingConnection: NSXPCConnection) {
-        let reloaded = ManagedPolicyLoader.loadWithSync()
-        let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
-        let reloadedXProtect = enumerateXProtectEntries()
-        lock.lock()
-        managedRules = reloaded
-        managedAllowlist = reloadedAllowlist
-        xprotectEntries = reloadedXProtect
-        lock.unlock()
+    fileprivate func requestResync(requestingConnection: NSXPCConnection, reply: @escaping () -> Void) {
+        Task {
+            let reloaded = ManagedPolicyLoader.loadWithSync()
+            let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
+            let reloadedXProtect = enumerateXProtectEntries()
+            lock.lock()
+            managedRules = reloaded
+            managedAllowlist = reloadedAllowlist
+            xprotectEntries = reloadedXProtect
+            lock.unlock()
 
-        applyPolicyToFilter()
-        applyAllowlistToFilter()
+            applyPolicyToFilter()
+            applyAllowlistToFilter()
 
-        pushPolicySnapshotToGUIClient(requestingConnection)
+            pushPolicySnapshotToGUIClient(requestingConnection)
+            reply()
+        }
     }
 
     // MARK: - Policy helpers
@@ -517,8 +522,7 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
 
     func requestResync(withReply reply: @escaping () -> Void) {
         guard let server, let conn = connection else { reply(); return }
-        server.requestResync(requestingConnection: conn)
-        reply()
+        server.requestResync(requestingConnection: conn, reply: reply)
     }
 
     func beginDiscovery(withReply reply: @escaping () -> Void) {

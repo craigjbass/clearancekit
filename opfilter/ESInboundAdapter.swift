@@ -148,7 +148,7 @@ final class ESInboundAdapter {
 
         let ttyPath: String? = process.tty.map { string(from: $0.pointee.path) }.flatMap { $0.isEmpty ? nil : $0 }
 
-        let respond: (Bool) -> Void = { allowed in
+        let respond: @Sendable (Bool) -> Void = { allowed in
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, allowed)
         }
 

@@ -10,7 +10,7 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 // MARK: - OpenFileEvent
 
-struct OpenFileEvent {
+struct OpenFileEvent: Sendable {
     let path: String
     let processIdentity: ProcessIdentity
     let processID: pid_t
@@ -22,7 +22,7 @@ struct OpenFileEvent {
     let gid: gid_t
     let ttyPath: String?
     let deadline: UInt64
-    let respond: (Bool) -> Void
+    let respond: @Sendable (Bool) -> Void
 }
 
 // MARK: - MachTime
@@ -65,18 +65,12 @@ enum FilterEvent {
 
 // MARK: - FilterInteractor
 
-final class FilterInteractor {
+final class FilterInteractor: @unchecked Sendable {
     var onEvent: ((FolderOpenEvent) -> Void)?
 
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
     private let processTree: ProcessTreeProtocol
-
-    /// AUTH_OPEN events are dispatched here so the ES callback thread stays
-    /// free to deliver NOTIFY_EXEC / NOTIFY_FORK / NOTIFY_EXIT events.
-    /// Without this, dwelling in waitForProcess would block the very events
-    /// that populate the ProcessTree.
-    private let authQueue = DispatchQueue(label: "uk.craigbass.clearancekit.auth-open", attributes: .concurrent)
 
     init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
@@ -106,11 +100,11 @@ final class FilterInteractor {
             logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
             processTree.remove(identity: identity)
         case .openFile(let fileEvent):
-            authQueue.async { self.handleOpenFile(fileEvent) }
+            Task { await self.handleOpenFile(fileEvent) }
         }
     }
 
-    private func handleOpenFile(_ fileEvent: OpenFileEvent) {
+    private func handleOpenFile(_ fileEvent: OpenFileEvent) async {
         let allowlist = allowlistStorage.withLock { $0 }
 
         // Fast path: globally allowlisted processes bypass all rule evaluation.
@@ -147,7 +141,7 @@ final class FilterInteractor {
         case .ancestryRequired(let matchingRule):
             // Ancestry data is needed. Dwell until the process appears in
             // the tree, then look up ancestors for evaluation.
-            dwellNanoseconds = waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
+            dwellNanoseconds = await waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
 
             guard processTree.contains(identity: fileEvent.processIdentity) else {
                 // Process never appeared before the deadline — fail safe.
@@ -205,12 +199,12 @@ final class FilterInteractor {
         }
     }
 
-    private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) -> UInt64 {
+    private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) async -> UInt64 {
         let start = mach_absolute_time()
         let cutoff = MachTime.cutoff(for: deadline)
         while mach_absolute_time() < cutoff {
             guard !processTree.contains(identity: identity) else { break }
-            sched_yield()
+            try? await Task.sleep(nanoseconds: 1_000_000) // 1 ms; frees the thread while waiting
         }
         return MachTime.nanoseconds(from: start, to: mach_absolute_time())
     }
