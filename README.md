@@ -161,7 +161,7 @@ apple:com.apple.Safari                    — Safari signed by Apple
 
 ### GlobalAllowlist — process bypass list
 
-Delivered as an array under the `GlobalAllowlist` preference key. Each entry adds a process to the global allowlist, which bypasses all FAAPolicy rules.
+Delivered as an array under the `GlobalAllowlist` preference key. Each entry adds an **immediate** process to the global allowlist. When the process making a file-system access request matches an entry, it bypasses all FAAPolicy rules regardless of which path it is accessing.
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -170,6 +170,24 @@ Delivered as an array under the `GlobalAllowlist` preference key. Each entry add
 | `ProcessPath` | string | One of `SigningID` or `ProcessPath` | Match by executable path. |
 | `PlatformBinary` | bool | No | If `true`, the process must carry an empty Team ID (Apple platform binary). |
 | `TeamID` | string | No | Additional Team ID constraint when `PlatformBinary` is `false`. |
+
+### GlobalAncestorAllowlist — ancestor process bypass list
+
+Ancestor allowlist entries bypass all FAAPolicy rules when **any process in the calling chain** — parent, grandparent, and so on — matches the entry. The immediate process identity is irrelevant; what matters is whether an ancestor was trusted.
+
+This is useful when you want to allow any tool launched from a trusted shell or IDE without having to enumerate every individual binary. For example, adding your terminal emulator to the ancestor allowlist lets any command run from that terminal access protected paths, while processes with an unrecognised ancestry remain denied.
+
+Ancestor entries use the same matching fields as `GlobalAllowlist`:
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `ID` | string | No | Stable UUID. Omit to auto-derive. Always generate with `uuidgen`. |
+| `SigningID` | string | One of `SigningID` or `ProcessPath` | Match ancestor by code signing identifier. |
+| `ProcessPath` | string | One of `SigningID` or `ProcessPath` | Match ancestor by executable path. |
+| `PlatformBinary` | bool | No | If `true`, the ancestor must carry an empty Team ID (Apple platform binary). |
+| `TeamID` | string | No | Additional Team ID constraint when `PlatformBinary` is `false`. |
+
+Ancestor entries are managed via the **Add Ancestor Entry** button in the allowlist view and are displayed inline alongside immediate-process entries, distinguished by an ancestry icon and an **ancestor** badge. Managed-profile ancestor entries appear in a separate **Managed Profile Ancestor Entries** section.
 
 ### AppProtections — named rule groupings
 
