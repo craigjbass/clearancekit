@@ -287,4 +287,36 @@ struct FilterInteractorTests {
 
         #expect(allowed == true)
     }
+
+    @Test("openFile allowed by process path without consulting tree when rule also has ancestor criteria")
+    func openFileProcessPathMatchSkipsAncestryLookup() {
+        // Rule has BOTH process-path AND ancestor criteria. When the process path
+        // matches, the ancestry provider must not be invoked — so even with an
+        // expired deadline (process never in tree), the access is allowed.
+        let rule = FAARule(
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedProcessPaths: ["/usr/bin/safe"],
+            allowedAncestorProcessPaths: ["/usr/bin/terminal"]
+        )
+        let tree = FakeProcessTree()
+        tree.containsResult = false  // process not in tree; would trigger deny in old code
+        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/protected/file.txt",
+            processPath: "/usr/bin/safe",
+            deadline: 0  // immediate deadline — any wait would expire instantly
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
 }

@@ -19,7 +19,7 @@ public enum XPCConstants {
 // MARK: - AncestorInfo
 
 @objc(AncestorInfo)
-public class AncestorInfo: NSObject, NSSecureCoding {
+public class AncestorInfo: NSObject, NSSecureCoding, @unchecked Sendable {
     public static var supportsSecureCoding: Bool { true }
 
     @objc public let path: String

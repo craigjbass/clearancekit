@@ -266,14 +266,32 @@ private func globMatches(string: String, pattern: String) -> Bool {
 
 // MARK: - Policy evaluation
 
+/// Evaluates FAA policy rules against a file-access request.
+///
+/// Ancestry data is fetched lazily via `ancestryProvider` — the closure is called at most once,
+/// only when the first matching rule actually requires an ancestry check. Rules that can be
+/// resolved by process path or code signature alone will never trigger the provider, so the
+/// potentially expensive wait for the process tree is deferred until it is truly necessary.
 public func checkFAAPolicy(
     rules: [FAARule],
     path: String,
     processPath: String,
     teamID: String,
     signingID: String,
-    ancestors: [AncestorInfo] = []
-) -> PolicyDecision {
+    ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
+) async -> PolicyDecision {
+    // cachedAncestors is accessed only within this function's sequential async
+    // execution — rules are evaluated one at a time on a single task — so no
+    // synchronization is needed.
+    var cachedAncestors: [AncestorInfo]? = nil
+
+    func ancestors() async -> [AncestorInfo] {
+        if let cached = cachedAncestors { return cached }
+        let fetched = await ancestryProvider()
+        cachedAncestors = fetched
+        return fetched
+    }
+
     for rule in rules {
         guard pathIsProtected(path, by: rule.protectedPathPrefix) else { continue }
 
@@ -288,13 +306,16 @@ public func checkFAAPolicy(
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
         }
 
-        if !rule.allowedAncestorProcessPaths.isEmpty,
-           let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
+        if !rule.allowedAncestorProcessPaths.isEmpty {
+            let ancs = await ancestors()
+            if let match = ancs.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
+                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
+            }
         }
 
         if !rule.allowedAncestorSignatures.isEmpty {
-            for ancestor in ancestors {
+            let ancs = await ancestors()
+            for ancestor in ancs {
                 let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
                 if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: resolvedAncestorTeamID, signingID: ancestor.signingID) }) {
                     return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
@@ -350,10 +371,10 @@ public func evaluateAccess(
     processPath: String,
     teamID: String,
     signingID: String,
-    ancestors: [AncestorInfo] = []
-) -> PolicyDecision {
+    ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
+) async -> PolicyDecision {
     if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
         return .globallyAllowed
     }
-    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return await checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestryProvider: ancestryProvider)
 }
