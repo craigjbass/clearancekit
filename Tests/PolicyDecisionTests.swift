@@ -638,6 +638,172 @@ struct AccessEvaluationTests {
         #expect(decision.isAllowed)
         #expect(decision.reason.contains("process path"))
     }
+
+    // MARK: Global ancestor allowlist
+
+    private func decideWithAncestorAllowlist(
+        rules: [FAARule] = [],
+        allowlist: [AllowlistEntry] = [],
+        ancestorAllowlist: [AncestorAllowlistEntry],
+        path: String = "/protected/file",
+        processPath: String = "/bin/test",
+        teamID: String = "",
+        signingID: String = "",
+        ancestors: [AncestorInfo]
+    ) async -> PolicyDecision {
+        await evaluateAccess(
+            rules: rules,
+            allowlist: allowlist,
+            ancestorAllowlist: ancestorAllowlist,
+            path: path,
+            processPath: processPath,
+            teamID: teamID,
+            signingID: signingID,
+            ancestryProvider: { ancestors }
+        )
+    }
+
+    @Test("process with matching ancestor signing ID is globally allowed")
+    func ancestorSigningIDGloballyAllowed() async {
+        let ancestorEntry = AncestorAllowlistEntry(signingID: "com.apple.terminal", platformBinary: true)
+        let rules = [ruleProtecting("/protected")]
+        let ancestors = [AncestorInfo(path: "/Applications/Terminal.app/Contents/MacOS/Terminal", teamID: "", signingID: "com.apple.terminal")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: ancestors
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("process with matching ancestor path is globally allowed")
+    func ancestorPathGloballyAllowed() async {
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let rules = [ruleProtecting("/protected")]
+        let ancestors = [AncestorInfo(path: "/usr/bin/bash", teamID: "", signingID: "")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: ancestors
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("process with non-matching ancestor falls through to policy")
+    func nonMatchingAncestorFallsThrough() async {
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let rules = [ruleProtecting("/protected")]
+        let ancestors = [AncestorInfo(path: "/usr/bin/zsh", teamID: "", signingID: "")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: ancestors
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("process with empty ancestor chain and ancestor allowlist falls through to policy")
+    func emptyAncestorChainFallsThrough() async {
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let rules = [ruleProtecting("/protected")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: []
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("ancestor allowlist platform binary requires empty team ID")
+    func ancestorPlatformBinaryRequiresEmptyTeam() async {
+        let ancestorEntry = AncestorAllowlistEntry(signingID: "com.apple.terminal", platformBinary: true)
+        let rules = [ruleProtecting("/protected")]
+        let ancestorWithTeam = AncestorInfo(path: "/Applications/Terminal.app/Contents/MacOS/Terminal", teamID: "SOMETEAM", signingID: "com.apple.terminal")
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: [ancestorWithTeam]
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("immediate process allowlist takes precedence over ancestor allowlist check")
+    func immediateAllowlistTakesPrecedence() async {
+        let immediateEntry = AllowlistEntry(signingID: "com.example.trusted", teamID: "TRUST1")
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let rules = [ruleProtecting("/protected")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, allowlist: [immediateEntry], ancestorAllowlist: [ancestorEntry],
+            processPath: "/anywhere", teamID: "TRUST1", signingID: "com.example.trusted",
+            ancestors: []
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed from immediate allowlist, got \(decision)")
+            return
+        }
+    }
+
+    @Test("ancestor allowlist bypasses deny-all rule when ancestor matches")
+    func ancestorAllowlistBypassesDenyAll() async {
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let denyAllRule = FAARule(protectedPathPrefix: "/protected")
+        let ancestors = [AncestorInfo(path: "/usr/bin/bash", teamID: "", signingID: "")]
+        let decision = await decideWithAncestorAllowlist(
+            rules: [denyAllRule], ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: ancestors
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("ancestor allowlist with team ID constraint — correct team is allowed")
+    func ancestorTeamIDConstraintAllowed() async {
+        let ancestorEntry = AncestorAllowlistEntry(signingID: "com.corp.tool", teamID: "CORP99")
+        let rules = [ruleProtecting("/protected")]
+        let ancestor = AncestorInfo(path: "/opt/corp/tool", teamID: "CORP99", signingID: "com.corp.tool")
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: [ancestor]
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("ancestor allowlist with team ID constraint — wrong team is denied")
+    func ancestorTeamIDConstraintDenied() async {
+        let ancestorEntry = AncestorAllowlistEntry(signingID: "com.corp.tool", teamID: "CORP99")
+        let rules = [ruleProtecting("/protected")]
+        let ancestor = AncestorInfo(path: "/opt/corp/tool", teamID: "EVIL11", signingID: "com.corp.tool")
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: [ancestor]
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("any ancestor in the chain matching is sufficient")
+    func anyAncestorMatchSuffices() async {
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/bash")
+        let rules = [ruleProtecting("/protected")]
+        let ancestors = [
+            AncestorInfo(path: "/usr/bin/zsh", teamID: "", signingID: ""),
+            AncestorInfo(path: "/usr/bin/bash", teamID: "", signingID: ""),
+            AncestorInfo(path: "/sbin/launchd", teamID: "", signingID: ""),
+        ]
+        let decision = await decideWithAncestorAllowlist(
+            rules: rules, ancestorAllowlist: [ancestorEntry],
+            processPath: "/usr/bin/cat", ancestors: ancestors
+        )
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed when one ancestor matches, got \(decision)")
+            return
+        }
+    }
 }
 
 // MARK: - FAARule.requiresAncestry

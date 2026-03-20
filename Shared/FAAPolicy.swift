@@ -367,6 +367,7 @@ public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassifica
 public func evaluateAccess(
     rules: [FAARule],
     allowlist: [AllowlistEntry],
+    ancestorAllowlist: [AncestorAllowlistEntry] = [],
     path: String,
     processPath: String,
     teamID: String,
@@ -376,5 +377,13 @@ public func evaluateAccess(
     if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
         return .globallyAllowed
     }
+
+    if !ancestorAllowlist.isEmpty {
+        let ancestors = await ancestryProvider()
+        if isGloballyAllowedByAncestry(ancestorAllowlist: ancestorAllowlist, ancestors: ancestors) {
+            return .globallyAllowed
+        }
+    }
+
     return await checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestryProvider: ancestryProvider)
 }

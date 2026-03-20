@@ -24,6 +24,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private var xprotectEntries: [AllowlistEntry] = []
     private var managedAllowlist: [AllowlistEntry] = []
     private var userAllowlist: [AllowlistEntry] = []
+    private var managedAncestorAllowlist: [AncestorAllowlistEntry] = []
+    private var userAncestorAllowlist: [AncestorAllowlistEntry] = []
     private var pendingSuspectUserRules: [FAARule]? = nil
     private var pendingSuspectUserAllowlist: [AllowlistEntry]? = nil
     private let maxHistoryCount = 1000
@@ -52,6 +54,17 @@ final class XPCServer: NSObject, @unchecked Sendable {
             userAllowlist = []
             pendingSuspectUserAllowlist = entries
             logger.warning("XPCServer: Signature issue for user_allowlist — awaiting GUI resolution")
+        }
+
+        switch database.loadUserAncestorAllowlistResult() {
+        case .ok(let entries):
+            userAncestorAllowlist = entries
+        case .suspect(let entries):
+            userAncestorAllowlist = []
+            // Ancestor allowlist entries bypass all policy rules, so tampering is
+            // high impact. Silently discard and log — the user will notice that their
+            // ancestor entries are gone and can re-add them after investigating.
+            logger.warning("XPCServer: Signature issue for user_ancestor_allowlist — discarding \(entries.count) suspect entry/entries")
         }
 
         managedRules = ManagedPolicyLoader.load()
@@ -115,6 +128,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
         return baselineAllowlist + xprotect + managed + user
     }
 
+    func mergedAncestorAllowlist() -> [AncestorAllowlistEntry] {
+        lock.lock()
+        let managed = managedAncestorAllowlist
+        let user = userAncestorAllowlist
+        lock.unlock()
+        return managed + user
+    }
+
     private func applyPolicyToFilter() {
         let rules = mergedRules()
         adapter.updatePolicy(rules)
@@ -122,7 +143,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     private func applyAllowlistToFilter() {
         let entries = mergedAllowlist()
+        let ancestorEntries = mergedAncestorAllowlist()
         interactor.updateAllowlist(entries)
+        interactor.updateAncestorAllowlist(ancestorEntries)
     }
 
     // MARK: - Client registration
@@ -331,6 +354,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy?.userRulesUpdated(encodedUserRules())
         proxy?.managedAllowlistUpdated(encodedManagedAllowlist())
         proxy?.userAllowlistUpdated(encodedUserAllowlist())
+        proxy?.managedAncestorAllowlistUpdated(encodedManagedAncestorAllowlist())
+        proxy?.userAncestorAllowlistUpdated(encodedUserAncestorAllowlist())
     }
 
     // MARK: - Allowlist mutations
@@ -384,6 +409,60 @@ final class XPCServer: NSObject, @unchecked Sendable {
         lock.unlock()
         for conn in clients {
             (conn.remoteObjectProxy as? ClientProtocol)?.userAllowlistUpdated(data)
+        }
+    }
+
+    // MARK: - Ancestor allowlist mutations
+
+    fileprivate func applyAddAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
+        lock.lock()
+        userAncestorAllowlist.append(entry)
+        lock.unlock()
+        persistAndBroadcastAncestorAllowlist()
+    }
+
+    fileprivate func applyRemoveAncestorAllowlistEntry(entryID: UUID) {
+        lock.lock()
+        userAncestorAllowlist.removeAll { $0.id == entryID }
+        lock.unlock()
+        persistAndBroadcastAncestorAllowlist()
+    }
+
+    private func persistAndBroadcastAncestorAllowlist() {
+        database.saveUserAncestorAllowlist(userAncestorAllowlist)
+        applyAllowlistToFilter()
+        broadcastUserAncestorAllowlistToAllGUIClients()
+    }
+
+    // MARK: - Ancestor allowlist helpers
+
+    private func encodedManagedAncestorAllowlist() -> NSData {
+        lock.lock()
+        let entries = managedAncestorAllowlist
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("XPCServer: Failed to encode managed ancestor allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    private func encodedUserAncestorAllowlist() -> NSData {
+        lock.lock()
+        let entries = userAncestorAllowlist
+        lock.unlock()
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("XPCServer: Failed to encode user ancestor allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    private func broadcastUserAncestorAllowlistToAllGUIClients() {
+        let data = encodedUserAncestorAllowlist()
+        lock.lock()
+        let clients = Array(guiClients.values)
+        lock.unlock()
+        for conn in clients {
+            (conn.remoteObjectProxy as? ClientProtocol)?.userAncestorAllowlistUpdated(data)
         }
     }
 }
@@ -517,6 +596,22 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
         server.applyRemoveAllowlistEntry(entryID: entryID as UUID)
+        reply(true)
+    }
+
+    func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server,
+              let entry = try? JSONDecoder().decode(AncestorAllowlistEntry.self, from: entryData as Data) else {
+            reply(false)
+            return
+        }
+        server.applyAddAncestorAllowlistEntry(entry)
+        reply(true)
+    }
+
+    func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.applyRemoveAncestorAllowlistEntry(entryID: entryID as UUID)
         reply(true)
     }
 

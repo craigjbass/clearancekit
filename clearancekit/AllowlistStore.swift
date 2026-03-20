@@ -24,6 +24,12 @@ final class AllowlistStore: ObservableObject {
     /// User-configurable entries managed by opfilter.
     @Published private(set) var userEntries: [AllowlistEntry] = []
 
+    /// Ancestor allowlist entries delivered via MDM or a .mobileconfig profile. Read-only in the GUI.
+    @Published private(set) var managedAncestorEntries: [AncestorAllowlistEntry] = []
+
+    /// User-configurable ancestor allowlist entries managed by opfilter.
+    @Published private(set) var userAncestorEntries: [AncestorAllowlistEntry] = []
+
     private init() {}
 
     // MARK: - Service push
@@ -34,6 +40,14 @@ final class AllowlistStore: ObservableObject {
 
     func receivedUserEntries(_ entries: [AllowlistEntry]) {
         userEntries = entries
+    }
+
+    func receivedManagedAncestorEntries(_ entries: [AncestorAllowlistEntry]) {
+        managedAncestorEntries = entries
+    }
+
+    func receivedUserAncestorEntries(_ entries: [AncestorAllowlistEntry]) {
+        userAncestorEntries = entries
     }
 
     // MARK: - Mutations
@@ -48,5 +62,17 @@ final class AllowlistStore: ObservableObject {
         try await BiometricAuth.authenticate(reason: "Remove a global allowlist entry")
         userEntries.removeAll { $0.id == entry.id }
         XPCClient.shared.removeAllowlistEntry(entryID: entry.id)
+    }
+
+    func addAncestor(_ entry: AncestorAllowlistEntry) async throws {
+        try await BiometricAuth.authenticate(reason: "Add a global ancestor allowlist entry")
+        userAncestorEntries.append(entry)
+        XPCClient.shared.addAncestorAllowlistEntry(entry)
+    }
+
+    func removeAncestor(_ entry: AncestorAllowlistEntry) async throws {
+        try await BiometricAuth.authenticate(reason: "Remove a global ancestor allowlist entry")
+        userAncestorEntries.removeAll { $0.id == entry.id }
+        XPCClient.shared.removeAncestorAllowlistEntry(entryID: entry.id)
     }
 }

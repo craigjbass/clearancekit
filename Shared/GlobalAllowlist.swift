@@ -53,6 +53,51 @@ public struct AllowlistEntry: Identifiable, Codable {
     }
 }
 
+// MARK: - AncestorAllowlistEntry
+
+/// An entry in the global ancestor allowlist.
+///
+/// When any ancestor in the calling-process chain matches this entry, access is
+/// granted globally — bypassing all FAA policy rules — regardless of the
+/// immediate process identity. This mirrors `AllowlistEntry` semantics but
+/// applies to the ancestry chain rather than the immediate caller.
+public struct AncestorAllowlistEntry: Identifiable, Codable {
+    public let id: UUID
+    /// Signing ID to match. Empty if this is a path-based entry.
+    public var signingID: String
+    /// Process executable path to match. Empty if this is a signing-ID-based entry.
+    public var processPath: String
+    /// If true, the ancestor must be an Apple platform binary (empty team ID).
+    public var platformBinary: Bool
+    /// Additional team ID constraint for non-platform-binary entries. Empty = any team.
+    public var teamID: String
+
+    public init(
+        id: UUID = UUID(),
+        signingID: String = "",
+        processPath: String = "",
+        platformBinary: Bool = false,
+        teamID: String = ""
+    ) {
+        self.id = id
+        self.signingID = signingID
+        self.processPath = processPath
+        self.platformBinary = platformBinary
+        self.teamID = teamID
+    }
+
+    public func matchesAncestor(path: String, signingID: String, teamID: String) -> Bool {
+        if platformBinary {
+            guard teamID.isEmpty else { return false }
+        } else if !self.teamID.isEmpty {
+            guard teamID == self.teamID else { return false }
+        }
+        if !self.signingID.isEmpty { return signingID == self.signingID }
+        if !self.processPath.isEmpty { return path == self.processPath }
+        return false
+    }
+}
+
 // MARK: - Evaluation
 
 public func isGloballyAllowed(
@@ -62,6 +107,16 @@ public func isGloballyAllowed(
     teamID: String
 ) -> Bool {
     allowlist.contains { $0.matches(processPath: processPath, signingID: signingID, teamID: teamID) }
+}
+
+/// Returns true if any ancestor in `ancestors` matches an entry in `ancestorAllowlist`.
+public func isGloballyAllowedByAncestry(
+    ancestorAllowlist: [AncestorAllowlistEntry],
+    ancestors: [AncestorInfo]
+) -> Bool {
+    ancestors.contains { ancestor in
+        ancestorAllowlist.contains { $0.matchesAncestor(path: ancestor.path, signingID: ancestor.signingID, teamID: ancestor.teamID) }
+    }
 }
 
 // MARK: - Baseline allowlist
