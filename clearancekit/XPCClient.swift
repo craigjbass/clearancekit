@@ -257,6 +257,27 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Ancestor allowlist mutations
+
+    func addAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
+        guard let data = try? JSONEncoder().encode(entry) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: addAncestorAllowlistEntry error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.addAncestorAllowlistEntry(data as NSData) { success in
+            if !success { logger.error("XPCClient: addAncestorAllowlistEntry rejected by service") }
+        }
+    }
+
+    func removeAncestorAllowlistEntry(entryID: UUID) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: removeAncestorAllowlistEntry error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.removeAncestorAllowlistEntry(entryID as NSUUID) { success in
+            if !success { logger.error("XPCClient: removeAncestorAllowlistEntry rejected by service") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -436,6 +457,28 @@ extension XPCClient: ClientProtocol {
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedUserEntries(entries)
+        }
+    }
+
+    nonisolated func managedAncestorAllowlistUpdated(_ allowlistData: NSData) {
+        guard let entries = try? JSONDecoder().decode([AncestorAllowlistEntry].self, from: allowlistData as Data) else {
+            logger.fault("XPCClient: Failed to decode managed ancestor allowlist — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            AllowlistStore.shared.receivedManagedAncestorEntries(entries)
+        }
+    }
+
+    nonisolated func userAncestorAllowlistUpdated(_ allowlistData: NSData) {
+        guard let entries = try? JSONDecoder().decode([AncestorAllowlistEntry].self, from: allowlistData as Data) else {
+            logger.fault("XPCClient: Failed to decode user ancestor allowlist — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            AllowlistStore.shared.receivedUserAncestorEntries(entries)
         }
     }
 }

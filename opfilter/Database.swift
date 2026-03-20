@@ -289,6 +289,66 @@ final class Database {
         )
     }
 
+    // MARK: - User Ancestor Allowlist
+
+    func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry> {
+        var entries: [AncestorAllowlistEntry] = []
+        query("""
+            SELECT id, signing_id, process_path, platform_binary, team_id
+            FROM user_ancestor_allowlist ORDER BY rowid
+        """) { stmt in
+            if let entry = ancestorAllowlistEntryFromRow(stmt) {
+                entries.append(entry)
+            }
+        }
+        switch checkSignature(table: "user_ancestor_allowlist", content: canonicalAncestorAllowlistJSON(entries)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d user ancestor allowlist entry/entries", entries.count)
+            return .ok(entries)
+        case .suspect:
+            NSLog("Database: Signature verification failed for user_ancestor_allowlist — %d suspect entry/entries", entries.count)
+            return .suspect(entries)
+        }
+    }
+
+    func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) {
+        inTransaction {
+            execute("DELETE FROM user_ancestor_allowlist")
+            for entry in entries {
+                insertAncestorAllowlistEntry(entry)
+            }
+            updateSignature(table: "user_ancestor_allowlist", content: canonicalAncestorAllowlistJSON(entries))
+        }
+    }
+
+    private func insertAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
+        execute("""
+            INSERT INTO user_ancestor_allowlist (id, signing_id, process_path, platform_binary, team_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, bindings: [
+            .text(entry.id.uuidString),
+            .text(entry.signingID),
+            .text(entry.processPath),
+            .int(entry.platformBinary ? 1 : 0),
+            .text(entry.teamID),
+        ])
+    }
+
+    private func ancestorAllowlistEntryFromRow(_ stmt: OpaquePointer) -> AncestorAllowlistEntry? {
+        let uuidString = columnText(stmt, 0)
+        guard let id = UUID(uuidString: uuidString) else {
+            NSLog("Database: Skipping ancestor allowlist row with invalid UUID '%@'", uuidString)
+            return nil
+        }
+        return AncestorAllowlistEntry(
+            id: id,
+            signingID: columnText(stmt, 1),
+            processPath: columnText(stmt, 2),
+            platformBinary: sqlite3_column_int(stmt, 3) != 0,
+            teamID: columnText(stmt, 4)
+        )
+    }
+
     // MARK: - Signature verification
 
     private enum SignatureCheckResult {
@@ -310,8 +370,9 @@ final class Database {
 
     private func tableHasRows(_ table: String) -> Bool {
         switch table {
-        case "user_rules":    break
-        case "user_allowlist": break
+        case "user_rules":              break
+        case "user_allowlist":          break
+        case "user_ancestor_allowlist": break
         default: preconditionFailure("Unexpected table name: \(table)")
         }
         var found = false
@@ -401,6 +462,16 @@ final class Database {
         encoder.outputFormatting = .sortedKeys
         guard let encoded = try? encoder.encode(sorted) else {
             fatalError("Database: Failed to JSON-encode allowlist for signature — [AllowlistEntry] must always be encodable")
+        }
+        return encoded
+    }
+
+    private func canonicalAncestorAllowlistJSON(_ entries: [AncestorAllowlistEntry]) -> Data {
+        let sorted = entries.sorted { $0.id.uuidString < $1.id.uuidString }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode ancestor allowlist for signature — [AncestorAllowlistEntry] must always be encodable")
         }
         return encoded
     }

@@ -288,6 +288,76 @@ struct FilterInteractorTests {
         #expect(allowed == true)
     }
 
+    @Test("process allowed when ancestor matches ancestor allowlist entry")
+    func ancestorAllowlistBypasses() {
+        let rule = FAARule(
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/trusted-shell")
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/trusted-shell", teamID: "", signingID: "")]
+        let interactor = FilterInteractor(
+            initialRules: [rule],
+            initialAllowlist: [],
+            initialAncestorAllowlist: [ancestorEntry],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/protected/data.db",
+            teamID: "UNRELATED",
+            signingID: "com.unrelated.app"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("process denied when ancestor does not match ancestor allowlist entry")
+    func ancestorAllowlistMismatchDenied() {
+        let rule = FAARule(
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let ancestorEntry = AncestorAllowlistEntry(processPath: "/usr/bin/trusted-shell")
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/evil-shell", teamID: "", signingID: "")]
+        let interactor = FilterInteractor(
+            initialRules: [rule],
+            initialAllowlist: [],
+            initialAncestorAllowlist: [ancestorEntry],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/protected/data.db",
+            teamID: "UNRELATED",
+            signingID: "com.unrelated.app"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == false)
+    }
+
     @Test("openFile allowed by process path without consulting tree when rule also has ancestor criteria")
     func openFileProcessPathMatchSkipsAncestryLookup() {
         // Rule has BOTH process-path AND ancestor criteria. When the process path

@@ -84,11 +84,13 @@ final class FilterInteractor: @unchecked Sendable {
 
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
+    private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
     private let processTree: ProcessTreeProtocol
 
-    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, processTree: ProcessTreeProtocol = ProcessTree.shared) {
+    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
+        self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
         self.processTree = processTree
     }
 
@@ -98,6 +100,10 @@ final class FilterInteractor: @unchecked Sendable {
 
     func updateAllowlist(_ entries: [AllowlistEntry]) {
         allowlistStorage.withLock { $0 = entries }
+    }
+
+    func updateAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) {
+        ancestorAllowlistStorage.withLock { $0 = entries }
     }
 
     func handle(_ event: FilterEvent) {
@@ -120,6 +126,7 @@ final class FilterInteractor: @unchecked Sendable {
 
     private func handleFileAuth(_ fileEvent: FileAuthEvent) async {
         let allowlist = allowlistStorage.withLock { $0 }
+        let ancestorAllowlist = ancestorAllowlistStorage.withLock { $0 }
 
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
@@ -135,29 +142,31 @@ final class FilterInteractor: @unchecked Sendable {
 
         switch classification {
         case .noRuleApplies:
+            // No rule covers this path — default allow. The ancestor allowlist only
+            // needs to be checked when a policy rule could deny access; for paths
+            // with no rules the access is allowed regardless of ancestry.
             decision = .noRuleApplies
-            dwellNanoseconds = 0
 
-        case .processLevelOnly:
-            // Matching rule has only process-level criteria — evaluate
-            // immediately using data from the AUTH_OPEN event.
-            decision = await checkFAAPolicy(
-                rules: rules, path: fileEvent.path,
+        case .processLevelOnly where ancestorAllowlist.isEmpty:
+            // Matching rule has only process-level criteria and the ancestor
+            // allowlist is empty — evaluate immediately with no ancestry fetch.
+            decision = await evaluateAccess(
+                rules: rules, allowlist: allowlist, ancestorAllowlist: [],
+                path: fileEvent.path,
                 processPath: fileEvent.processPath,
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID
             )
-            dwellNanoseconds = 0
 
-        case .ancestryRequired:
-            // Ancestry data may be needed. Pass a lazy provider so that the
-            // potentially expensive process-tree wait is deferred until the
-            // evaluation actually reaches an ancestry criterion. If a
-            // process-level criterion matches first, the provider is never
-            // called and no waiting occurs.
+        case .processLevelOnly, .ancestryRequired:
+            // Either the ancestor allowlist is non-empty (so we must check ancestors
+            // even for process-level rules) or the rule itself requires ancestry.
+            // Pass a lazy provider so the potentially expensive process-tree wait is
+            // deferred until a criterion actually requires it.
             let dwellStorage = OSAllocatedUnfairLock<UInt64>(initialState: 0)
-            decision = await checkFAAPolicy(
-                rules: rules, path: fileEvent.path,
+            decision = await evaluateAccess(
+                rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist,
+                path: fileEvent.path,
                 processPath: fileEvent.processPath,
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID,

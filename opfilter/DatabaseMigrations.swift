@@ -20,6 +20,7 @@ struct Migration {
 let allMigrations: [Migration] = [
     Migration(version: 1, name: "Create tables and import from JSON", up: migration001CreateTablesAndImportJSON),
     Migration(version: 2, name: "Replace separate team/signing ID columns with combined signatures", up: migration002CombineSignatures),
+    Migration(version: 3, name: "Create user ancestor allowlist table", up: migration003CreateAncestorAllowlist),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -147,6 +148,21 @@ private func encodeJSONStringArray(_ array: [String]) -> String {
         fatalError("DatabaseMigrations: Failed to JSON-encode string array — [String] must always be encodable")
     }
     return string
+}
+
+// MARK: - Migration 003: Create user ancestor allowlist table
+
+private func migration003CreateAncestorAllowlist(_ db: Database) {
+    db.execute("""
+        CREATE TABLE user_ancestor_allowlist (
+            id TEXT PRIMARY KEY,
+            signing_id TEXT NOT NULL DEFAULT '',
+            process_path TEXT NOT NULL DEFAULT '',
+            platform_binary INTEGER NOT NULL DEFAULT 0,
+            team_id TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    NSLog("Migration 003: Created user_ancestor_allowlist table")
 }
 
 // MARK: - JSON import helpers

@@ -243,6 +243,11 @@ public protocol ServiceProtocol {
     func addAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
+    // User ancestor-allowlist mutations (GUI → opfilter). Opfilter stores, then applies
+    // the merged ancestor allowlist and pushes updates to all GUI clients.
+    func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
+
     // GUI requests a full status resync. Opfilter pushes the current user-rule
     // and allowlist snapshots back to the caller.
     func requestResync(withReply reply: @escaping () -> Void)
@@ -273,6 +278,8 @@ public protocol ClientProtocol {
     func userRulesUpdated(_ rulesData: NSData)
     func managedAllowlistUpdated(_ allowlistData: NSData)
     func userAllowlistUpdated(_ allowlistData: NSData)
+    func managedAncestorAllowlistUpdated(_ allowlistData: NSData)
+    func userAncestorAllowlistUpdated(_ allowlistData: NSData)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)
