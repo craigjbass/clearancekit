@@ -175,7 +175,7 @@ Delivered as an array under the `GlobalAllowlist` preference key. Each entry add
 
 Ancestor allowlist entries bypass all FAAPolicy rules when **any process in the calling chain** — parent, grandparent, and so on — matches the entry. The immediate process identity is irrelevant; what matters is whether an ancestor was trusted.
 
-This is useful when you want to allow any tool launched from a trusted shell or IDE without having to enumerate every individual binary. For example, adding your terminal emulator to the ancestor allowlist lets any command run from that terminal access protected paths, while processes with an unrecognised ancestry remain denied.
+This is useful when you want to allow any process to launch processes and gain their permissions. Most likely to be used when allowing background tasks, other security tools or MDM processes to function correctly.
 
 Ancestor entries use the same matching fields as `GlobalAllowlist`:
 
