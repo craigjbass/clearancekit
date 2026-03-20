@@ -203,13 +203,6 @@ let builtInPresets: [AppPreset] = [
         description: "Prevents other processes from reading Chrome's cookies, history, and profile data. Only Chrome and its helpers may open files in its data directories.",
         rules: [
             FAARule(
-                id: UUID(uuidString: "30C8C303-0D9D-4158-BB54-ABCB6DF61316")!,
-                protectedPathPrefix: "/Users/*/Library/Application Support/CrashReporter",
-                allowedSignatures: [
-                    sig("EQHXZ8M8AV", "com.google.Chrome"),
-                ]
-            ),
-            FAARule(
                 id: UUID(uuidString: "2E8546E3-C08A-4877-986D-3E676A4B96F3")!,
                 protectedPathPrefix: "/Users/*/Library/Application Support/Google",
                 allowedSignatures: [
