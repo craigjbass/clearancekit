@@ -130,53 +130,45 @@ final class FilterInteractor: @unchecked Sendable {
         let rules = rulesStorage.withLock { $0 }
         let classification = classifyPath(fileEvent.path, rules: rules)
 
-        let dwellNanoseconds: UInt64
-        let ancestors: [AncestorInfo]
         let decision: PolicyDecision
+        var dwellNanoseconds: UInt64 = 0
 
         switch classification {
         case .noRuleApplies:
-            dwellNanoseconds = 0
-            ancestors = []
             decision = .noRuleApplies
+            dwellNanoseconds = 0
 
         case .processLevelOnly:
             // Matching rule has only process-level criteria — evaluate
             // immediately using data from the AUTH_OPEN event.
-            dwellNanoseconds = 0
-            ancestors = []
-            decision = checkFAAPolicy(
+            decision = await checkFAAPolicy(
                 rules: rules, path: fileEvent.path,
                 processPath: fileEvent.processPath,
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID
             )
+            dwellNanoseconds = 0
 
-        case .ancestryRequired(let matchingRule):
-            // Ancestry data is needed. Dwell until the process appears in
-            // the tree, then look up ancestors for evaluation.
-            dwellNanoseconds = await waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
-
-            guard processTree.contains(identity: fileEvent.processIdentity) else {
-                // Process never appeared before the deadline — fail safe.
-                ancestors = []
-                decision = .denied(
-                    ruleID: matchingRule.id,
-                    ruleName: matchingRule.protectedPathPrefix,
-                    ruleSource: matchingRule.source,
-                    allowedCriteria: "ancestry required but process not found in tree before deadline (pid=\(fileEvent.processIdentity.pid) pidversion=\(fileEvent.processIdentity.pidVersion))"
-                )
-                break
-            }
-
-            ancestors = processTree.ancestors(of: fileEvent.processIdentity)
-            decision = checkFAAPolicy(
+        case .ancestryRequired:
+            // Ancestry data may be needed. Pass a lazy provider so that the
+            // potentially expensive process-tree wait is deferred until the
+            // evaluation actually reaches an ancestry criterion. If a
+            // process-level criterion matches first, the provider is never
+            // called and no waiting occurs.
+            let dwellStorage = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+            decision = await checkFAAPolicy(
                 rules: rules, path: fileEvent.path,
                 processPath: fileEvent.processPath,
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID,
-                ancestors: ancestors
+                ancestryProvider: { [weak self, dwellStorage] in
+                    guard let self else { return [] }
+                    let dwell = await self.waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
+                    dwellStorage.withLock { $0 = dwell }
+                    return self.processTree.ancestors(of: fileEvent.processIdentity)
+                }
             )
+            dwellNanoseconds = dwellStorage.withLock { $0 }
         }
 
         let allowed = decision.isAllowed
