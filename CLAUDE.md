@@ -1,40 +1,124 @@
-# Coding Standards
+# ClearanceKit — Developer Guide
 
-## Naming
-- Use descriptive names that clearly convey intent
-- No abbreviations or generic names like `data`, `temp`, or `value`
+## Architecture
 
-## Control Flow
-- Use guard clauses to exit early and reduce nesting
-- No `else` blocks — return early or extract methods
-- Keep ternary expressions simple; never nest them or span multiple lines
-- Extract complex boolean expressions into clearly named methods
+ClearanceKit uses hexagonal architecture. Three distinct layers must stay separate:
 
-## Methods
-- Short, single-responsibility methods
-- Keep parameter lists short; group related parameters into types
-- No side effects in property getters
+**Domain** (`Shared/`) — Pure Swift logic with no I/O, framework, or OS dependencies.
+- `FAAPolicy.swift` — file-access policy evaluation
+- `GlobalAllowlist.swift` — global allowlist matching
+- `ProcessTree.swift` — process ancestry service
 
-## Collections
-- Never return or pass `nil`/`null` for collections; use empty collections
-- No `if (!empty) { for ... }` — just iterate directly
-- Use collection/object initializers
+**Ports** — Swift protocols that define what the domain needs from the outside world.
+- `ProcessTreeProtocol` — ancestry lookup
+- `ServiceProtocol` / `ClientProtocol` (`XPCProtocol.swift`) — IPC surface
 
-## Immutability
-- Prefer immutable data; use `let` over `var` where possible
-- `let` for anything set only at init time
+**Adapters** (`opfilter/`, `clearancekit/`) — Concrete implementations that translate between external systems and domain types.
+- `ESInboundAdapter` — translates Endpoint Security C events → `FilterEvent`
+- `XPCServer` / `XPCClient` — bridges the GUI ↔ extension boundary
+- `Database` — SQLite persistence
+- `PolicySigner` — ECDSA signature verification
 
-## Errors and Assertions
-- Don't catch broad/generic error types; catch specific ones
-- Don't swallow exceptions and return invented default values — this hides bugs and moves the failure away from its source
-- Use runtime assertions (`guard`, `precondition`, `fatalError`) to enforce invariants instead of defensive fallbacks
-- Only guard against things that are actually possible
+**Rule**: domain code never imports `EndpointSecurity`, `AppKit`, `SwiftUI`, `SQLite`, or any other infrastructure framework. Adapters own those imports.
 
-## Miscellaneous
-- No magic numbers or strings — use named constants or enums
-- No flag booleans for controlling logic; prefer enums or state types
-- Use string interpolation, not concatenation or format calls
-- Deserialize structured data into typed models — no manual JSON manipulation
-- No fallback/default behaviours unless explicitly asked for; every extra branch adds complexity
-- When refactoring, update all call sites — no backwards-compatibility shims or deprecated aliases
-- Never write placeholder comments like "in a real implementation..." or stub methods that pretend to do something. If something is unclear, ask.
+## Build and Test
+
+```bash
+# Build and test via xcodebuild
+xcodebuild test -scheme clearancekit -destination 'platform=macOS'
+```
+
+Tests live in `Tests/` and use the Swift Testing framework (`@Suite`, `@Test`, `#expect`).
+
+## Testing Strategy
+
+### New code — TDD
+Write the test first. Red → Green → Refactor. Keep the cycle short: one failing assertion at a time.
+
+### Existing untested code — Feathers approach
+1. **Characterise before changing.** Write a test that pins the current behaviour exactly, even if that behaviour looks wrong. Do not change any logic yet; only add the test.
+2. **Introduce a seam.** Extract an interface or closure parameter so the behaviour under test can be driven without real I/O. Prefer the simplest seam: a `@Sendable` closure injected at the call site beats a full protocol when only one behaviour varies.
+3. **Narrow the scope.** Test the smallest unit that isolates the logic you need to change, using a fake collaborator (named `Fake…`, never `Mock…`).
+4. **Change under the safety net.** Modify the logic only once a characterisation test is green. Keep commits atomic: characterisation test → logic change → refactoring, each as its own commit.
+5. **Do not retrofit tests onto integration boundaries.** Adapter code that calls OS APIs belongs behind a protocol seam so the domain logic can be tested without it.
+
+### What to test
+- Domain logic (policy evaluation, path matching, allowlist resolution) must be fully covered.
+- Adapters are tested at integration or system level when practical, not unit-level.
+- Do not test Swift language mechanics or framework plumbing.
+
+### Test structure
+```swift
+@Suite("Feature area")
+struct FeatureAreaTests {
+    @Test("specific observable behaviour")
+    func specificObservableBehaviour() async {
+        // Arrange
+        // Act
+        // #expect
+    }
+}
+```
+
+Fake collaborators are private nested structs/classes inside the test file. They implement only the protocol methods exercised by the test.
+
+## Swift Conventions
+
+### Naming
+- Names describe intent at the call site, not the implementation.
+- No abbreviations. No generic placeholders (`data`, `temp`, `value`, `result`, `info`).
+- Prefer nouns for types, verb phrases for methods that perform work.
+
+### Control flow
+- Guard clauses first; exit early; reduce nesting.
+- No `else` after a `return`, `throw`, or `continue` — extract a method instead.
+- Ternaries on one line only; never nested.
+- Complex boolean logic lives in a clearly named computed property or method.
+
+### Methods
+- Single responsibility. If you need to describe a method with "and", split it.
+- Short parameter lists; group related parameters into a dedicated type.
+- No side effects in computed properties.
+
+### Collections
+- Never return or pass `nil` for a collection; return an empty collection.
+- Iterate directly; no `if !collection.isEmpty { for … }` guard before a loop.
+
+### Immutability
+- `let` for everything that does not change after initialisation.
+- Prefer value types (`struct`, `enum`) for domain models.
+
+### Enums over booleans
+- Replace flag parameters and boolean return values with enums that name the cases explicitly.
+- Pattern-match on enum cases; never inspect `.rawValue` to drive logic.
+
+### Errors and assertions
+- Catch specific error types; never catch the root `Error` and swallow it.
+- Do not return invented defaults to paper over failures — surface the error.
+- Use `guard`/`precondition`/`fatalError` to enforce invariants that must always hold.
+- Only add a guard if the condition is actually reachable.
+
+### Concurrency
+- Mark shared mutable state with `OSAllocatedUnfairLock`; avoid `@MainActor` in domain code.
+- Ancestry lookups are lazy: pass `@Sendable () async -> [AncestorInfo]` closures and call them only when a rule demands ancestry data.
+
+### Miscellaneous
+- Named constants or enums; no magic numbers or strings.
+- String interpolation, not concatenation or `String(format:…)`.
+- Deserialise structured data into typed models; no raw dictionary key access.
+- No fallback defaults unless the requirement explicitly calls for one; extra branches hide intent.
+- Update every call site when changing an interface; no backwards-compatibility shims or deprecated aliases.
+
+## Comments
+
+Code should explain itself through precise naming and small, focused units. Comments are not a substitute for clarity.
+
+**Write a comment only when:**
+- The code is correct but the reason it is written that way is non-obvious (e.g. a workaround for a known OS bug with a reference).
+- A performance-sensitive section explains *why* a specific algorithm was chosen and what the measured trade-off is.
+
+**Never write:**
+- Comments that restate what the code does (`// Increment counter`).
+- TODO/FIXME left for future readers without a linked issue.
+- Doc-comment boilerplate on every declaration.
+- Placeholder prose like "in a real implementation…".
