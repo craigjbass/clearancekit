@@ -2,7 +2,7 @@
 
 Every `npm install`, `pip install`, and `brew upgrade` executes arbitrary native code with your full file system permissions. One compromised package can silently read your SSH keys, AWS credentials, iMessages, and browser cookies. You will not know until it is too late.
 
-ClearanceKit intercepts every file-open event on macOS and enforces per-process access policies. Any process without an explicit allow rule is blocked. Denied events surface in a native SwiftUI interface so you can review them and build policy as you work — no configuration files required.
+ClearanceKit intercepts file-system access events on macOS — opens, renames, deletions, hard links, creates, truncations, copies, and directory reads — and enforces per-process access policies. Any process without an explicit allow rule is blocked. Denied events surface in a native SwiftUI interface so you can review them and build policy as you work — no configuration files required.
 
 Policies are bound to cryptographic code signing identity — the Developer ID certificate and bundle identifier embedded in the binary — not to file paths or hashes. A trojanised binary is denied even if it sits at the expected path. Policies survive software updates without any maintenance, because a developer's signing identity does not change between releases.
 
@@ -33,7 +33,7 @@ What can it reach?
 - **Zoom and meeting recordings** — local recordings stored unprotected at `~/Documents/Zoom/`
 - **VS Code and JetBrains IDE state** — recent file lists, workspace settings, and extension local storage that map your entire codebase
 
-clearancekit places the Endpoint Security framework between every file-open event and the process that triggered it. When a process you did not explicitly allow attempts to read a protected path — your `~/.ssh` directory, your Notes database, your browser profile — clearancekit intercepts the access, denies it, and surfaces it in the UI so you can decide whether to add a policy or investigate further.
+clearancekit places the Endpoint Security framework between every file-system access attempt and the process that triggered it. When a process you did not explicitly allow attempts to read a protected path — your `~/.ssh` directory, your Notes database, your browser profile — clearancekit intercepts the access, denies it, and surfaces it in the UI so you can decide whether to add a policy or investigate further.
 
 ### Why code signing makes this stronger than SELinux
 
@@ -60,7 +60,7 @@ ClearanceKit has no auto-update mechanism. This is a deliberate decision: an app
 Two components work together:
 
 - **clearancekit.app** — SwiftUI menu bar app. Manages policies, displays live events, and communicates with the system extension over XPC.
-- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Intercepts `ES_EVENT_TYPE_AUTH_OPEN` events, evaluates policies, and serves the GUI over XPC.
+- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`), evaluates policies, and serves the GUI over XPC.
 
 ## Development
 
