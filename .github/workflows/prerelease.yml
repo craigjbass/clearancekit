@@ -1,0 +1,162 @@
+name: Pre-release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-notarize:
+    runs-on: macos-26
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute version name
+        id: version
+        run: |
+          MARKETING_VERSION=$(grep -m1 'MARKETING_VERSION' clearancekit.xcodeproj/project.pbxproj | grep -oE '[0-9]+\.[0-9]+')
+          SHORT_HASH=$(git rev-parse --short HEAD)
+          LAST_MINOR=$(git tag --list "v${MARKETING_VERSION}.*-*" \
+            | grep -oE "v${MARKETING_VERSION//./\\.}\\.([0-9]+)-" \
+            | grep -oE '[0-9]+-' \
+            | grep -oE '[0-9]+' \
+            | sort -n \
+            | tail -1 \
+            || true)
+          LAST_MINOR=${LAST_MINOR:-0}
+          echo "name=v${MARKETING_VERSION}.${LAST_MINOR}-beta-${SHORT_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          echo "$P12_BASE64" | base64 --decode > certificate.p12
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Install provisioning profiles
+        env:
+          PP_APP_BASE64: ${{ secrets.PROVISIONING_PROFILE_APP }}
+          PP_EXT_BASE64: ${{ secrets.PROVISIONING_PROFILE_OPFILTER }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PP_APP_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/clearancekit.provisionprofile
+          echo "$PP_EXT_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/opfilter.provisionprofile
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project clearancekit.xcodeproj \
+            -scheme clearancekit \
+            -configuration Release \
+            -archivePath build/clearancekit.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=37KMK6XFTT
+
+      - name: Export
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/clearancekit.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Package DMG
+        run: |
+          hdiutil create \
+            -volname "clearancekit" \
+            -size 200m \
+            -fs HFS+ \
+            -layout SPUD \
+            -ov \
+            build/clearancekit-staging.dmg
+
+          hdiutil attach -readwrite -noverify build/clearancekit-staging.dmg
+          MOUNT="/Volumes/clearancekit"
+          cp -R "build/export/clearancekit.app" "$MOUNT/"
+          ln -s /Applications "$MOUNT/Applications"
+
+          osascript <<APPLESCRIPT
+          tell application "Finder"
+            tell disk "clearancekit"
+              open
+              set current view of container window to icon view
+              set toolbar visible of container window to false
+              set statusbar visible of container window to false
+              set the bounds of container window to {400, 100, 1000, 500}
+              set viewOptions to the icon view options of container window
+              set arrangement of viewOptions to not arranged
+              set icon size of viewOptions to 128
+              set background color of viewOptions to {61166, 61166, 61166}
+              set position of item "clearancekit.app" of container window to {175, 190}
+              set position of item "Applications" of container window to {425, 190}
+              close
+              open
+              update without registering applications
+              delay 2
+              close
+            end tell
+          end tell
+          APPLESCRIPT
+
+          hdiutil detach "$MOUNT"
+
+          hdiutil convert build/clearancekit-staging.dmg \
+            -format UDZO \
+            -o "build/clearancekit-${{ steps.version.outputs.name }}.dmg"
+          rm build/clearancekit-staging.dmg
+
+      - name: Notarize DMG
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_API_PRIVATE_KEY }}
+        run: |
+          echo "$ASC_PRIVATE_KEY" > AuthKey.p8
+          xcrun notarytool submit \
+            "build/clearancekit-${{ steps.version.outputs.name }}.dmg" \
+            --key AuthKey.p8 \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait \
+            --timeout 30m
+          rm AuthKey.p8
+          xcrun stapler staple "build/clearancekit-${{ steps.version.outputs.name }}.dmg"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/clearancekit-${{ steps.version.outputs.name }}.dmg
+
+      - name: Create GitHub pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.name }}
+          name: ${{ steps.version.outputs.name }}
+          prerelease: true
+          generate_release_notes: true
+          files: build/clearancekit-${{ steps.version.outputs.name }}.dmg
