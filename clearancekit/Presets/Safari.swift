@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 private let safariSignatures: [ProcessSignature] = [
     apple("com.apple.Safari"),
     apple("com.apple.cloudd"),

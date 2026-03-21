@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 let notesPreset = AppPreset(
     id: "notes-data-protection",
     appName: "Notes",

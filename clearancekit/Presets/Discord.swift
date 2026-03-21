@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 private let discordSignatures: [ProcessSignature] = [
     sig("53Q6R32WPB", "com.hnc.Discord"),
     sig("53Q6R32WPB", "com.hnc.Discord.helper"),

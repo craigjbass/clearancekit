@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 let chromePreset = AppPreset(
     id: "chrome-data-protection",
     appName: "Google Chrome",

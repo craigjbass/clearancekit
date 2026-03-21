@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 let signalPreset = AppPreset(
     id: "signal-data-protection",
     appName: "Signal",

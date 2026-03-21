@@ -3,6 +3,8 @@
 //  clearancekit
 //
 
+import Foundation
+
 let heyPreset = AppPreset(
     id: "hey-data-protection",
     appName: "HEY",
