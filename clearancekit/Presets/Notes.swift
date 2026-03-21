@@ -20,6 +20,7 @@ let notesPreset = AppPreset(
                 apple("com.apple.Notes.SpotlightIndexExtension"),
                 apple("com.apple.Notes.IntentsExtension"),
                 apple("com.apple.LinkedNotesUIService"),
+                apple("com.apple.accountsd"),
             ]
         ),
     ]
