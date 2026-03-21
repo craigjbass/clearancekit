@@ -139,7 +139,10 @@ jobs:
           subject-path: build/clearancekit-${{ github.ref_name }}.dmg
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/clearancekit-${{ github.ref_name }}.dmg
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "build/clearancekit-${{ github.ref_name }}.dmg" \
+            --generate-notes \
+            --title "${{ github.ref_name }}"
