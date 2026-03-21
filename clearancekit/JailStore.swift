@@ -54,9 +54,8 @@ final class JailStore: ObservableObject {
     func allowPath(_ path: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
         try await authenticate("Allow this path in jail rule")
-        let parentDir = URL(fileURLWithPath: path).deletingLastPathComponent().path
-        guard !userRules[index].allowedPathPrefixes.contains(parentDir) else { return }
-        userRules[index].allowedPathPrefixes.append(parentDir)
+        guard !userRules[index].allowedPathPrefixes.contains(path) else { return }
+        userRules[index].allowedPathPrefixes.append(path)
         service.updateJailRule(userRules[index])
     }
 }

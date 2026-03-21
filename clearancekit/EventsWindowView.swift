@@ -347,7 +347,7 @@ struct EventRow: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else if !event.signingID.isEmpty {
-                if canAllowDeny, let ruleID = event.matchedRuleID {
+                if canAllowDeny, let ruleID = event.matchedRuleID, event.jailedRuleID == nil {
                     allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
                         try await PolicyStore.shared.allowProcess(
                             teamID: event.teamID,
@@ -387,7 +387,7 @@ struct EventRow: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             } else if !ancestor.signingID.isEmpty {
-                                if canAllowDeny, let ruleID = event.matchedRuleID {
+                                if canAllowDeny, let ruleID = event.matchedRuleID, event.jailedRuleID == nil {
                                     allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
                                         try await PolicyStore.shared.allowAncestor(
                                             teamID: ancestor.teamID,
