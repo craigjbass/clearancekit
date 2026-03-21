@@ -92,19 +92,19 @@
 		EE4444444444444444440010 /* Exceptions for "opfilter" folder in "clearancekitTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				ConnectionValidator.swift,
-				Database.swift,
-				DatabaseMigrations.swift,
-				ESInboundAdapter.swift,
-				ESProcessRecord.swift,
+				"Database/Database.swift",
+				"Database/DatabaseMigrations.swift",
+				"EndpointSecurity/ESInboundAdapter.swift",
+				"EndpointSecurity/ESProcessRecord.swift",
 				Info.plist,
 				main.swift,
-				ManagedAllowlistLoader.swift,
-				ManagedPolicyLoader.swift,
-				"NSXPCConnection+AuditToken.swift",
-				PolicySigner.swift,
-				ProcessEnumerator.swift,
-				XPCServer.swift,
+				"Policy/ManagedAllowlistLoader.swift",
+				"Policy/ManagedPolicyLoader.swift",
+				"Policy/PolicySigner.swift",
+				"XPC/ConnectionValidator.swift",
+				"XPC/NSXPCConnection+AuditToken.swift",
+				"XPC/ProcessEnumerator.swift",
+				"XPC/XPCServer.swift",
 			);
 			target = EE4444444444444444440006 /* clearancekitTests */;
 		};

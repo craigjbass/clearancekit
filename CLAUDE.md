@@ -14,10 +14,13 @@ ClearanceKit uses hexagonal architecture. Three distinct layers must stay separa
 - `ServiceProtocol` / `ClientProtocol` (`XPCProtocol.swift`) — IPC surface
 
 **Adapters** (`opfilter/`, `clearancekit/`) — Concrete implementations that translate between external systems and domain types.
-- `ESInboundAdapter` — translates Endpoint Security C events → `FilterEvent`
-- `XPCServer` / `XPCClient` — bridges the GUI ↔ extension boundary
-- `Database` — SQLite persistence
-- `PolicySigner` — ECDSA signature verification
+
+`opfilter/` is organised into subdirectories by adapter role:
+- `EndpointSecurity/` — translates Endpoint Security C events → domain types (`ESInboundAdapter`, `ESProcessRecord`, `MutePath`)
+- `XPC/` — IPC boundary with the GUI app (`XPCServer`, `ConnectionValidator`, `EventBroadcaster`, `ProcessEnumerator`, `NSXPCConnection+AuditToken`)
+- `Database/` — SQLite persistence (`Database`, `DatabaseMigrations`)
+- `Policy/` — policy loading, signing, and state management (`PolicyRepository`, `PolicySigner`, `ManagedPolicyLoader`, `ManagedAllowlistLoader`)
+- `Filter/` — filter orchestration and output (`FilterInteractor`, `AuditLogger`, `TTYNotifier`)
 
 **Rule**: domain code never imports `EndpointSecurity`, `AppKit`, `SwiftUI`, `SQLite`, or any other infrastructure framework. Adapters own those imports.
 
