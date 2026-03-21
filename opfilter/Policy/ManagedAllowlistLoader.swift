@@ -26,7 +26,7 @@ enum ManagedAllowlistLoader {
             NSLog("ManagedAllowlistLoader: No managed GlobalAllowlist found — running without managed allowlist tier")
             return []
         }
-        let entries = raw.compactMap(parseEntry)
+        let entries = raw.compactMap(parseManagedAllowlistEntry)
         NSLog("ManagedAllowlistLoader: Loaded %d managed allowlist entry/entries", entries.count)
         return entries
     }
@@ -34,38 +34,5 @@ enum ManagedAllowlistLoader {
     static func loadWithSync() -> [AllowlistEntry] {
         CFPreferencesAppSynchronize(preferencesDomain)
         return load()
-    }
-
-    // MARK: - Private
-
-    private static func parseEntry(_ dict: [String: Any]) -> AllowlistEntry? {
-        let signingID   = dict["SigningID"]   as? String ?? ""
-        let processPath = dict["ProcessPath"] as? String ?? ""
-        guard !signingID.isEmpty || !processPath.isEmpty else {
-            NSLog("ManagedAllowlistLoader: Skipping entry with no SigningID or ProcessPath")
-            return nil
-        }
-
-        let platformBinary = dict["PlatformBinary"] as? Bool ?? false
-        let teamID = dict["TeamID"] as? String ?? ""
-
-        let id: UUID
-        if let idString = dict["ID"] as? String, let parsed = UUID(uuidString: idString) {
-            id = parsed
-        } else {
-            id = deterministicID(for: signingID.isEmpty ? processPath : signingID)
-        }
-
-        return AllowlistEntry(
-            id: id,
-            signingID: signingID,
-            processPath: processPath,
-            platformBinary: platformBinary,
-            teamID: teamID
-        )
-    }
-
-    private static func deterministicID(for name: String) -> UUID {
-        uuidV5(namespace: uuidV5URLNamespace, name: name)
     }
 }
