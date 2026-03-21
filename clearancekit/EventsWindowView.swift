@@ -16,8 +16,10 @@ enum EventFilter: String, CaseIterable {
 struct EventsWindowView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @ObservedObject private var nav = NavigationState.shared
-    @State private var filter: EventFilter = .all
+    @State private var filter: EventFilter = .deny
     @State private var showDefaultAllows = false
+
+    private static let maxDisplayedEvents = 500
 
     private var filteredEvents: [FolderOpenEvent] {
         let base: [FolderOpenEvent]
@@ -26,8 +28,8 @@ struct EventsWindowView: View {
         case .allow: base = xpcClient.events.filter { $0.accessAllowed }
         case .deny:  base = xpcClient.events.filter { !$0.accessAllowed }
         }
-        guard showDefaultAllows else { return base.filter { !$0.accessAllowed || $0.matchedRuleID != nil } }
-        return base
+        let visible = showDefaultAllows ? base : base.filter { !$0.accessAllowed || $0.matchedRuleID != nil }
+        return Array(visible.prefix(Self.maxDisplayedEvents))
     }
 
     var body: some View {
