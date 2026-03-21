@@ -29,8 +29,14 @@ enum PolicySigner {
     private static let algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA256
 
     /// Reference to the System Keychain, used for software-backed keys only.
+    ///
+    /// `SecKeychainOpen` is deprecated since macOS 10.10 but remains the only API that
+    /// accepts an explicit keychain path. `SecItemCopyMatching` does not accept a path, so
+    /// the legacy API is required here; the deprecation warning is accepted as known noise.
     private static let systemKeychain: SecKeychain? = {
         var kc: SecKeychain?
+        // SecKeychainOpen is deprecated (macOS 10.10) but has no modern replacement for
+        // explicit keychain paths; the warning is expected and intentional.
         let status = SecKeychainOpen("/Library/Keychains/System.keychain", &kc)
         if status != errSecSuccess {
             NSLog("PolicySigner: Could not open System Keychain (%d)", status)
