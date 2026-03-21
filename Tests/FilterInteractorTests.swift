@@ -615,4 +615,143 @@ struct FilterInteractorTests {
 
         #expect(allowed == true)
     }
+
+    // MARK: - Ancestor jail propagation via handleFileAuth
+
+    @Test("descendant of jailed ancestor is denied access outside allowed prefixes")
+    func ancestorJailDeniesDescendant() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed/**"]
+        )
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file.txt",
+            teamID: "OTHER",
+            signingID: "com.child.process"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == false)
+    }
+
+    @Test("descendant of jailed ancestor is allowed access within allowed prefixes")
+    func ancestorJailAllowsDescendantWithinPrefixes() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed/**"]
+        )
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/allowed/data.db",
+            teamID: "OTHER",
+            signingID: "com.child.process"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("globally allowlisted descendant escapes ancestor jail")
+    func globalAllowlistEscapesAncestorJail() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: []
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.child.process", teamID: "OTHER")
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [allowlistEntry],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file",
+            teamID: "OTHER",
+            signingID: "com.child.process"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("no ancestor jail match leaves process unaffected")
+    func noAncestorJailMatchUnaffected() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed"]
+        )
+        let tree = FakeProcessTree()
+        tree.containsResult = true
+        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/other", teamID: "OTHER", signingID: "com.other.app")]
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file.txt",
+            teamID: "OTHER",
+            signingID: "com.other.app"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
 }

@@ -56,7 +56,8 @@ final class ESInboundAdapter {
                     oldToken: message.pointee.process.pointee.audit_token,
                     newToken: target.audit_token,
                     teamID: Self.string(from: target.team_id),
-                    signingID: Self.string(from: target.signing_id)
+                    signingID: Self.string(from: target.signing_id),
+                    parentToken: message.pointee.process.pointee.parent_audit_token
                 )
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             case ES_EVENT_TYPE_NOTIFY_EXIT:

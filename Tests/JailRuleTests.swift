@@ -244,6 +244,82 @@ struct CheckJailPathTests {
     }
 }
 
+// MARK: - checkAncestorJailPolicy
+
+@Suite("checkAncestorJailPolicy")
+struct CheckAncestorJailPolicyTests {
+
+    private let rule = JailRule(
+        name: "Confine App",
+        jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+        allowedPathPrefixes: ["/allowed/**", "/tmp"]
+    )
+
+    @Test("returns nil when jail rules are empty")
+    func emptyRules() {
+        let ancestors = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.app")]
+        let result = checkAncestorJailPolicy(jailRules: [], path: "/any", ancestors: ancestors)
+        #expect(result == nil)
+    }
+
+    @Test("returns nil when no ancestor matches any jail rule")
+    func noAncestorMatch() {
+        let ancestors = [AncestorInfo(path: "/usr/bin/other", teamID: "OTHER", signingID: "com.other.app")]
+        let result = checkAncestorJailPolicy(jailRules: [rule], path: "/any", ancestors: ancestors)
+        #expect(result == nil)
+    }
+
+    @Test("allows path when ancestor matches rule and path is within allowed prefixes")
+    func ancestorMatchAllowedPath() {
+        let ancestors = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.app")]
+        let result = checkAncestorJailPolicy(jailRules: [rule], path: "/allowed/file.txt", ancestors: ancestors)
+        guard case .jailAllowed(let ruleID, _, _) = result else {
+            Issue.record("Expected jailAllowed, got \(String(describing: result))")
+            return
+        }
+        #expect(ruleID == rule.id)
+    }
+
+    @Test("denies path when ancestor matches rule and path is outside allowed prefixes")
+    func ancestorMatchDeniedPath() {
+        let ancestors = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.app")]
+        let result = checkAncestorJailPolicy(jailRules: [rule], path: "/forbidden/secret", ancestors: ancestors)
+        guard case .jailDenied(let ruleID, _, _) = result else {
+            Issue.record("Expected jailDenied, got \(String(describing: result))")
+            return
+        }
+        #expect(ruleID == rule.id)
+    }
+
+    @Test("matches on grandparent when parent does not match")
+    func grandparentMatch() {
+        let ancestors = [
+            AncestorInfo(path: "/bin/zsh", teamID: "apple", signingID: "com.apple.zsh"),
+            AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.app")
+        ]
+        let result = checkAncestorJailPolicy(jailRules: [rule], path: "/forbidden/file", ancestors: ancestors)
+        guard case .jailDenied = result else {
+            Issue.record("Expected jailDenied, got \(String(describing: result))")
+            return
+        }
+    }
+
+    @Test("resolves empty team ID to apple for ancestor matching")
+    func appleTeamIDResolution() {
+        let appleRule = JailRule(
+            name: "Jail Apple Tool",
+            jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
+            allowedPathPrefixes: ["/usr/**"]
+        )
+        let ancestors = [AncestorInfo(path: "/usr/bin/tool", teamID: "", signingID: "com.apple.tool")]
+        let result = checkAncestorJailPolicy(jailRules: [appleRule], path: "/usr/local/file", ancestors: ancestors)
+        guard case .jailAllowed = result else {
+            Issue.record("Expected jailAllowed, got \(String(describing: result))")
+            return
+        }
+    }
+}
+
 // MARK: - JailRule Codable
 
 @Suite("JailRule Codable")

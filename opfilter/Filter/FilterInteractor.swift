@@ -200,11 +200,20 @@ final class FilterInteractor: @unchecked Sendable {
             return
         }
 
-        // Jail check: if the process is jailed, evaluate against the jail rule's
-        // allowed path prefixes. Runs after the global allowlist (globally
-        // allowlisted processes escape jail) but before FAA rule evaluation.
+        // Jail check: if the process itself or any ancestor matches a jail rule,
+        // evaluate against the jail rule's allowed path prefixes. Runs after the
+        // global allowlist (globally allowlisted processes escape jail) but before
+        // FAA rule evaluation.
         let jailRules = jailRulesStorage.withLock { $0 }
-        let jailDecision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
+        var jailDecision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
+
+        if jailDecision.jailedRuleID == nil, !jailRules.isEmpty {
+            let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
+            if let ancestorDecision = checkAncestorJailPolicy(jailRules: jailRules, path: fileEvent.path, ancestors: ancestors) {
+                jailDecision = ancestorDecision
+            }
+        }
+
         if jailDecision.jailedRuleID != nil {
             let allowed = jailDecision.isAllowed
             fileEvent.respond(allowed)

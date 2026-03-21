@@ -182,27 +182,35 @@ final class ESJailAdapter {
     /// `message.pointee.process` holds the pre-exec token; `exec.target` holds
     /// the post-exec token. pidVersion increments on exec, so the old key must
     /// be atomically replaced with the new one to keep the jail in effect.
-    func onExec(oldToken: audit_token_t, newToken: audit_token_t, teamID: String, signingID: String) {
+    func onExec(oldToken: audit_token_t, newToken: audit_token_t, teamID: String, signingID: String, parentToken: audit_token_t) {
         let oldKey = ProcessKey(oldToken)
         let newKey = ProcessKey(newToken)
+        let parentKey = ProcessKey(parentToken)
 
-        // Atomically replace the old key with the new one if this process was jailed.
-        let existingRuleID = jailedProcessesLock.withLock { map -> UUID? in
-            guard let ruleID = map[oldKey] else { return nil }
-            map.removeValue(forKey: oldKey)
-            map[newKey] = ruleID
-            return ruleID
+        let inheritedRuleID = jailedProcessesLock.withLock { map -> UUID? in
+            // Check 1: pre-exec self was jailed → swap keys.
+            if let ruleID = map[oldKey] {
+                map.removeValue(forKey: oldKey)
+                map[newKey] = ruleID
+                return ruleID
+            }
+            // Check 2: parent process is jailed → inherit.
+            if let ruleID = map[parentKey] {
+                map[newKey] = ruleID
+                return ruleID
+            }
+            return nil
         }
 
-        if let ruleID = existingRuleID {
+        if let ruleID = inheritedRuleID {
             guard let client else { return }
             var t = newToken
             es_mute_process(client, &t)
-            logger.debug("ESJailAdapter: re-muted exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public)")
+            logger.debug("ESJailAdapter: muted exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public)")
             return
         }
 
-        // Not previously jailed — check direct signing-ID match on new image.
+        // Not inherited — check direct signing-ID match on new image.
         let rules = rulesLock.withLock { $0 }
         guard !rules.isEmpty else { return }
         let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID

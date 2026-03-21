@@ -66,6 +66,23 @@ public func checkJailPolicy(
     return .jailDenied(ruleID: rule.id, ruleName: rule.name, allowedPrefixes: rule.allowedPathPrefixes)
 }
 
+/// Walks ancestors to find the first one whose signing ID matches a jail rule,
+/// then evaluates the path against that rule. Returns nil if no ancestor is jailed.
+public func checkAncestorJailPolicy(
+    jailRules: [JailRule],
+    path: String,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision? {
+    guard !jailRules.isEmpty else { return nil }
+
+    for ancestor in ancestors {
+        let resolvedTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
+        guard let rule = jailRules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: ancestor.signingID) }) else { continue }
+        return checkJailPath(rule: rule, path: path)
+    }
+    return nil
+}
+
 private func pathMatchesPattern(_ path: String, pattern: String) -> Bool {
     if pattern.hasSuffix("/**") {
         let base = String(pattern.dropLast(3))
