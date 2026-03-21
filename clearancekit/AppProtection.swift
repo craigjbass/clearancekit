@@ -140,6 +140,7 @@ final class DiscoverySession: ObservableObject, Identifiable {
 
     init(appInfo: AppBundleInfo) {
         self.appInfo = appInfo
+        XPCClient.shared.clearEvents()
         subscribe()
         startTimer()
         XPCClient.shared.beginDiscovery()
