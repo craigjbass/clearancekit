@@ -16,12 +16,10 @@
 //
 
 import Foundation
-import CommonCrypto
 
 enum ManagedAllowlistLoader {
     private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
     private static let allowlistKey: CFString = "GlobalAllowlist" as CFString
-    private static let uuidV5Namespace = UUID(uuidString: "6BA7B811-9DAD-11D1-80B4-00C04FD430C8")!
 
     static func load() -> [AllowlistEntry] {
         guard let raw = CFPreferencesCopyAppValue(allowlistKey, preferencesDomain) as? [[String: Any]] else {
@@ -68,23 +66,6 @@ enum ManagedAllowlistLoader {
     }
 
     private static func deterministicID(for name: String) -> UUID {
-        var nsBytes = uuidV5Namespace.uuid
-        let nameBytes = Array(name.utf8)
-        var digest = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
-        var ctx = CC_SHA1_CTX()
-        CC_SHA1_Init(&ctx)
-        withUnsafeBytes(of: &nsBytes) { ptr in
-            _ = CC_SHA1_Update(&ctx, ptr.baseAddress, CC_LONG(ptr.count))
-        }
-        CC_SHA1_Update(&ctx, nameBytes, CC_LONG(nameBytes.count))
-        CC_SHA1_Final(&digest, &ctx)
-        digest[6] = (digest[6] & 0x0F) | 0x50
-        digest[8] = (digest[8] & 0x3F) | 0x80
-        return UUID(uuid: (
-            digest[0],  digest[1],  digest[2],  digest[3],
-            digest[4],  digest[5],  digest[6],  digest[7],
-            digest[8],  digest[9],  digest[10], digest[11],
-            digest[12], digest[13], digest[14], digest[15]
-        ))
+        uuidV5(namespace: uuidV5URLNamespace, name: name)
     }
 }
