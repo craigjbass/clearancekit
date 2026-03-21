@@ -7,8 +7,9 @@ MARKETING_VERSION=$(grep -m1 'MARKETING_VERSION' clearancekit.xcodeproj/project.
 SHORT_HASH=$(git rev-parse --short HEAD)
 
 NEXT_INCREMENT=$(git tag --list "v${MARKETING_VERSION}.*" \
-    | grep -E "^v${MARKETING_VERSION//./\\.}\.[0-9]+$" \
-    | grep -oE '[0-9]+$' \
+    | grep -v -- '-beta-' \
+    | grep -E "^v${MARKETING_VERSION//./\\.}\.[0-9]+(-[0-9a-f]+)?$" \
+    | sed -E "s/^v${MARKETING_VERSION//./\\.}\.([0-9]+).*/\1/" \
     | sort -n \
     | tail -1 \
     || true)
