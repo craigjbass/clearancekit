@@ -8,10 +8,11 @@ SHORT_HASH=$(git rev-parse --short HEAD)
 
 NEXT_INCREMENT=$(git tag --list "v${MARKETING_VERSION}.*-*" \
     | grep -oE "v${MARKETING_VERSION//./\\.}\\.([0-9]+)-" \
-    | grep -oE '[0-9]+\-' \
+    | grep -oE '[0-9]+-' \
     | grep -oE '[0-9]+' \
     | sort -n \
-    | tail -1)
+    | tail -1 \
+    || true)
 
 NEXT_INCREMENT=$(( ${NEXT_INCREMENT:-0} + 1 ))
 
