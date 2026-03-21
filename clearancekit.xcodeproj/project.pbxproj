@@ -54,6 +54,36 @@
 			);
 			target = 4682565B2F28331400839A1A /* opfilter */;
 		};
+		AA5555555555555555550001 /* Exceptions for "clearancekit" folder in "clearancekitTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AllowlistView.swift,
+				AppPickerView.swift,
+				AppPreset.swift,
+				AppProtection.swift,
+				AppProtectionStore.swift,
+				"Assets.xcassets",
+				ContentView.swift,
+				DatabaseSignatureIssueView.swift,
+				EventsWindowView.swift,
+				ManagedAppProtectionLoader.swift,
+				NavigationState.swift,
+				PolicyExportView.swift,
+				PolicyImportView.swift,
+				PolicyView.swift,
+				PresetsView.swift,
+				ProcessPickerView.swift,
+				ProcessesView.swift,
+				ProtectionDraft.swift,
+				ProtectionFettleView.swift,
+				RuleEditView.swift,
+				SystemExtensionManager.swift,
+				"clearancekit.entitlements",
+				"clearancekit.icon",
+				clearancekitApp.swift,
+			);
+			target = EE4444444444444444440006 /* clearancekitTests */;
+		};
 		EE4444444444444444440010 /* Exceptions for "opfilter" folder in "clearancekitTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -78,6 +108,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4682563E2F2832C400839A1A /* clearancekit */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA5555555555555555550001 /* Exceptions for "clearancekit" folder in "clearancekitTests" target */,
+			);
 			path = clearancekit;
 			sourceTree = "<group>";
 		};
@@ -233,6 +266,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				4682563E2F2832C400839A1A /* clearancekit */,
 				468256602F28331400839A1A /* opfilter */,
 				468256722F28500000000003 /* Shared */,
 				EE4444444444444444440002 /* Tests */,
