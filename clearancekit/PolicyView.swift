@@ -103,9 +103,15 @@ struct PolicyView: View {
         }
     }
 
-    private func protection(for rule: FAARule) -> AppProtection? {
-        (protectionStore.protections + protectionStore.managedProtections)
-            .first { $0.ruleIDs.contains(rule.id) }
+    private func source(for rule: FAARule) -> (name: String, icon: NSImage)? {
+        let allProtections = protectionStore.protections + protectionStore.managedProtections
+        if let protection = allProtections.first(where: { $0.ruleIDs.contains(rule.id) }) {
+            return (protection.appName, protection.icon)
+        }
+        if let preset = builtInPresets.first(where: { $0.rules.contains { $0.id == rule.id } }) {
+            return (preset.appName, preset.icon)
+        }
+        return nil
     }
 
     @ViewBuilder
@@ -122,7 +128,7 @@ struct PolicyView: View {
                 if !policyStore.baselineRules.isEmpty {
                     Section("Baseline Rules") {
                         ForEach(policyStore.baselineRules) { rule in
-                            RuleRow(rule: rule, protection: nil, isEditable: false) { } onDelete: { }
+                            RuleRow(rule: rule, source: nil, isEditable: false) { } onDelete: { }
                                 .padding(.vertical, 4)
                         }
                     }
@@ -130,7 +136,7 @@ struct PolicyView: View {
                 if !policyStore.managedRules.isEmpty {
                     Section("Managed Profile Rules") {
                         ForEach(policyStore.managedRules) { rule in
-                            RuleRow(rule: rule, protection: protection(for: rule), isEditable: false) { } onDelete: { }
+                            RuleRow(rule: rule, source: source(for: rule), isEditable: false) { } onDelete: { }
                                 .padding(.vertical, 4)
                         }
                     }
@@ -138,7 +144,7 @@ struct PolicyView: View {
                 if !policyStore.userRules.isEmpty {
                     Section("User Rules") {
                         ForEach(policyStore.userRules) { rule in
-                            RuleRow(rule: rule, protection: protection(for: rule), isEditable: true) {
+                            RuleRow(rule: rule, source: source(for: rule), isEditable: true) {
                                 editingRule = rule
                             } onDelete: {
                                 Task { try? await policyStore.remove(rule) }
@@ -164,7 +170,7 @@ private struct ImportPreviewItem: Identifiable {
 
 private struct RuleRow: View {
     let rule: FAARule
-    let protection: AppProtection?
+    let source: (name: String, icon: NSImage)?
     let isEditable: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -185,12 +191,12 @@ private struct RuleRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
                 Spacer()
-                if let protection {
+                if let source {
                     HStack(spacing: 4) {
-                        Image(nsImage: protection.icon)
+                        Image(nsImage: source.icon)
                             .resizable()
                             .frame(width: 16, height: 16)
-                        Text(protection.appName)
+                        Text(source.name)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
