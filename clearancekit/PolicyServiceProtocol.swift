@@ -17,6 +17,9 @@ protocol PolicyServiceProtocol: AnyObject {
     func removeAllowlistEntry(entryID: UUID)
     func addAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry)
     func removeAncestorAllowlistEntry(entryID: UUID)
+    func addJailRule(_ rule: JailRule)
+    func updateJailRule(_ rule: JailRule)
+    func removeJailRule(ruleID: UUID)
 }
 
 /// A function that authenticates the user before a sensitive mutation is applied.

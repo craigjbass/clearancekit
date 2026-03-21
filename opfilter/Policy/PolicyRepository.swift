@@ -24,9 +24,11 @@ protocol PolicyDatabaseProtocol: AnyObject {
     func loadUserRulesResult() -> DatabaseLoadResult<FAARule>
     func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry>
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry>
+    func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule>
     func saveUserRules(_ rules: [FAARule])
     func saveUserAllowlist(_ entries: [AllowlistEntry])
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry])
+    func saveUserJailRules(_ rules: [JailRule])
 }
 
 // MARK: - PolicyRepository
@@ -40,6 +42,7 @@ final class PolicyRepository: @unchecked Sendable {
         var userAllowlist: [AllowlistEntry] = []
         var managedAncestorAllowlist: [AncestorAllowlistEntry] = []
         var userAncestorAllowlist: [AncestorAllowlistEntry] = []
+        var userJailRules: [JailRule] = []
         var pendingSuspectUserRules: [FAARule]?
         var pendingSuspectUserAllowlist: [AllowlistEntry]?
     }
@@ -84,6 +87,13 @@ final class PolicyRepository: @unchecked Sendable {
             logger.warning("PolicyRepository: Signature issue for user_ancestor_allowlist — discarding \(entries.count) suspect entry/entries")
         }
 
+        switch database.loadUserJailRulesResult() {
+        case .ok(let rules):
+            initialState.userJailRules = rules
+        case .suspect(let rules):
+            logger.warning("PolicyRepository: Signature issue for user_jail_rules — discarding \(rules.count) suspect rule(s)")
+        }
+
         self.storage = OSAllocatedUnfairLock(initialState: initialState)
         self.database = database
     }
@@ -125,6 +135,10 @@ final class PolicyRepository: @unchecked Sendable {
 
     func mergedAncestorAllowlist() -> [AncestorAllowlistEntry] {
         storage.withLock { $0.managedAncestorAllowlist + $0.userAncestorAllowlist }
+    }
+
+    func mergedJailRules() -> [JailRule] {
+        storage.withLock { $0.userJailRules }
     }
 
     // MARK: - Rule mutations
@@ -192,6 +206,37 @@ final class PolicyRepository: @unchecked Sendable {
             return state.userAncestorAllowlist
         }
         database.saveUserAncestorAllowlist(entries)
+    }
+
+    // MARK: - Jail rule mutations
+
+    func addJailRule(_ rule: JailRule) {
+        let rules = storage.withLock { state -> [JailRule] in
+            state.userJailRules.append(rule)
+            return state.userJailRules
+        }
+        database.saveUserJailRules(rules)
+    }
+
+    func updateJailRule(_ rule: JailRule) {
+        let rules: [JailRule]? = storage.withLock { state in
+            guard let index = state.userJailRules.firstIndex(where: { $0.id == rule.id }) else { return nil }
+            state.userJailRules[index] = rule
+            return state.userJailRules
+        }
+        guard let rules else {
+            logger.error("PolicyRepository: updateJailRule — rule \(rule.id.uuidString, privacy: .public) not found")
+            return
+        }
+        database.saveUserJailRules(rules)
+    }
+
+    func removeJailRule(ruleID: UUID) {
+        let rules = storage.withLock { state -> [JailRule] in
+            state.userJailRules.removeAll { $0.id == ruleID }
+            return state.userJailRules
+        }
+        database.saveUserJailRules(rules)
     }
 
     // MARK: - Signature issue
@@ -275,6 +320,14 @@ final class PolicyRepository: @unchecked Sendable {
         let entries = storage.withLock { $0.userAncestorAllowlist }
         guard let data = try? JSONEncoder().encode(entries) else {
             fatalError("PolicyRepository: Failed to encode user ancestor allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    func encodedUserJailRules() -> NSData {
+        let rules = storage.withLock { $0.userJailRules }
+        guard let data = try? JSONEncoder().encode(rules) else {
+            fatalError("PolicyRepository: Failed to encode user jail rules — this is a bug")
         }
         return data as NSData
     }

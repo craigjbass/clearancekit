@@ -87,14 +87,16 @@ final class FilterInteractor: @unchecked Sendable {
     private let rulesStorage: OSAllocatedUnfairLock<[FAARule]>
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
     private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
+    private let jailRulesStorage: OSAllocatedUnfairLock<[JailRule]>
     private let processTree: ProcessTreeProtocol
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
 
-    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
+    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], initialJailRules: [JailRule] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
         self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
+        self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
     }
 
@@ -108,6 +110,10 @@ final class FilterInteractor: @unchecked Sendable {
 
     func updateAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) {
         ancestorAllowlistStorage.withLock { $0 = entries }
+    }
+
+    func updateJailRules(_ rules: [JailRule]) {
+        jailRulesStorage.withLock { $0 = rules }
     }
 
     func handle(_ event: FilterEvent) {
@@ -135,6 +141,43 @@ final class FilterInteractor: @unchecked Sendable {
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             fileEvent.respond(true)
+            return
+        }
+
+        // Jail check: if the process is jailed, evaluate against the jail rule's
+        // allowed path prefixes. Runs after the global allowlist (globally
+        // allowlisted processes escape jail) but before FAA rule evaluation.
+        let jailRules = jailRulesStorage.withLock { $0 }
+        let jailDecision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
+        if jailDecision.jailedRuleID != nil {
+            let allowed = jailDecision.isAllowed
+            fileEvent.respond(allowed)
+
+            let logAncestors = processTree.ancestors(of: fileEvent.processIdentity)
+            auditLogger.log(jailDecision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: 0)
+
+            if !allowed {
+                ttyNotifier.writeDenial(path: fileEvent.path, reason: jailDecision.reason, ttyPath: fileEvent.ttyPath)
+            }
+
+            let folderOpenEvent = FolderOpenEvent(
+                operation: fileEvent.operation.rawValue,
+                path: fileEvent.path,
+                timestamp: Date(),
+                processID: fileEvent.processID,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID,
+                accessAllowed: allowed,
+                decisionReason: jailDecision.reason,
+                ancestors: logAncestors,
+                matchedRuleID: jailDecision.matchedRuleID,
+                jailedRuleID: jailDecision.jailedRuleID
+            )
+            let callback = onEvent
+            DispatchQueue.main.async {
+                callback?(folderOpenEvent)
+            }
             return
         }
 

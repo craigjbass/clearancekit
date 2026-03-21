@@ -16,6 +16,9 @@ final class FakePolicyService: PolicyServiceProtocol {
     private(set) var removedEntryIDs: [UUID] = []
     private(set) var addedAncestorEntries: [AncestorAllowlistEntry] = []
     private(set) var removedAncestorEntryIDs: [UUID] = []
+    private(set) var addedJailRules: [JailRule] = []
+    private(set) var updatedJailRules: [JailRule] = []
+    private(set) var removedJailRuleIDs: [UUID] = []
 
     func addRule(_ rule: FAARule) { addedRules.append(rule) }
     func updateRule(_ rule: FAARule) { updatedRules.append(rule) }
@@ -24,6 +27,9 @@ final class FakePolicyService: PolicyServiceProtocol {
     func removeAllowlistEntry(entryID: UUID) { removedEntryIDs.append(entryID) }
     func addAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) { addedAncestorEntries.append(entry) }
     func removeAncestorAllowlistEntry(entryID: UUID) { removedAncestorEntryIDs.append(entryID) }
+    func addJailRule(_ rule: JailRule) { addedJailRules.append(rule) }
+    func updateJailRule(_ rule: JailRule) { updatedJailRules.append(rule) }
+    func removeJailRule(ruleID: UUID) { removedJailRuleIDs.append(ruleID) }
 }
 
 // MARK: - Auth helpers

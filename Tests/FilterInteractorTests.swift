@@ -394,4 +394,158 @@ struct FilterInteractorTests {
 
         #expect(allowed == true)
     }
+
+    // MARK: - Jail tests
+
+    @Test("jailed process denied when accessing path outside allowed prefixes")
+    func jailedProcessDeniedOutsidePrefixes() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed"]
+        )
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file.txt",
+            teamID: "TEAM1",
+            signingID: "com.example.jailed"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == false)
+    }
+
+    @Test("jailed process allowed when accessing path within allowed prefixes")
+    func jailedProcessAllowedWithinPrefixes() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed"]
+        )
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/allowed/data.db",
+            teamID: "TEAM1",
+            signingID: "com.example.jailed"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("globally allowlisted process escapes jail")
+    func globallyAllowlistedProcessEscapesJail() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed"]
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.example.jailed", teamID: "TEAM1")
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [allowlistEntry],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file.txt",
+            teamID: "TEAM1",
+            signingID: "com.example.jailed"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("non-jailed process is unaffected by jail rules")
+    func nonJailedProcessUnaffected() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed"]
+        )
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/forbidden/file.txt",
+            teamID: "OTHER",
+            signingID: "com.other.app"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
+    @Test("jail check runs before FAA rule evaluation")
+    func jailCheckRunsBeforeFAA() {
+        // FAA rule would allow this process, but jail rule should deny it first
+        let faaRule = FAARule(
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed")]
+        )
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/other"]
+        )
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(
+            initialRules: [faaRule],
+            initialAllowlist: [],
+            initialJailRules: [jailRule],
+            processTree: tree
+        )
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        let event = openFileEvent(
+            path: "/protected/data.db",
+            teamID: "TEAM1",
+            signingID: "com.example.jailed"
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == false)
+    }
 }

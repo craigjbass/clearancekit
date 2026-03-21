@@ -28,7 +28,7 @@ struct EventsWindowView: View {
         case .allow: base = xpcClient.events.filter { $0.accessAllowed }
         case .deny:  base = xpcClient.events.filter { !$0.accessAllowed }
         }
-        let visible = showDefaultAllows ? base : base.filter { !$0.accessAllowed || $0.matchedRuleID != nil }
+        let visible = showDefaultAllows ? base : base.filter { !$0.accessAllowed || $0.matchedRuleID != nil || $0.jailedRuleID != nil }
         return Array(visible.prefix(Self.maxDisplayedEvents))
     }
 
@@ -181,6 +181,7 @@ struct EventRow: View {
                     if event.operation != "open" {
                         operationBadge
                     }
+                    jailBadge
                     Text(isBaselineEvent ? "baseline" : "managed")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -236,6 +237,7 @@ struct EventRow: View {
                 if event.operation != "open" {
                     operationBadge
                 }
+                jailBadge
                 Spacer()
                 Text(event.accessAllowed ? "Allowed" : "Denied")
                     .font(.caption)
@@ -292,6 +294,19 @@ struct EventRow: View {
             .padding(.vertical, 2)
             .background(Color.purple.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
+    @ViewBuilder
+    private var jailBadge: some View {
+        if event.jailedRuleID != nil {
+            Text(event.accessAllowed ? "jailed ✓" : "jailed ✗")
+                .font(.caption2)
+                .foregroundStyle(event.accessAllowed ? .green : .red)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background((event.accessAllowed ? Color.green : Color.red).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
     }
 
     // MARK: - Shared detail sections

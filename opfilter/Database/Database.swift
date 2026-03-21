@@ -342,6 +342,89 @@ final class Database {
         )
     }
 
+    // MARK: - User Jail Rules
+
+    func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> {
+        var rules: [JailRule] = []
+        query("""
+            SELECT id, name, jailed_signature, allowed_path_prefixes
+            FROM user_jail_rules ORDER BY rowid
+        """) { stmt in
+            if let rule = jailRuleFromRow(stmt) {
+                rules.append(rule)
+            }
+        }
+        switch checkSignature(table: "user_jail_rules", content: canonicalJailRulesJSON(rules)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d user jail rule(s)", rules.count)
+            return .ok(rules)
+        case .suspect:
+            NSLog("Database: Signature verification failed for user_jail_rules — %d suspect rule(s)", rules.count)
+            return .suspect(rules)
+        }
+    }
+
+    func saveUserJailRules(_ rules: [JailRule]) {
+        inTransaction {
+            execute("DELETE FROM user_jail_rules")
+            for rule in rules {
+                insertJailRule(rule)
+            }
+            updateSignature(table: "user_jail_rules", content: canonicalJailRulesJSON(rules))
+        }
+    }
+
+    private func insertJailRule(_ rule: JailRule) {
+        execute("""
+            INSERT INTO user_jail_rules (id, name, jailed_signature, allowed_path_prefixes)
+            VALUES (?, ?, ?, ?)
+        """, bindings: [
+            .text(rule.id.uuidString),
+            .text(rule.name),
+            .text(encodeSignature(rule.jailedSignature)),
+            .text(encodeStringArray(rule.allowedPathPrefixes)),
+        ])
+    }
+
+    private func jailRuleFromRow(_ stmt: OpaquePointer) -> JailRule? {
+        let uuidString = columnText(stmt, 0)
+        guard let id = UUID(uuidString: uuidString) else {
+            NSLog("Database: Skipping jail rule row with invalid UUID '%@'", uuidString)
+            return nil
+        }
+        guard let signature = decodeSignature(columnText(stmt, 2)) else {
+            NSLog("Database: Skipping jail rule row with invalid signature")
+            return nil
+        }
+        return JailRule(
+            id: id,
+            name: columnText(stmt, 1),
+            jailedSignature: signature,
+            allowedPathPrefixes: decodeStringArray(columnText(stmt, 3))
+        )
+    }
+
+    private func encodeSignature(_ sig: ProcessSignature) -> String {
+        "\(sig.teamID):\(sig.signingID)"
+    }
+
+    private func decodeSignature(_ string: String) -> ProcessSignature? {
+        guard let colonIndex = string.firstIndex(of: ":") else { return nil }
+        let teamID = String(string[string.startIndex..<colonIndex])
+        let signingID = String(string[string.index(after: colonIndex)...])
+        return ProcessSignature(teamID: teamID, signingID: signingID)
+    }
+
+    private func canonicalJailRulesJSON(_ rules: [JailRule]) -> Data {
+        let sorted = rules.sorted { $0.id.uuidString < $1.id.uuidString }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode jail rules for signature — [JailRule] must always be encodable")
+        }
+        return encoded
+    }
+
     // MARK: - Signature verification
 
     private enum SignatureCheckResult {
@@ -366,6 +449,7 @@ final class Database {
         case "user_rules":              break
         case "user_allowlist":          break
         case "user_ancestor_allowlist": break
+        case "user_jail_rules":         break
         default: preconditionFailure("Unexpected table name: \(table)")
         }
         var found = false

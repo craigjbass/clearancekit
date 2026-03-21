@@ -277,6 +277,37 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Jail rule mutations
+
+    func addJailRule(_ rule: JailRule) {
+        guard let data = try? JSONEncoder().encode(rule) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: addJailRule error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.addJailRule(data as NSData) { success in
+            if !success { logger.error("XPCClient: addJailRule rejected by service") }
+        }
+    }
+
+    func updateJailRule(_ rule: JailRule) {
+        guard let data = try? JSONEncoder().encode(rule) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: updateJailRule error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.updateJailRule(data as NSData) { success in
+            if !success { logger.error("XPCClient: updateJailRule rejected by service") }
+        }
+    }
+
+    func removeJailRule(ruleID: UUID) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: removeJailRule error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.removeJailRule(ruleID as NSUUID) { success in
+            if !success { logger.error("XPCClient: removeJailRule rejected by service") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -482,6 +513,17 @@ extension XPCClient: ClientProtocol {
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedUserAncestorEntries(entries)
+        }
+    }
+
+    nonisolated func userJailRulesUpdated(_ rulesData: NSData) {
+        guard let rules = try? JSONDecoder().decode([JailRule].self, from: rulesData as Data) else {
+            logger.fault("XPCClient: Failed to decode user jail rules — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            JailStore.shared.receivedUserRules(rules)
         }
     }
 }

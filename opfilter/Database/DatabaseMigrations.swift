@@ -21,6 +21,7 @@ let allMigrations: [Migration] = [
     Migration(version: 1, name: "Create tables and import from JSON", up: migration001CreateTablesAndImportJSON),
     Migration(version: 2, name: "Replace separate team/signing ID columns with combined signatures", up: migration002CombineSignatures),
     Migration(version: 3, name: "Create user ancestor allowlist table", up: migration003CreateAncestorAllowlist),
+    Migration(version: 4, name: "Create user jail rules table", up: migration004CreateJailRules),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -219,4 +220,18 @@ private func importUserAllowlistFromJSON(_ db: Database) {
 
     db.saveUserAllowlist(entries)
     NSLog("Migration 001: Imported %d user allowlist entry/entries from JSON", entries.count)
+}
+
+// MARK: - Migration 004: Create user jail rules table
+
+private func migration004CreateJailRules(_ db: Database) {
+    db.execute("""
+        CREATE TABLE user_jail_rules (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            jailed_signature TEXT NOT NULL,
+            allowed_path_prefixes TEXT NOT NULL DEFAULT '[]'
+        )
+    """)
+    NSLog("Migration 004: Created user_jail_rules table")
 }

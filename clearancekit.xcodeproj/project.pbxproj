@@ -67,6 +67,7 @@
 				ContentView.swift,
 				DatabaseSignatureIssueView.swift,
 				EventsWindowView.swift,
+				JailView.swift,
 				ManagedAppProtectionLoader.swift,
 				NavigationState.swift,
 				PolicyExportView.swift,

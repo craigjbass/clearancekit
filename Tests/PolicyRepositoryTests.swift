@@ -12,17 +12,21 @@ private final class FakeDatabase: PolicyDatabaseProtocol {
     var userRulesResult: DatabaseLoadResult<FAARule> = .ok([])
     var userAllowlistResult: DatabaseLoadResult<AllowlistEntry> = .ok([])
     var userAncestorAllowlistResult: DatabaseLoadResult<AncestorAllowlistEntry> = .ok([])
+    var userJailRulesResult: DatabaseLoadResult<JailRule> = .ok([])
 
     private(set) var savedRules: [FAARule] = []
     private(set) var savedAllowlist: [AllowlistEntry] = []
     private(set) var savedAncestorAllowlist: [AncestorAllowlistEntry] = []
+    private(set) var savedJailRules: [JailRule] = []
 
     func loadUserRulesResult() -> DatabaseLoadResult<FAARule> { userRulesResult }
     func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry> { userAllowlistResult }
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry> { userAncestorAllowlistResult }
+    func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> { userJailRulesResult }
     func saveUserRules(_ rules: [FAARule]) { savedRules = rules }
     func saveUserAllowlist(_ entries: [AllowlistEntry]) { savedAllowlist = entries }
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) { savedAncestorAllowlist = entries }
+    func saveUserJailRules(_ rules: [JailRule]) { savedJailRules = rules }
 }
 
 // MARK: - Factories
