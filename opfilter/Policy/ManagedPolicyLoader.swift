@@ -25,15 +25,10 @@
 //
 
 import Foundation
-import CommonCrypto
 
 enum ManagedPolicyLoader {
     private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
     private static let policyKey: CFString          = "FAAPolicy" as CFString
-
-    /// UUID v5 namespace used when deriving stable rule IDs from a path string.
-    /// This is the RFC 4122 URL namespace: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
-    private static let uuidV5Namespace = UUID(uuidString: "6BA7B811-9DAD-11D1-80B4-00C04FD430C8")!
 
     /// Reads the managed FAAPolicy from CFPreferences.
     /// Call `loadWithSync()` when you want to guarantee the cache is flushed first
@@ -81,40 +76,9 @@ enum ManagedPolicyLoader {
         )
     }
 
-    private static func parseSignatures(_ strings: [String]) -> [ProcessSignature] {
-        strings.compactMap { s in
-            guard let colonIndex = s.firstIndex(of: ":") else { return nil }
-            return ProcessSignature(
-                teamID: String(s[s.startIndex..<colonIndex]),
-                signingID: String(s[s.index(after: colonIndex)...])
-            )
-        }
-    }
-
     /// Derives a stable UUID v5 (RFC 4122, SHA-1) for a rule when no explicit
     /// ID is provided. The name is the UTF-8 encoding of the ProtectedPathPrefix.
     private static func deterministicID(forPath path: String) -> UUID {
-        var nsBytes = uuidV5Namespace.uuid
-        let nameBytes = Array(path.utf8)
-
-        var digest = [UInt8](repeating: 0, count: Int(CC_SHA1_DIGEST_LENGTH))
-        var ctx = CC_SHA1_CTX()
-        CC_SHA1_Init(&ctx)
-        withUnsafeBytes(of: &nsBytes) { ptr in
-            _ = CC_SHA1_Update(&ctx, ptr.baseAddress, CC_LONG(ptr.count))
-        }
-        CC_SHA1_Update(&ctx, nameBytes, CC_LONG(nameBytes.count))
-        CC_SHA1_Final(&digest, &ctx)
-
-        // Set version = 5 and RFC 4122 variant bits.
-        digest[6] = (digest[6] & 0x0F) | 0x50
-        digest[8] = (digest[8] & 0x3F) | 0x80
-
-        return UUID(uuid: (
-            digest[0],  digest[1],  digest[2],  digest[3],
-            digest[4],  digest[5],  digest[6],  digest[7],
-            digest[8],  digest[9],  digest[10], digest[11],
-            digest[12], digest[13], digest[14], digest[15]
-        ))
+        uuidV5(namespace: uuidV5URLNamespace, name: path)
     }
 }
