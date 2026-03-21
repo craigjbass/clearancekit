@@ -19,7 +19,7 @@ interactor.onEvent = { event in
 }
 
 jailAdapter.start(initialRules: server.mergedJailRules())
-adapter.start(initialRules: server.mergedRules(), jailAdapter: jailAdapter, onXProtectChanged: { server.handleXProtectChange() })
+adapter.start(initialRules: server.mergedRules(), onXProtectChanged: { server.handleXProtectChange() })
 server.start()
 
 dispatchMain()

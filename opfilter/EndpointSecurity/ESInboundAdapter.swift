@@ -22,7 +22,7 @@ final class ESInboundAdapter {
         self.interactor = interactor
     }
 
-    func start(initialRules: [FAARule], jailAdapter: ESJailAdapter? = nil, onXProtectChanged: @escaping () -> Void) {
+    func start(initialRules: [FAARule], onXProtectChanged: @escaping () -> Void) {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
             switch message.pointee.event_type {
@@ -41,31 +41,22 @@ final class ESInboundAdapter {
                 // before constructing a domain event.
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
-            case ES_EVENT_TYPE_NOTIFY_FORK:
-                let child = message.pointee.event.fork.child.pointee
-                jailAdapter?.onFork(
-                    childToken: child.audit_token,
-                    teamID: Self.string(from: child.team_id),
-                    signingID: Self.string(from: child.signing_id),
-                    parentToken: message.pointee.process.pointee.audit_token
-                )
-                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             case ES_EVENT_TYPE_AUTH_EXEC:
-                let target = message.pointee.event.exec.target.pointee
-                jailAdapter?.onExec(
-                    oldToken: message.pointee.process.pointee.audit_token,
-                    newToken: target.audit_token,
-                    teamID: Self.string(from: target.team_id),
-                    signingID: Self.string(from: target.signing_id),
-                    parentToken: message.pointee.process.pointee.parent_audit_token
-                )
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
-            case ES_EVENT_TYPE_NOTIFY_EXIT:
-                jailAdapter?.onProcessExited(auditToken: message.pointee.process.pointee.audit_token)
+            case ES_EVENT_TYPE_AUTH_OPEN,
+                 ES_EVENT_TYPE_AUTH_LINK,
+                 ES_EVENT_TYPE_AUTH_CREATE,
+                 ES_EVENT_TYPE_AUTH_TRUNCATE,
+                 ES_EVENT_TYPE_AUTH_COPYFILE,
+                 ES_EVENT_TYPE_AUTH_READDIR,
+                 ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
+                 ES_EVENT_TYPE_AUTH_CLONE,
+                 ES_EVENT_TYPE_NOTIFY_FORK,
+                 ES_EVENT_TYPE_NOTIFY_EXIT:
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             default:
-                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+                fatalError("ESInboundAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
             }
         }
 
