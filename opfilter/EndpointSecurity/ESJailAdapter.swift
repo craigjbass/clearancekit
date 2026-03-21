@@ -28,17 +28,15 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "es-jail-adapter")
 
 // audit_token_for_pid is in libBSM (always loaded on macOS) but is not
-// directly bridged into Swift modules, so we locate it at runtime via dlsym.
-private typealias AuditTokenForPID = @convention(c) (pid_t, UnsafeMutablePointer<audit_token_t>) -> Int32
-private let _auditTokenForPID: AuditTokenForPID? = {
-    guard let sym = dlsym(RTLD_DEFAULT, "audit_token_for_pid") else { return nil }
-    return unsafeBitCast(sym, to: AuditTokenForPID.self)
-}()
+// directly bridged into Swift modules. @_silgen_name binds to the symbol at
+// link time, avoiding the need to look up RTLD_DEFAULT (a C macro unavailable
+// in Swift) via dlsym.
+@_silgen_name("audit_token_for_pid")
+private func _auditTokenForPID(_ pid: pid_t, _ token: UnsafeMutablePointer<audit_token_t>) -> Int32
 
 private func auditToken(forPID pid: pid_t) -> audit_token_t? {
-    guard let fn = _auditTokenForPID else { return nil }
     var token = audit_token_t()
-    guard fn(pid, &token) == 0 else { return nil }
+    guard _auditTokenForPID(pid, &token) == 0 else { return nil }
     return token
 }
 
