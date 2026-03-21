@@ -97,10 +97,10 @@ private struct JailRuleEditView: View {
     let onSave: (JailRule) -> Void
 
     @State private var name: String
-    @State private var teamID: String
-    @State private var signingID: String
+    @State private var signatureText: String
     @State private var allowedPrefixes: [String]
     @State private var newPrefix: String = ""
+    @State private var showProcessPicker = false
 
     private let existingID: UUID?
 
@@ -108,9 +108,23 @@ private struct JailRuleEditView: View {
         self.onSave = onSave
         self.existingID = existingRule?.id
         _name = State(initialValue: existingRule?.name ?? "")
-        _teamID = State(initialValue: existingRule?.jailedSignature.teamID ?? "")
-        _signingID = State(initialValue: existingRule?.jailedSignature.signingID ?? "")
+        _signatureText = State(initialValue: existingRule?.jailedSignature.description ?? "")
         _allowedPrefixes = State(initialValue: existingRule?.allowedPathPrefixes ?? [])
+    }
+
+    private var parsedSignature: ProcessSignature? {
+        guard let colonIndex = signatureText.firstIndex(of: ":") else { return nil }
+        let team = String(signatureText[signatureText.startIndex..<colonIndex])
+        let signing = String(signatureText[signatureText.index(after: colonIndex)...])
+        guard !signing.isEmpty else { return nil }
+        // Normalise empty team ID to appleTeamID so the rule matches correctly,
+        // consistent with how process events are resolved before matching.
+        let effectiveTeam = team.isEmpty ? appleTeamID : team
+        return ProcessSignature(teamID: effectiveTeam, signingID: signing)
+    }
+
+    private var isValid: Bool {
+        !name.isEmpty && parsedSignature != nil
     }
 
     var body: some View {
@@ -119,9 +133,17 @@ private struct JailRuleEditView: View {
                 Section("Rule") {
                     TextField("Name", text: $name)
                 }
-                Section("Jailed Process") {
-                    TextField("Team ID", text: $teamID)
-                    TextField("Signing ID", text: $signingID)
+                Section {
+                    HStack {
+                        TextField("teamID:signingID", text: $signatureText)
+                            .font(.system(.body, design: .monospaced))
+                        Button("Pick...") { showProcessPicker = true }
+                    }
+                } header: {
+                    Text("Jailed Process")
+                } footer: {
+                    Text("Wildcards (*) are not supported for jail rules.")
+                        .foregroundStyle(.secondary)
                 }
                 Section("Allowed Path Prefixes") {
                     ForEach(allowedPrefixes, id: \.self) { prefix in
@@ -157,20 +179,31 @@ private struct JailRuleEditView: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
+                    guard let sig = parsedSignature else { return }
                     let rule = JailRule(
                         id: existingID ?? UUID(),
                         name: name,
-                        jailedSignature: ProcessSignature(teamID: teamID, signingID: signingID),
+                        jailedSignature: sig,
                         allowedPathPrefixes: allowedPrefixes
                     )
                     onSave(rule)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(name.isEmpty || signingID.isEmpty)
+                .disabled(!isValid)
             }
             .padding()
         }
         .frame(minWidth: 500, minHeight: 400)
+        .sheet(isPresented: $showProcessPicker) {
+            ProcessPickerView { process in
+                let effectiveTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
+                signatureText = "\(effectiveTeamID):\(process.signingID)"
+                if name.isEmpty { name = process.name }
+                showProcessPicker = false
+            } onCancel: {
+                showProcessPicker = false
+            }
+        }
     }
 }

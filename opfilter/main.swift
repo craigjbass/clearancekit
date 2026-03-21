@@ -11,13 +11,15 @@ ProcessTree.shared.buildInitialTree()
 
 let interactor = FilterInteractor(initialRules: faaPolicy)
 let adapter = ESInboundAdapter(interactor: interactor)
-let server = XPCServer(interactor: interactor, adapter: adapter)
+let jailAdapter = ESJailAdapter(interactor: interactor)
+let server = XPCServer(interactor: interactor, adapter: adapter, jailAdapter: jailAdapter)
 
 interactor.onEvent = { event in
     server.handleEvent(event)
 }
 
-adapter.start(initialRules: server.mergedRules(), onXProtectChanged: { server.handleXProtectChange() })
+jailAdapter.start(initialRules: server.mergedJailRules())
+adapter.start(initialRules: server.mergedRules(), jailAdapter: jailAdapter, onXProtectChanged: { server.handleXProtectChange() })
 server.start()
 
 dispatchMain()

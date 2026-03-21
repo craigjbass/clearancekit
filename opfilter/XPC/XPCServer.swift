@@ -19,8 +19,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private let broadcaster: EventBroadcaster
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
+    private let jailAdapter: ESJailAdapter
 
-    init(interactor: FilterInteractor, adapter: ESInboundAdapter) {
+    init(interactor: FilterInteractor, adapter: ESInboundAdapter, jailAdapter: ESJailAdapter) {
         let database = Database(directory: dataDirectory)
         let managedRules = ManagedPolicyLoader.load()
         let managedAllowlist = ManagedAllowlistLoader.load()
@@ -36,6 +37,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         self.broadcaster = EventBroadcaster()
         self.interactor = interactor
         self.adapter = adapter
+        self.jailAdapter = jailAdapter
 
         super.init()
 
@@ -73,6 +75,10 @@ final class XPCServer: NSObject, @unchecked Sendable {
         policyRepository.mergedRules()
     }
 
+    func mergedJailRules() -> [JailRule] {
+        policyRepository.mergedJailRules()
+    }
+
     // MARK: - Filter application
 
     private func applyPolicyToFilter() {
@@ -85,7 +91,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
     }
 
     private func applyJailRulesToFilter() {
-        interactor.updateJailRules(policyRepository.mergedJailRules())
+        let rules = policyRepository.mergedJailRules()
+        interactor.updateJailRules(rules)
+        jailAdapter.updateJailRules(rules)
     }
 
     // MARK: - Client registration

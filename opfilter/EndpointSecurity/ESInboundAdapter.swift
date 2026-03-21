@@ -22,7 +22,7 @@ final class ESInboundAdapter {
         self.interactor = interactor
     }
 
-    func start(initialRules: [FAARule], onXProtectChanged: @escaping () -> Void) {
+    func start(initialRules: [FAARule], jailAdapter: ESJailAdapter? = nil, onXProtectChanged: @escaping () -> Void) {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
             switch message.pointee.event_type {
@@ -41,6 +41,25 @@ final class ESInboundAdapter {
                 // before constructing a domain event.
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
+            case ES_EVENT_TYPE_NOTIFY_FORK:
+                let child = message.pointee.event.fork.child.pointee
+                jailAdapter?.onProcessStarted(
+                    auditToken: child.audit_token,
+                    teamID: Self.string(from: child.team_id),
+                    signingID: Self.string(from: child.signing_id)
+                )
+                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+            case ES_EVENT_TYPE_NOTIFY_EXEC:
+                let target = message.pointee.event.exec.target.pointee
+                jailAdapter?.onProcessStarted(
+                    auditToken: target.audit_token,
+                    teamID: Self.string(from: target.team_id),
+                    signingID: Self.string(from: target.signing_id)
+                )
+                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+            case ES_EVENT_TYPE_NOTIFY_EXIT:
+                jailAdapter?.onProcessExited(auditToken: message.pointee.process.pointee.audit_token)
+                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             default:
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             }
@@ -184,7 +203,7 @@ final class ESInboundAdapter {
         }
     }
 
-    private static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
+    static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
         let path = string(from: message.pointee.event.open.file.pointee.path)
         let respond: @Sendable (Bool) -> Void = { allowed in
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, allowed)
@@ -192,7 +211,7 @@ final class ESInboundAdapter {
         return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, respond: respond)
     }
 
-    private static func fileAuthEvent(
+    static func fileAuthEvent(
         from message: UnsafePointer<es_message_t>,
         esClient: OpaquePointer,
         operation: FileOperation,
@@ -204,7 +223,7 @@ final class ESInboundAdapter {
         return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, respond: respond)
     }
 
-    private static func fileAuthEvent(
+    static func fileAuthEvent(
         from message: UnsafePointer<es_message_t>,
         esClient: OpaquePointer,
         operation: FileOperation,
@@ -234,7 +253,7 @@ final class ESInboundAdapter {
         )
     }
 
-    private static func createEventPath(from event: es_event_create_t) -> String {
+    static func createEventPath(from event: es_event_create_t) -> String {
         switch event.destination_type {
         case ES_DESTINATION_TYPE_EXISTING_FILE:
             return string(from: event.destination.existing_file.pointee.path)
@@ -247,7 +266,7 @@ final class ESInboundAdapter {
         }
     }
 
-    private static func string(from esString: es_string_token_t) -> String {
+    static func string(from esString: es_string_token_t) -> String {
         guard let data = esString.data else { return "" }
         return String(bytes: Data(bytes: data, count: esString.length), encoding: .utf8) ?? ""
     }

@@ -130,6 +130,11 @@ struct EventRow: View {
 
     private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
 
+    private var isJailedUserDeny: Bool {
+        guard let ruleID = event.jailedRuleID, !event.accessAllowed else { return false }
+        return JailStore.shared.userRules.contains { $0.id == ruleID }
+    }
+
     private var matchedRule: FAARule? {
         guard let ruleID = event.matchedRuleID else { return nil }
         return PolicyStore.shared.userRules.first { $0.id == ruleID }
@@ -231,9 +236,17 @@ struct EventRow: View {
             HStack {
                 Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
                     .foregroundColor(event.accessAllowed ? .green : .red)
-                Text(event.path)
+                if isJailedUserDeny, let ruleID = event.jailedRuleID {
+                    allowButton(label: event.path, itemKey: "jail-path") {
+                        try await JailStore.shared.allowPath(event.path, inRule: ruleID)
+                    }
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(1)
+                } else {
+                    Text(event.path)
+                        .font(.system(.body, design: .monospaced))
+                        .lineLimit(1)
+                }
                 if event.operation != "open" {
                     operationBadge
                 }
