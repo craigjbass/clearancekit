@@ -16,8 +16,8 @@
 //  • When the main client observes NOTIFY_FORK / NOTIFY_EXEC for a process
 //    whose signing ID matches a jail rule, it calls onProcessStarted.
 //  • When the main client observes NOTIFY_EXIT, it calls onProcessExited.
-//  • When jail rules change, updateJailRules re-enumerates running processes
-//    and mutes any whose signing ID now matches.
+//  • When jail rules change, updateJailRules updates the rule set so that
+//    subsequent NOTIFY_FORK/EXEC callbacks mute the correct processes.
 //
 
 import Foundation
@@ -26,19 +26,6 @@ import Security
 import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "es-jail-adapter")
-
-// audit_token_for_pid is in libBSM (always loaded on macOS) but is not
-// directly bridged into Swift modules. @_silgen_name binds to the symbol at
-// link time, avoiding the need to look up RTLD_DEFAULT (a C macro unavailable
-// in Swift) via dlsym.
-@_silgen_name("audit_token_for_pid")
-private func _auditTokenForPID(_ pid: pid_t, _ token: UnsafeMutablePointer<audit_token_t>) -> Int32
-
-private func auditToken(forPID pid: pid_t) -> audit_token_t? {
-    var token = audit_token_t()
-    guard _auditTokenForPID(pid, &token) == 0 else { return nil }
-    return token
-}
 
 // MARK: - ESJailAdapter
 
@@ -122,7 +109,6 @@ final class ESJailAdapter {
         }
 
         rulesLock.withLock { $0 = initialRules }
-        muteMatchingRunningProcesses(rules: initialRules)
         logger.info("ESJailAdapter: started with \(initialRules.count) initial jail rule(s)")
     }
 
@@ -130,7 +116,6 @@ final class ESJailAdapter {
 
     func updateJailRules(_ rules: [JailRule]) {
         rulesLock.withLock { $0 = rules }
-        muteMatchingRunningProcesses(rules: rules)
         logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s)")
     }
 
@@ -153,18 +138,4 @@ final class ESJailAdapter {
         es_unmute_process(client, &token)
     }
 
-    // MARK: - Private helpers
-
-    private func muteMatchingRunningProcesses(rules: [JailRule]) {
-        guard let client, !rules.isEmpty else { return }
-        let processes = ProcessEnumerator.enumerateAll()
-        for proc in processes {
-            let resolvedTeamID = proc.teamID.isEmpty ? appleTeamID : proc.teamID
-            guard rules.contains(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: proc.signingID) }) else { continue }
-            guard let token = auditToken(forPID: pid_t(proc.pid)) else { continue }
-            var mutableToken = token
-            es_mute_process(client, &mutableToken)
-            logger.debug("ESJailAdapter: muted running process pid=\(proc.pid) signingID=\(proc.signingID, privacy: .public)")
-        }
-    }
 }
