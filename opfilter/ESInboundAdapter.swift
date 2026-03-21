@@ -9,6 +9,18 @@ import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "es-adapter")
 
+/// Returns the literal path prefix to pass to `es_mute_path` for a given pattern.
+/// Stops at the first path component that contains a wildcard character.
+func mutePath(for pattern: String) -> String {
+    var literal: [String] = []
+    for component in pattern.split(separator: "/", omittingEmptySubsequences: false).map(String.init) {
+        if component.contains("*") || component.contains("?") { break }
+        literal.append(component)
+    }
+    let result = literal.joined(separator: "/")
+    return result.isEmpty ? "/" : result
+}
+
 final class ESInboundAdapter {
     static let xprotectPath = "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS"
 
@@ -85,7 +97,7 @@ final class ESInboundAdapter {
     func updatePolicy(_ rules: [FAARule]) {
         guard let client else { return }
         let old = policyPrefixes.union(discoveryPrefixes)
-        policyPrefixes = Set(rules.map { $0.esMutePath })
+        policyPrefixes = Set(rules.map { mutePath(for: $0.protectedPathPrefix) })
         applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
         interactor.updatePolicy(rules)
@@ -116,7 +128,7 @@ final class ESInboundAdapter {
 
     private func applyMutedPrefixes(from rules: [FAARule]) {
         guard let client else { return }
-        policyPrefixes = Set(rules.map { $0.esMutePath })
+        policyPrefixes = Set(rules.map { mutePath(for: $0.protectedPathPrefix) })
         for prefix in policyPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
