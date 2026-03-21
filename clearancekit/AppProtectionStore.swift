@@ -7,7 +7,7 @@ import Foundation
 import Combine
 import os
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "app-protection-store")
+nonisolated(unsafe) private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "app-protection-store")
 
 @MainActor
 final class AppProtectionStore: ObservableObject {

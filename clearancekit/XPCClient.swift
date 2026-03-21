@@ -10,7 +10,6 @@ import Combine
 import UserNotifications
 import os
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
 
 // MARK: - PendingSignatureIssue
 
@@ -23,6 +22,8 @@ struct PendingSignatureIssue: Identifiable, Equatable {
         lhs.id == rhs.id
     }
 }
+
+nonisolated(unsafe) private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "xpc-client")
 
 @MainActor
 final class XPCClient: NSObject, ObservableObject {

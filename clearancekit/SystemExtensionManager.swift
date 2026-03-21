@@ -11,7 +11,7 @@ import Combine
 import os
 @preconcurrency import SystemExtensions
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
+nonisolated(unsafe) private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "system-extension")
 
 @MainActor
 final class SystemExtensionManager: NSObject, ObservableObject {
