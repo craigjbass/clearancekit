@@ -34,6 +34,7 @@ struct ContentView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @ObservedObject private var nav = NavigationState.shared
+    @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var signatureIssue: PendingSignatureIssue? = nil
 
     var body: some View {
@@ -72,6 +73,15 @@ struct ContentView: View {
                 xpcClient.resolveSignatureIssue(approved: approved)
             }
             .interactiveDismissDisabled()
+        }
+        // The binding setter is intentionally a no-op: interactive dismissal is disabled,
+        // and the sheet is dismissed only by the Cancel/Finalize actions in DiscoverySessionRow,
+        // which call AppProtectionStore.shared.cancelDiscovery() or finalizeDiscovery(_:for:).
+        .sheet(item: Binding(get: { protectionStore.activeDiscovery }, set: { _ in })) { session in
+            DiscoverySessionRow(session: session)
+                .padding()
+                .frame(minWidth: 500)
+                .interactiveDismissDisabled()
         }
     }
 }

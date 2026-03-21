@@ -23,12 +23,6 @@ struct PresetsView: View {
 
     var body: some View {
         List {
-            if let session = protectionStore.activeDiscovery {
-                Section {
-                    DiscoverySessionRow(session: session)
-                        .padding(.vertical, 6)
-                }
-            }
             Section("Custom") {
                 ForEach(protectionStore.protections) { protection in
                     CustomProtectionRow(protection: protection)
@@ -138,8 +132,8 @@ struct PresetsView: View {
 
 // MARK: - DiscoverySessionRow
 
-private struct DiscoverySessionRow: View {
-    let session: DiscoverySession
+struct DiscoverySessionRow: View {
+    @ObservedObject var session: DiscoverySession
     @State private var isFinalizing = false
     @State private var showFettle = false
     @State private var fettleDraft: ProtectionDraft?

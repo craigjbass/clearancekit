@@ -122,7 +122,8 @@ enum AppBundleIntrospector {
 // MARK: - DiscoverySession
 
 @MainActor
-final class DiscoverySession: ObservableObject {
+final class DiscoverySession: ObservableObject, Identifiable {
+    let id = UUID()
     let appInfo: AppBundleInfo
 
     private static let sessionDuration: TimeInterval = 60
