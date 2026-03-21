@@ -147,6 +147,7 @@ public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 15, signingID: "com.apple.appkit.xpc.openAndSavePanelService"),
     signingEntry(n: 16, signingID: "com.apple.lsd"),
     signingEntry(n: 17, signingID: "com.apple.logd_helper"),
+    signingEntry(n: 18, signingID: "com.apple.settings.PrivacySecurity.extension"),
 ]
 
 // MARK: - XProtect enumeration
