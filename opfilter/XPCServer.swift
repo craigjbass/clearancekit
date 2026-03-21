@@ -2,9 +2,8 @@
 //  XPCServer.swift
 //  opfilter
 //
-//  XPC server that exposes policy management to the GUI app.
-//  Replaces the former DaemonXPCServer — opfilter is now the single
-//  privileged process for both ES enforcement and GUI communication.
+//  Thin coordinator: sets up the XPC listener, wires PolicyRepository,
+//  EventBroadcaster, FilterInteractor, and ESInboundAdapter together.
 //
 
 import Foundation
@@ -16,65 +15,31 @@ private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/c
 
 final class XPCServer: NSObject, @unchecked Sendable {
     private var listener: NSXPCListener?
-    private let lock = NSLock()
-    private var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
-    private var recentEvents: [FolderOpenEvent] = []
-    private var managedRules: [FAARule] = []
-    private var userRules: [FAARule] = []
-    private var xprotectEntries: [AllowlistEntry] = []
-    private var managedAllowlist: [AllowlistEntry] = []
-    private var userAllowlist: [AllowlistEntry] = []
-    private var managedAncestorAllowlist: [AncestorAllowlistEntry] = []
-    private var userAncestorAllowlist: [AncestorAllowlistEntry] = []
-    private var pendingSuspectUserRules: [FAARule]? = nil
-    private var pendingSuspectUserAllowlist: [AllowlistEntry]? = nil
-    private let maxHistoryCount = 1000
-    private let database: Database
+    private let policyRepository: PolicyRepository
+    private let broadcaster: EventBroadcaster
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
 
     init(interactor: FilterInteractor, adapter: ESInboundAdapter) {
+        let database = Database(directory: dataDirectory)
+        let managedRules = ManagedPolicyLoader.load()
+        let managedAllowlist = ManagedAllowlistLoader.load()
+        let xprotectEntries = enumerateXProtectEntries()
+        let xprotectCount = xprotectEntries.count
+
+        self.policyRepository = PolicyRepository(
+            database: database,
+            managedRules: managedRules,
+            managedAllowlist: managedAllowlist,
+            xprotectEntries: xprotectEntries
+        )
+        self.broadcaster = EventBroadcaster()
         self.interactor = interactor
         self.adapter = adapter
-        self.database = Database(directory: dataDirectory)
-
-        switch database.loadUserRulesResult() {
-        case .ok(let rules):
-            userRules = rules
-        case .suspect(let rules):
-            userRules = []
-            pendingSuspectUserRules = rules
-            logger.warning("XPCServer: Signature issue for user_rules — awaiting GUI resolution")
-        }
-
-        switch database.loadUserAllowlistResult() {
-        case .ok(let entries):
-            userAllowlist = entries
-        case .suspect(let entries):
-            userAllowlist = []
-            pendingSuspectUserAllowlist = entries
-            logger.warning("XPCServer: Signature issue for user_allowlist — awaiting GUI resolution")
-        }
-
-        switch database.loadUserAncestorAllowlistResult() {
-        case .ok(let entries):
-            userAncestorAllowlist = entries
-        case .suspect(let entries):
-            userAncestorAllowlist = []
-            // Ancestor allowlist entries bypass all policy rules, so tampering is
-            // high impact. Silently discard and log — the user will notice that their
-            // ancestor entries are gone and can re-add them after investigating.
-            logger.warning("XPCServer: Signature issue for user_ancestor_allowlist — discarding \(entries.count) suspect entry/entries")
-        }
-
-        managedRules = ManagedPolicyLoader.load()
-        managedAllowlist = ManagedAllowlistLoader.load()
-        xprotectEntries = enumerateXProtectEntries()
-        let xprotectCount = xprotectEntries.count
-        logger.info("XPCServer: Discovered \(xprotectCount) XProtect allowlist entry/entries")
 
         super.init()
 
+        logger.info("XPCServer: Discovered \(xprotectCount) XProtect allowlist entry/entries")
         applyPolicyToFilter()
         applyAllowlistToFilter()
     }
@@ -89,15 +54,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     func handleXProtectChange() {
         Task {
             let reloaded = enumerateXProtectEntries()
-            lock.lock()
-            let currentPaths = Set(xprotectEntries.map(\.processPath))
-            let newPaths = Set(reloaded.map(\.processPath))
-            guard currentPaths != newPaths else {
-                lock.unlock()
-                return
-            }
-            xprotectEntries = reloaded
-            lock.unlock()
+            guard policyRepository.updateXProtectEntries(reloaded) else { return }
             applyAllowlistToFilter()
             logger.info("XPCServer: XProtect bundle changed — reloaded \(reloaded.count) entry/entries")
         }
@@ -106,141 +63,91 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Direct filter integration
 
     func handleEvent(_ event: FolderOpenEvent) {
-        broadcastEvent(event)
+        broadcaster.broadcast(event)
     }
 
     // MARK: - Policy / allowlist assembly
 
     func mergedRules() -> [FAARule] {
-        lock.lock()
-        let managed = managedRules
-        let user = userRules
-        lock.unlock()
-        return faaPolicy + managed + user
+        policyRepository.mergedRules()
     }
 
-    func mergedAllowlist() -> [AllowlistEntry] {
-        lock.lock()
-        let xprotect = xprotectEntries
-        let managed = managedAllowlist
-        let user = userAllowlist
-        lock.unlock()
-        return baselineAllowlist + xprotect + managed + user
-    }
-
-    func mergedAncestorAllowlist() -> [AncestorAllowlistEntry] {
-        lock.lock()
-        let managed = managedAncestorAllowlist
-        let user = userAncestorAllowlist
-        lock.unlock()
-        return managed + user
-    }
+    // MARK: - Filter application
 
     private func applyPolicyToFilter() {
-        let rules = mergedRules()
-        adapter.updatePolicy(rules)
+        adapter.updatePolicy(policyRepository.mergedRules())
     }
 
     private func applyAllowlistToFilter() {
-        let entries = mergedAllowlist()
-        let ancestorEntries = mergedAncestorAllowlist()
-        interactor.updateAllowlist(entries)
-        interactor.updateAncestorAllowlist(ancestorEntries)
+        interactor.updateAllowlist(policyRepository.mergedAllowlist())
+        interactor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
     }
 
     // MARK: - Client registration
 
     fileprivate func addGUIClient(_ connection: NSXPCConnection) {
-        lock.lock()
-        guiClients[ObjectIdentifier(connection)] = connection
-        let count = guiClients.count
-        let hasIssue = pendingSuspectUserRules != nil || pendingSuspectUserAllowlist != nil
-        lock.unlock()
+        let count = broadcaster.addClient(connection)
         logger.debug("XPCServer: GUI client registered. Active clients: \(count)")
-        if hasIssue {
-            pushSignatureIssueTo(connection)
+        if let notification = policyRepository.pendingSignatureIssueNotification() {
+            (connection.remoteObjectProxy as? ClientProtocol)?.signatureIssueDetected(notification)
         }
-    }
-
-    private func pushSignatureIssueTo(_ connection: NSXPCConnection) {
-        lock.lock()
-        let suspectRules = pendingSuspectUserRules
-        let suspectAllowlist = pendingSuspectUserAllowlist
-        lock.unlock()
-
-        guard let rulesData = try? JSONEncoder().encode(suspectRules ?? []),
-              let allowlistData = try? JSONEncoder().encode(suspectAllowlist ?? []) else {
-            logger.fault("XPCServer: Failed to encode suspect data — cannot push signature issue to GUI")
-            return
-        }
-        let notification = SignatureIssueNotification(
-            suspectRulesData: rulesData as NSData,
-            suspectAllowlistData: allowlistData as NSData
-        )
-        (connection.remoteObjectProxy as? ClientProtocol)?.signatureIssueDetected(notification)
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
-        lock.lock()
-        guiClients.removeValue(forKey: ObjectIdentifier(connection))
-        let count = guiClients.count
-        lock.unlock()
+        let count = broadcaster.removeClient(connection)
         logger.debug("XPCServer: Client removed. GUI clients: \(count)")
     }
 
-    // MARK: - Event broadcasting
-
-    fileprivate func broadcastEvent(_ event: FolderOpenEvent) {
-        lock.lock()
-        recentEvents.append(event)
-        if recentEvents.count > maxHistoryCount {
-            recentEvents.removeFirst(recentEvents.count - maxHistoryCount)
-        }
-        let clients = Array(guiClients.values)
-        lock.unlock()
-        for conn in clients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
-        }
-    }
-
-    fileprivate func getRecentEvents() -> [FolderOpenEvent] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recentEvents
+    fileprivate func recentEvents() -> [FolderOpenEvent] {
+        broadcaster.recentEvents()
     }
 
     // MARK: - Rule mutations
 
     fileprivate func applyAddRule(_ rule: FAARule) {
-        lock.lock()
-        userRules.append(rule)
-        lock.unlock()
-        persistAndBroadcastRules()
+        policyRepository.addRule(rule)
+        applyPolicyToFilter()
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
     }
 
     fileprivate func applyUpdateRule(_ rule: FAARule) {
-        lock.lock()
-        guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else {
-            lock.unlock()
-            logger.error("XPCServer: updateRule — rule \(rule.id.uuidString, privacy: .public) not found")
-            return
-        }
-        userRules[index] = rule
-        lock.unlock()
-        persistAndBroadcastRules()
+        policyRepository.updateRule(rule)
+        applyPolicyToFilter()
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
     }
 
     fileprivate func applyRemoveRule(ruleID: UUID) {
-        lock.lock()
-        userRules.removeAll { $0.id == ruleID }
-        lock.unlock()
-        persistAndBroadcastRules()
+        policyRepository.removeRule(ruleID: ruleID)
+        applyPolicyToFilter()
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
     }
 
-    private func persistAndBroadcastRules() {
-        database.saveUserRules(userRules)
-        applyPolicyToFilter()
-        broadcastUserRulesToAllGUIClients()
+    // MARK: - Allowlist mutations
+
+    fileprivate func applyAddAllowlistEntry(_ entry: AllowlistEntry) {
+        policyRepository.addAllowlistEntry(entry)
+        applyAllowlistToFilter()
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+    }
+
+    fileprivate func applyRemoveAllowlistEntry(entryID: UUID) {
+        policyRepository.removeAllowlistEntry(entryID: entryID)
+        applyAllowlistToFilter()
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+    }
+
+    // MARK: - Ancestor allowlist mutations
+
+    fileprivate func applyAddAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
+        policyRepository.addAncestorAllowlistEntry(entry)
+        applyAllowlistToFilter()
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(self.policyRepository.encodedUserAncestorAllowlist()) }
+    }
+
+    fileprivate func applyRemoveAncestorAllowlistEntry(entryID: UUID) {
+        policyRepository.removeAncestorAllowlistEntry(entryID: entryID)
+        applyAllowlistToFilter()
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(self.policyRepository.encodedUserAncestorAllowlist()) }
     }
 
     // MARK: - Discovery mode
@@ -255,215 +162,49 @@ final class XPCServer: NSObject, @unchecked Sendable {
         logger.info("XPCServer: Discovery mode deactivated")
     }
 
+    // MARK: - Signature issue resolution
+
     fileprivate func resolveSignatureIssue(approved: Bool) {
-        lock.lock()
-        let suspectRules = pendingSuspectUserRules
-        let suspectAllowlist = pendingSuspectUserAllowlist
-        pendingSuspectUserRules = nil
-        pendingSuspectUserAllowlist = nil
-        lock.unlock()
-
-        if approved {
-            let rules = suspectRules ?? []
-            let allowlist = suspectAllowlist ?? []
-            applyUserData(rules: rules, allowlist: allowlist)
-            logger.info("XPCServer: Signature issue approved — re-signed \(rules.count) rule(s) and \(allowlist.count) allowlist entry/entries")
-        } else {
-            applyUserData(rules: [], allowlist: [])
-            logger.info("XPCServer: Signature issue rejected — cleared user rules and allowlist")
-        }
-
+        policyRepository.resolveSignatureIssue(approved: approved)
         applyPolicyToFilter()
         applyAllowlistToFilter()
-        broadcastUserRulesToAllGUIClients()
-        broadcastUserAllowlistToAllGUIClients()
-    }
-
-    private func applyUserData(rules: [FAARule], allowlist: [AllowlistEntry]) {
-        lock.lock()
-        userRules = rules
-        userAllowlist = allowlist
-        lock.unlock()
-        database.saveUserRules(rules)
-        database.saveUserAllowlist(allowlist)
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+        let action = approved ? "approved — re-signed" : "rejected — cleared"
+        logger.info("XPCServer: Signature issue \(action, privacy: .public) user rules and allowlist")
     }
 
     // MARK: - Resync
 
     fileprivate func requestResync(requestingConnection: NSXPCConnection, reply: @escaping () -> Void) {
         Task {
-            let reloaded = ManagedPolicyLoader.loadWithSync()
+            let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
             let reloadedXProtect = enumerateXProtectEntries()
-            lock.lock()
-            managedRules = reloaded
-            managedAllowlist = reloadedAllowlist
-            xprotectEntries = reloadedXProtect
-            lock.unlock()
+
+            policyRepository.resync(
+                managedRules: reloadedRules,
+                managedAllowlist: reloadedAllowlist,
+                xprotectEntries: reloadedXProtect
+            )
 
             applyPolicyToFilter()
             applyAllowlistToFilter()
-
             pushPolicySnapshotToGUIClient(requestingConnection)
             reply()
         }
     }
 
-    // MARK: - Policy helpers
-
-    private func mergedPolicyData() -> NSData {
-        guard let data = try? JSONEncoder().encode(mergedRules()) else {
-            fatalError("XPCServer: Failed to encode merged policy — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func encodedManagedRules() -> NSData {
-        lock.lock()
-        let rules = managedRules
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(rules) else {
-            fatalError("XPCServer: Failed to encode managed rules — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func encodedUserRules() -> NSData {
-        lock.lock()
-        let rules = userRules
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(rules) else {
-            fatalError("XPCServer: Failed to encode user rules — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func broadcastUserRulesToAllGUIClients() {
-        let data = encodedUserRules()
-        lock.lock()
-        let clients = Array(guiClients.values)
-        lock.unlock()
-        for conn in clients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.userRulesUpdated(data)
-        }
-    }
+    // MARK: - Snapshot push
 
     fileprivate func pushPolicySnapshotToGUIClient(_ connection: NSXPCConnection) {
         let proxy = connection.remoteObjectProxy as? ClientProtocol
-        proxy?.managedRulesUpdated(encodedManagedRules())
-        proxy?.userRulesUpdated(encodedUserRules())
-        proxy?.managedAllowlistUpdated(encodedManagedAllowlist())
-        proxy?.userAllowlistUpdated(encodedUserAllowlist())
-        proxy?.managedAncestorAllowlistUpdated(encodedManagedAncestorAllowlist())
-        proxy?.userAncestorAllowlistUpdated(encodedUserAncestorAllowlist())
-    }
-
-    // MARK: - Allowlist mutations
-
-    fileprivate func applyAddAllowlistEntry(_ entry: AllowlistEntry) {
-        lock.lock()
-        userAllowlist.append(entry)
-        lock.unlock()
-        persistAndBroadcastAllowlist()
-    }
-
-    fileprivate func applyRemoveAllowlistEntry(entryID: UUID) {
-        lock.lock()
-        userAllowlist.removeAll { $0.id == entryID }
-        lock.unlock()
-        persistAndBroadcastAllowlist()
-    }
-
-    private func persistAndBroadcastAllowlist() {
-        database.saveUserAllowlist(userAllowlist)
-        applyAllowlistToFilter()
-        broadcastUserAllowlistToAllGUIClients()
-    }
-
-    // MARK: - Allowlist helpers
-
-    private func encodedManagedAllowlist() -> NSData {
-        lock.lock()
-        let entries = managedAllowlist
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("XPCServer: Failed to encode managed allowlist — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func encodedUserAllowlist() -> NSData {
-        lock.lock()
-        let entries = userAllowlist
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("XPCServer: Failed to encode user allowlist — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func broadcastUserAllowlistToAllGUIClients() {
-        let data = encodedUserAllowlist()
-        lock.lock()
-        let clients = Array(guiClients.values)
-        lock.unlock()
-        for conn in clients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.userAllowlistUpdated(data)
-        }
-    }
-
-    // MARK: - Ancestor allowlist mutations
-
-    fileprivate func applyAddAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
-        lock.lock()
-        userAncestorAllowlist.append(entry)
-        lock.unlock()
-        persistAndBroadcastAncestorAllowlist()
-    }
-
-    fileprivate func applyRemoveAncestorAllowlistEntry(entryID: UUID) {
-        lock.lock()
-        userAncestorAllowlist.removeAll { $0.id == entryID }
-        lock.unlock()
-        persistAndBroadcastAncestorAllowlist()
-    }
-
-    private func persistAndBroadcastAncestorAllowlist() {
-        database.saveUserAncestorAllowlist(userAncestorAllowlist)
-        applyAllowlistToFilter()
-        broadcastUserAncestorAllowlistToAllGUIClients()
-    }
-
-    // MARK: - Ancestor allowlist helpers
-
-    private func encodedManagedAncestorAllowlist() -> NSData {
-        lock.lock()
-        let entries = managedAncestorAllowlist
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("XPCServer: Failed to encode managed ancestor allowlist — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func encodedUserAncestorAllowlist() -> NSData {
-        lock.lock()
-        let entries = userAncestorAllowlist
-        lock.unlock()
-        guard let data = try? JSONEncoder().encode(entries) else {
-            fatalError("XPCServer: Failed to encode user ancestor allowlist — this is a bug")
-        }
-        return data as NSData
-    }
-
-    private func broadcastUserAncestorAllowlistToAllGUIClients() {
-        let data = encodedUserAncestorAllowlist()
-        lock.lock()
-        let clients = Array(guiClients.values)
-        lock.unlock()
-        for conn in clients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.userAncestorAllowlistUpdated(data)
-        }
+        proxy?.managedRulesUpdated(policyRepository.encodedManagedRules())
+        proxy?.userRulesUpdated(policyRepository.encodedUserRules())
+        proxy?.managedAllowlistUpdated(policyRepository.encodedManagedAllowlist())
+        proxy?.userAllowlistUpdated(policyRepository.encodedUserAllowlist())
+        proxy?.managedAncestorAllowlistUpdated(policyRepository.encodedManagedAncestorAllowlist())
+        proxy?.userAncestorAllowlistUpdated(policyRepository.encodedUserAncestorAllowlist())
     }
 }
 
@@ -550,7 +291,7 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
-        reply(server?.getRecentEvents() ?? [])
+        reply(server?.recentEvents() ?? [])
     }
 
     func fetchVersionInfo(withReply reply: @escaping (NSString) -> Void) {
@@ -641,3 +382,4 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         reply()
     }
 }
+
