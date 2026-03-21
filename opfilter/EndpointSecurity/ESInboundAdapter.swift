@@ -50,7 +50,7 @@ final class ESInboundAdapter {
                     parentToken: message.pointee.process.pointee.audit_token
                 )
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
-            case ES_EVENT_TYPE_NOTIFY_EXEC:
+            case ES_EVENT_TYPE_AUTH_EXEC:
                 let target = message.pointee.event.exec.target.pointee
                 jailAdapter?.onExec(
                     oldToken: message.pointee.process.pointee.audit_token,
@@ -60,6 +60,7 @@ final class ESInboundAdapter {
                     parentToken: message.pointee.process.pointee.parent_audit_token
                 )
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+                es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_EXIT:
                 jailAdapter?.onProcessExited(auditToken: message.pointee.process.pointee.audit_token)
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
@@ -91,7 +92,7 @@ final class ESInboundAdapter {
             ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
             ES_EVENT_TYPE_AUTH_CLONE,
             ES_EVENT_TYPE_NOTIFY_FORK,
-            ES_EVENT_TYPE_NOTIFY_EXEC,
+            ES_EVENT_TYPE_AUTH_EXEC,
             ES_EVENT_TYPE_NOTIFY_EXIT,
             ES_EVENT_TYPE_NOTIFY_WRITE,
         ]
@@ -153,9 +154,9 @@ final class ESInboundAdapter {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_NOTIFY_WRITE:
             token = message.pointee.event.write.target.pointee.path
-        case ES_EVENT_TYPE_NOTIFY_RENAME, ES_EVENT_TYPE_AUTH_RENAME:
+        case ES_EVENT_TYPE_AUTH_RENAME:
             token = message.pointee.event.rename.source.pointee.path
-        case ES_EVENT_TYPE_NOTIFY_UNLINK, ES_EVENT_TYPE_AUTH_UNLINK:
+        case ES_EVENT_TYPE_AUTH_UNLINK:
             token = message.pointee.event.unlink.target.pointee.path
         default:
             return false
@@ -167,7 +168,7 @@ final class ESInboundAdapter {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_NOTIFY_FORK:
             return .fork(child: processRecord(from: message.pointee.event.fork.child))
-        case ES_EVENT_TYPE_NOTIFY_EXEC:
+        case ES_EVENT_TYPE_AUTH_EXEC:
             return .exec(newImage: processRecord(from: message.pointee.event.exec.target))
         case ES_EVENT_TYPE_NOTIFY_EXIT:
             let token = message.pointee.process.pointee.audit_token
