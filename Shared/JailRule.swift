@@ -47,13 +47,24 @@ public func checkJailPolicy(
         return .noRuleApplies
     }
 
-    for prefix in rule.allowedPathPrefixes {
-        let trimmed = prefix.hasSuffix("/") ? String(prefix.dropLast()) : prefix
-        guard path.hasPrefix(trimmed) else { continue }
-        let rest = path.dropFirst(trimmed.count)
-        guard rest.isEmpty || rest.hasPrefix("/") else { continue }
-        return .jailAllowed(ruleID: rule.id, ruleName: rule.name, matchedPrefix: prefix)
+    for pattern in rule.allowedPathPrefixes {
+        guard pathMatchesPattern(path, pattern: pattern) else { continue }
+        return .jailAllowed(ruleID: rule.id, ruleName: rule.name, matchedPrefix: pattern)
     }
 
     return .jailDenied(ruleID: rule.id, ruleName: rule.name, allowedPrefixes: rule.allowedPathPrefixes)
+}
+
+private func pathMatchesPattern(_ path: String, pattern: String) -> Bool {
+    if pattern.hasSuffix("/**") {
+        let base = String(pattern.dropLast(3))
+        return path == base || path.hasPrefix(base + "/")
+    }
+    if pattern.hasSuffix("/*") {
+        let base = String(pattern.dropLast(2))
+        guard path.hasPrefix(base + "/") else { return false }
+        let rest = path.dropFirst(base.count + 1)
+        return !rest.isEmpty && !rest.contains("/")
+    }
+    return path == pattern
 }

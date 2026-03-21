@@ -14,7 +14,7 @@ struct JailPolicyTests {
     private let jailRule = JailRule(
         name: "Confine Example App",
         jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
-        allowedPathPrefixes: ["/Users/admin/Documents/Example", "/tmp"]
+        allowedPathPrefixes: ["/Users/admin/Documents/Example/**", "/tmp"]
     )
 
     @Test("returns noRuleApplies when jail rules list is empty")
@@ -31,25 +31,67 @@ struct JailPolicyTests {
         #expect(decision.isAllowed)
     }
 
-    @Test("allows access when path matches an allowed prefix")
-    func allowedPath() {
+    @Test("/** allows access to files at any depth below base")
+    func doubleStarAllowsAnyDepth() {
         let decision = checkJailPolicy(jailRules: [jailRule], path: "/Users/admin/Documents/Example/file.txt", teamID: "TEAM1", signingID: "com.example.app")
         guard case .jailAllowed(let ruleID, _, let prefix) = decision else {
             Issue.record("Expected jailAllowed, got \(decision)")
             return
         }
         #expect(ruleID == jailRule.id)
-        #expect(prefix == "/Users/admin/Documents/Example")
+        #expect(prefix == "/Users/admin/Documents/Example/**")
     }
 
-    @Test("allows access when path exactly matches an allowed prefix")
-    func exactPrefixMatch() {
+    @Test("exact pattern allows access to the exact path only")
+    func exactPatternAllowsExactPath() {
         let decision = checkJailPolicy(jailRules: [jailRule], path: "/tmp", teamID: "TEAM1", signingID: "com.example.app")
         guard case .jailAllowed(_, _, let prefix) = decision else {
             Issue.record("Expected jailAllowed, got \(decision)")
             return
         }
         #expect(prefix == "/tmp")
+    }
+
+    @Test("exact pattern denies access to paths below it")
+    func exactPatternDeniesPathsBelow() {
+        let decision = checkJailPolicy(jailRules: [jailRule], path: "/tmp/foo", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailDenied = decision else {
+            Issue.record("Expected jailDenied, got \(decision)")
+            return
+        }
+    }
+
+    @Test("/* allows exactly one level of nesting")
+    func singleStarAllowsOneLevel() {
+        let rule = JailRule(
+            name: "One Level",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/usr/*"]
+        )
+        let allowed = checkJailPolicy(jailRules: [rule], path: "/usr/bin", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = allowed else {
+            Issue.record("Expected jailAllowed for /usr/bin, got \(allowed)")
+            return
+        }
+        let denied = checkJailPolicy(jailRules: [rule], path: "/usr/bin/node", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailDenied = denied else {
+            Issue.record("Expected jailDenied for /usr/bin/node, got \(denied)")
+            return
+        }
+    }
+
+    @Test("/** also allows access to the base directory itself")
+    func doubleStarAllowsBase() {
+        let rule = JailRule(
+            name: "Full Access",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/usr/**"]
+        )
+        let decision = checkJailPolicy(jailRules: [rule], path: "/usr", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = decision else {
+            Issue.record("Expected jailAllowed for /usr, got \(decision)")
+            return
+        }
     }
 
     @Test("denies access when path is outside all allowed prefixes")
@@ -77,7 +119,7 @@ struct JailPolicyTests {
         let appleJail = JailRule(
             name: "Jail Apple Tool",
             jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
-            allowedPathPrefixes: ["/usr/local"]
+            allowedPathPrefixes: ["/usr/local/**"]
         )
         let decision = checkJailPolicy(jailRules: [appleJail], path: "/usr/local/bin/thing", teamID: "", signingID: "com.apple.tool")
         guard case .jailAllowed = decision else {

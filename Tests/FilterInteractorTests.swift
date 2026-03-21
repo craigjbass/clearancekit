@@ -429,7 +429,7 @@ struct FilterInteractorTests {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
-            allowedPathPrefixes: ["/allowed"]
+            allowedPathPrefixes: ["/allowed/**"]
         )
         let tree = FakeProcessTree()
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
