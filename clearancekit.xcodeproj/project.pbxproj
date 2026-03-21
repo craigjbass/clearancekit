@@ -59,13 +59,6 @@
 				AllowlistView.swift,
 				AppPickerView.swift,
 				AppPreset.swift,
-				"Presets/Chrome.swift",
-				"Presets/Discord.swift",
-				"Presets/HEY.swift",
-				"Presets/index.swift",
-				"Presets/Notes.swift",
-				"Presets/Safari.swift",
-				"Presets/Signal.swift",
 				AppProtection.swift,
 				AppProtectionStore.swift,
 				Assets.xcassets,
@@ -79,6 +72,13 @@
 				PolicyExportView.swift,
 				PolicyImportView.swift,
 				PolicyView.swift,
+				Presets/Chrome.swift,
+				Presets/Discord.swift,
+				Presets/HEY.swift,
+				Presets/index.swift,
+				Presets/Notes.swift,
+				Presets/Safari.swift,
+				Presets/Signal.swift,
 				PresetsView.swift,
 				ProcessesView.swift,
 				ProcessPickerView.swift,
@@ -92,19 +92,19 @@
 		EE4444444444444444440010 /* Exceptions for "opfilter" folder in "clearancekitTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"Database/Database.swift",
-				"Database/DatabaseMigrations.swift",
-				"EndpointSecurity/ESInboundAdapter.swift",
-				"EndpointSecurity/ESProcessRecord.swift",
+				Database/Database.swift,
+				Database/DatabaseMigrations.swift,
+				EndpointSecurity/ESInboundAdapter.swift,
+				EndpointSecurity/ESProcessRecord.swift,
 				Info.plist,
 				main.swift,
-				"Policy/ManagedAllowlistLoader.swift",
-				"Policy/ManagedPolicyLoader.swift",
-				"Policy/PolicySigner.swift",
-				"XPC/ConnectionValidator.swift",
+				Policy/ManagedAllowlistLoader.swift,
+				Policy/ManagedPolicyLoader.swift,
+				Policy/PolicySigner.swift,
+				XPC/ConnectionValidator.swift,
 				"XPC/NSXPCConnection+AuditToken.swift",
-				"XPC/ProcessEnumerator.swift",
-				"XPC/XPCServer.swift",
+				XPC/ProcessEnumerator.swift,
+				XPC/XPCServer.swift,
 			);
 			target = EE4444444444444444440006 /* clearancekitTests */;
 		};
@@ -734,14 +734,16 @@
 		EE4444444444444444440007 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 37KMK6XFTT;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
