@@ -33,7 +33,7 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
 
 // MARK: - FilterInteractorTests
 
-@Suite("FilterInteractor")
+@Suite("FilterInteractor", .serialized)
 struct FilterInteractorTests {
 
     private func identity(pid: pid_t, version: UInt32 = 1) -> ProcessIdentity {
