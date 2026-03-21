@@ -88,6 +88,8 @@ final class FilterInteractor: @unchecked Sendable {
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
     private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
     private let processTree: ProcessTreeProtocol
+    private let auditLogger = AuditLogger()
+    private let ttyNotifier = TTYNotifier()
 
     init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
@@ -192,10 +194,10 @@ final class FilterInteractor: @unchecked Sendable {
         // since the decision was made, so re-query unconditionally.
         let logAncestors = processTree.ancestors(of: fileEvent.processIdentity)
 
-        logDecision(decision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds)
+        auditLogger.log(decision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds)
 
         if !allowed {
-            writeDenialToTTY(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
+            ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
         }
 
         let folderOpenEvent = FolderOpenEvent(
@@ -225,92 +227,5 @@ final class FilterInteractor: @unchecked Sendable {
             try? await Task.sleep(nanoseconds: 1_000_000) // 1 ms; frees the thread while waiting
         }
         return MachTime.nanoseconds(from: start, to: mach_absolute_time())
-    }
-
-    private func logDecision(_ decision: PolicyDecision, for fileEvent: FileAuthEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
-        let operationID = UUID()
-        let decisionTag = decision.isAllowed ? "ALLOW" : "DENIED"
-        let processName = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        let policyVersion = policyVersionString(for: decision)
-        let userName = resolveUserName(uid: fileEvent.uid)
-        let groupName = resolveGroupName(gid: fileEvent.gid)
-        let ancestryTree = formatAncestryTree(ancestors)
-
-        let line = [
-            "action=FILE_ACCESS",
-            "policy_version=\(policyVersion)",
-            "policy_name=\(decision.policyName)",
-            "path=\(fileEvent.path)",
-            "access_type=\(fileEvent.operation.rawValue)",
-            "decision=\(decisionTag)",
-            "operation_id=\(operationID.uuidString)",
-            "pid=\(fileEvent.processID)",
-            "ppid=\(fileEvent.parentPID)",
-            "process=\(processName)",
-            "processpath=\(fileEvent.processPath)",
-            "uid=\(fileEvent.uid)",
-            "user=\(userName)",
-            "gid=\(fileEvent.gid)",
-            "group=\(groupName)",
-            "team_id=\(resolveTeamID(teamID: fileEvent.teamID, signingID: fileEvent.signingID))",
-            "codesigning_id=\(resolveSigningID(teamID: fileEvent.teamID, signingID: fileEvent.signingID))",
-            "ancestry_tree=\(ancestryTree)",
-            "dwell_ns=\(dwellNanoseconds)",
-        ].joined(separator: "|")
-
-        logger.log("\(line, privacy: .public)")
-    }
-
-    private func policyVersionString(for decision: PolicyDecision) -> String {
-        guard let source = decision.policySource else { return "" }
-        switch source {
-        case .builtin: return BuildInfo.gitHash
-        case .user: return "user"
-        case .mdm: return "mdm"
-        }
-    }
-
-    private func formatAncestryTree(_ ancestors: [AncestorInfo]) -> String {
-        guard !ancestors.isEmpty else { return "()" }
-        let entries = ancestors.map { ancestor -> String in
-            let user = resolveUserName(uid: ancestor.uid)
-            let team = resolveTeamID(teamID: ancestor.teamID, signingID: ancestor.signingID)
-            let signing = resolveSigningID(teamID: ancestor.teamID, signingID: ancestor.signingID)
-            return "user=\(user),signature=\(team):\(signing)"
-        }
-        return entries.map { "(\($0))" }.joined(separator: "->")
-    }
-
-    private func resolveTeamID(teamID: String, signingID: String) -> String {
-        if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
-        return teamID.isEmpty ? appleTeamID : teamID
-    }
-
-    private func resolveSigningID(teamID: String, signingID: String) -> String {
-        teamID.isEmpty && signingID.isEmpty ? invalidSignature : signingID
-    }
-
-    private func resolveUserName(uid: uid_t) -> String {
-        guard let entry = getpwuid(uid) else { return "\(uid)" }
-        return String(cString: entry.pointee.pw_name)
-    }
-
-    private func resolveGroupName(gid: gid_t) -> String {
-        guard let entry = getgrgid(gid) else { return "\(gid)" }
-        return String(cString: entry.pointee.gr_name)
-    }
-
-    private func writeDenialToTTY(path: String, reason: String, ttyPath: String?) {
-        guard let ttyPath, let fh = FileHandle(forWritingAtPath: ttyPath) else { return }
-        let msg = "\n[clearancekit] Access denied: \(path)\n  \(reason)\n"
-        if let data = msg.data(using: .utf8) {
-            fh.write(data)
-        }
-        let fd = fh.fileDescriptor
-        let pgrp = tcgetpgrp(fd)
-        if pgrp > 0 {
-            killpg(pgrp, SIGWINCH)
-        }
-        fh.closeFile()
     }
 }
