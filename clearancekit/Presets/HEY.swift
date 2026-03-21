@@ -16,6 +16,11 @@ let heyPreset = AppPreset(
             protectedPathPrefix: "/Users/*/Library/Application Support/HEY",
             allowedSignatures: [
                 sig("473F8PJA84", "com.hey.app.desktop"),
+                sig("473F8PJA84", "com.hey.app.desktop.helper"),
+                sig("473F8PJA84", "chrome_crashpad_handler"),
+            ],
+            allowedAncestorSignatures: [
+                sig("473F8PJA84", "com.hey.app.desktop"),
             ]
         ),
     ]

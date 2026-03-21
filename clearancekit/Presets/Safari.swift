@@ -33,12 +33,15 @@ let safariPreset = AppPreset(
             allowedSignatures: safariSignatures + [
                 apple("com.apple.UserEventAgent"),
                 apple("com.apple.SafariNotificationAgent"),
+                apple("com.apple.Passwords"),
             ]
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000002")!,
             protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
-            allowedSignatures: safariSignatures
+            allowedSignatures: safariSignatures + [
+                apple("com.apple.Passwords"),
+            ]
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0001-0001-0001-000000000003")!,

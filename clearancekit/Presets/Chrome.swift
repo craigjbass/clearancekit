@@ -21,6 +21,7 @@ let chromePreset = AppPreset(
                 sig("EQHXZ8M8AV", "chrome_crashpad_handler"),
                 apple("com.apple.LoginItems-Settings.extension"),
                 apple("com.apple.Safari.BrowserDataImportingService"),
+                apple("com.apple.iconservicesagent"),
             ]
         ),
         FAARule(
