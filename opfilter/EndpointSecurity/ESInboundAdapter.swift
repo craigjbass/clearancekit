@@ -43,16 +43,17 @@ final class ESInboundAdapter {
                 return
             case ES_EVENT_TYPE_NOTIFY_FORK:
                 let child = message.pointee.event.fork.child.pointee
-                jailAdapter?.onProcessStarted(
-                    auditToken: child.audit_token,
+                jailAdapter?.onFork(
+                    childToken: child.audit_token,
                     teamID: Self.string(from: child.team_id),
-                    signingID: Self.string(from: child.signing_id)
+                    signingID: Self.string(from: child.signing_id),
+                    parentToken: message.pointee.process.pointee.audit_token
                 )
                 interactor.handle(Self.filterEvent(from: message, esClient: esClient))
             case ES_EVENT_TYPE_NOTIFY_EXEC:
                 let target = message.pointee.event.exec.target.pointee
-                jailAdapter?.onProcessStarted(
-                    auditToken: target.audit_token,
+                jailAdapter?.onExec(
+                    newToken: target.audit_token,
                     teamID: Self.string(from: target.team_id),
                     signingID: Self.string(from: target.signing_id)
                 )

@@ -121,7 +121,12 @@ final class FilterInteractor: @unchecked Sendable {
     // Task dispatch that causes thread-pool saturation and deadline misses when
     // the jail client receives the high volume of events its inverted process
     // muting generates.
-    func handleJailEventSync(_ fileEvent: FileAuthEvent) {
+    //
+    // jailRuleID is resolved by ESJailAdapter from its tracked muted-PID map,
+    // covering both direct matches (signing ID matches rule) and inherited jails
+    // (child of a jailed process). Providing the rule ID explicitly means this
+    // path never needs to match by signing ID.
+    func handleJailEventSync(_ fileEvent: FileAuthEvent, jailRuleID: UUID) {
         let allowlist = allowlistStorage.withLock { $0 }
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
@@ -130,13 +135,13 @@ final class FilterInteractor: @unchecked Sendable {
         }
 
         let jailRules = jailRulesStorage.withLock { $0 }
-        let decision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
-
-        guard decision.jailedRuleID != nil else {
-            // Stale mute: the jail rule was removed while this event was in-flight.
+        guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
+            // Stale mute: the jail rule was removed while this process was still muted.
             fileEvent.respond(true)
             return
         }
+
+        let decision = checkJailPath(rule: rule, path: fileEvent.path)
 
         let allowed = decision.isAllowed
         fileEvent.respond(allowed)

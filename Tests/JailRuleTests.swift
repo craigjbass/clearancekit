@@ -195,6 +195,55 @@ struct PolicyDecisionJailTests {
     }
 }
 
+// MARK: - checkJailPath
+
+@Suite("checkJailPath")
+struct CheckJailPathTests {
+
+    private let rule = JailRule(
+        name: "Path Rule",
+        jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+        allowedPathPrefixes: ["/allowed/**", "/exact"]
+    )
+
+    @Test("allows path matching /** pattern")
+    func allowsDoubleStarPath() {
+        let decision = checkJailPath(rule: rule, path: "/allowed/data.db")
+        #expect(decision.isAllowed)
+        #expect(decision.jailedRuleID == rule.id)
+    }
+
+    @Test("allows base directory matched by /**")
+    func allowsBaseDirectory() {
+        let decision = checkJailPath(rule: rule, path: "/allowed")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("allows exact path match")
+    func allowsExactPath() {
+        let decision = checkJailPath(rule: rule, path: "/exact")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("denies path not in allowed list")
+    func deniesUnallowedPath() {
+        let decision = checkJailPath(rule: rule, path: "/forbidden/file")
+        #expect(!decision.isAllowed)
+        #expect(decision.jailedRuleID == rule.id)
+    }
+
+    @Test("does not match signing ID — evaluates any process against the rule")
+    func ignoresSigningID() {
+        // checkJailPath is used for inherited jails where the child's signing ID
+        // does not match the rule's jailedSignature.
+        let decision = checkJailPath(rule: rule, path: "/exact")
+        guard case .jailAllowed = decision else {
+            Issue.record("Expected jailAllowed, got \(decision)")
+            return
+        }
+    }
+}
+
 // MARK: - JailRule Codable
 
 @Suite("JailRule Codable")

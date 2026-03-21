@@ -548,4 +548,71 @@ struct FilterInteractorTests {
 
         #expect(allowed == false)
     }
+
+    // MARK: - handleJailEventSync (inherited jail path)
+
+    @Test("handleJailEventSync allows path within rule's allowed prefixes for inherited process")
+    func inheritedJailAllowsPathWithinPrefixes() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed/**"]
+        )
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
+        var allowed: Bool?
+
+        let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
+
+        #expect(allowed == true)
+    }
+
+    @Test("handleJailEventSync denies path outside rule's allowed prefixes for inherited process")
+    func inheritedJailDeniesPathOutsidePrefixes() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed/**"]
+        )
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
+        var allowed: Bool?
+
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
+
+        #expect(allowed == false)
+    }
+
+    @Test("handleJailEventSync allows when rule ID no longer exists (stale mute)")
+    func inheritedJailStaleRuleAllows() {
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [], processTree: FakeProcessTree())
+        var allowed: Bool?
+
+        let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        interactor.handleJailEventSync(event, jailRuleID: UUID())
+
+        #expect(allowed == true)
+    }
+
+    @Test("handleJailEventSync: globally allowlisted process escapes inherited jail")
+    func inheritedJailAllowlistEscape() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: []
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.child.process", teamID: "OTHER")
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [allowlistEntry],
+            initialJailRules: [jailRule],
+            processTree: FakeProcessTree()
+        )
+        var allowed: Bool?
+
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
+
+        #expect(allowed == true)
+    }
 }

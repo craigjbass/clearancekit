@@ -34,6 +34,17 @@ public struct JailRule: Identifiable, Codable, Equatable {
 
 // MARK: - Jail policy evaluation
 
+/// Evaluates path access for a process already known to be under `rule`, without
+/// re-checking the signing ID. Used for inherited jail processes whose signing ID
+/// does not match the rule's jailedSignature.
+public func checkJailPath(rule: JailRule, path: String) -> PolicyDecision {
+    for pattern in rule.allowedPathPrefixes {
+        guard pathMatchesPattern(path, pattern: pattern) else { continue }
+        return .jailAllowed(ruleID: rule.id, ruleName: rule.name, matchedPrefix: pattern)
+    }
+    return .jailDenied(ruleID: rule.id, ruleName: rule.name, allowedPrefixes: rule.allowedPathPrefixes)
+}
+
 public func checkJailPolicy(
     jailRules: [JailRule],
     path: String,
