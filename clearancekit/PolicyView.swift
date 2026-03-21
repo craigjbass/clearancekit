@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 
 struct PolicyView: View {
     @StateObject private var policyStore = PolicyStore.shared
+    @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var editingRule: FAARule? = nil
     @State private var isAddingRule = false
     @State private var isExporting = false
@@ -102,6 +103,11 @@ struct PolicyView: View {
         }
     }
 
+    private func protection(for rule: FAARule) -> AppProtection? {
+        (protectionStore.protections + protectionStore.managedProtections)
+            .first { $0.ruleIDs.contains(rule.id) }
+    }
+
     @ViewBuilder
     private var ruleList: some View {
         if policyStore.baselineRules.isEmpty && policyStore.userRules.isEmpty {
@@ -116,7 +122,7 @@ struct PolicyView: View {
                 if !policyStore.baselineRules.isEmpty {
                     Section("Baseline Rules") {
                         ForEach(policyStore.baselineRules) { rule in
-                            RuleRow(rule: rule, isEditable: false) { } onDelete: { }
+                            RuleRow(rule: rule, protection: nil, isEditable: false) { } onDelete: { }
                                 .padding(.vertical, 4)
                         }
                     }
@@ -124,7 +130,7 @@ struct PolicyView: View {
                 if !policyStore.managedRules.isEmpty {
                     Section("Managed Profile Rules") {
                         ForEach(policyStore.managedRules) { rule in
-                            RuleRow(rule: rule, isEditable: false) { } onDelete: { }
+                            RuleRow(rule: rule, protection: protection(for: rule), isEditable: false) { } onDelete: { }
                                 .padding(.vertical, 4)
                         }
                     }
@@ -132,7 +138,7 @@ struct PolicyView: View {
                 if !policyStore.userRules.isEmpty {
                     Section("User Rules") {
                         ForEach(policyStore.userRules) { rule in
-                            RuleRow(rule: rule, isEditable: true) {
+                            RuleRow(rule: rule, protection: protection(for: rule), isEditable: true) {
                                 editingRule = rule
                             } onDelete: {
                                 Task { try? await policyStore.remove(rule) }
@@ -158,6 +164,7 @@ private struct ImportPreviewItem: Identifiable {
 
 private struct RuleRow: View {
     let rule: FAARule
+    let protection: AppProtection?
     let isEditable: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -178,6 +185,16 @@ private struct RuleRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
                 Spacer()
+                if let protection {
+                    HStack(spacing: 4) {
+                        Image(nsImage: protection.icon)
+                            .resizable()
+                            .frame(width: 16, height: 16)
+                        Text(protection.appName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if isEditable {
                     Button { onEdit() } label: {
                         Image(systemName: "pencil")
