@@ -130,6 +130,25 @@ struct EventRow: View {
 
     private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
 
+    private var matchedRule: FAARule? {
+        guard let ruleID = event.matchedRuleID else { return nil }
+        return PolicyStore.shared.userRules.first { $0.id == ruleID }
+            ?? PolicyStore.shared.managedRules.first { $0.id == ruleID }
+            ?? faaPolicy.first { $0.id == ruleID }
+    }
+
+    private var matchedSource: (name: String, icon: NSImage)? {
+        guard let rule = matchedRule else { return nil }
+        let allProtections = AppProtectionStore.shared.protections + AppProtectionStore.shared.managedProtections
+        if let protection = allProtections.first(where: { $0.ruleIDs.contains(rule.id) }) {
+            return (protection.appName, protection.icon)
+        }
+        if let preset = builtInPresets.first(where: { $0.rules.contains { $0.id == rule.id } }) {
+            return (preset.appName, preset.icon)
+        }
+        return nil
+    }
+
     private var formattedTime: String {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
@@ -225,6 +244,21 @@ struct EventRow: View {
                 Text(formattedTime)
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            if let source = matchedSource, let rule = matchedRule {
+                HStack(spacing: 5) {
+                    Image(nsImage: source.icon)
+                        .resizable()
+                        .frame(width: 14, height: 14)
+                    Text(source.name)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    Text(rule.protectedPathPrefix)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             processSection
