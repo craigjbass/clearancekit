@@ -55,6 +55,14 @@ On first launch you will be prompted to activate the system extension and grant 
 
 ClearanceKit has no auto-update mechanism. This is a deliberate decision: an app that monitors what other processes do on your machine should not itself be making network calls you did not initiate. Check the [Releases](https://github.com/craigjbass/clearancekit/releases/latest) page manually for updates.
 
+## Related projects
+
+ClearanceKit occupies a specific part of the macOS endpoint security space. Two well-known projects address adjacent but distinct problems:
+
+**[BlockBlock](https://github.com/objective-see/BlockBlock)** (Objective-See) monitors for process persistence — launch agents, launch daemons, login items, cron jobs, and other mechanisms a malicious process might use to survive a reboot. Where ClearanceKit asks "which processes may access which files?", BlockBlock asks "is something trying to establish a permanent foothold?". The two tools are complementary: a supply chain payload that exfiltrates credentials immediately would be caught by ClearanceKit; one that installs a backdoor for later use would be caught by BlockBlock.
+
+**[Santa](https://github.com/northpolesec/santa)** (North Pole Security) combines binary execution control with file access policies, and is designed for MDM-managed enterprise fleets with policy distributed via a central management server. Santa can operate in lockdown mode to block unapproved binaries from running at all — ClearanceKit has no equivalent; it does not restrict execution events. Both tools use the Endpoint Security framework to authorise file access by process identity, so their file access policies are conceptually similar. The key difference is process ancestry: ClearanceKit can express rules like "allow this path only when the accessing process was launched by a trusted parent" — for example, permitting a build tool to read source files only when invoked from a trusted CI runner. Santa's file access policies evaluate the immediate process only and have no concept of ancestry. For individual developer workstations where the threat is supply chain code running inside trusted toolchains, ancestry-aware policy is a meaningful additional control.
+
 ## Architecture
 
 Two components work together:
