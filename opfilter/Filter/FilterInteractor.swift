@@ -116,6 +116,57 @@ final class FilterInteractor: @unchecked Sendable {
         jailRulesStorage.withLock { $0 = rules }
     }
 
+    // Called synchronously from the ESJailAdapter ES callback queue.
+    // Jail policy is pure synchronous logic; responding inline avoids the async
+    // Task dispatch that causes thread-pool saturation and deadline misses when
+    // the jail client receives the high volume of events its inverted process
+    // muting generates.
+    func handleJailEventSync(_ fileEvent: FileAuthEvent) {
+        let allowlist = allowlistStorage.withLock { $0 }
+
+        if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
+            fileEvent.respond(true)
+            return
+        }
+
+        let jailRules = jailRulesStorage.withLock { $0 }
+        let decision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
+
+        guard decision.jailedRuleID != nil else {
+            // Stale mute: the jail rule was removed while this event was in-flight.
+            fileEvent.respond(true)
+            return
+        }
+
+        let allowed = decision.isAllowed
+        fileEvent.respond(allowed)
+
+        Task { [weak self] in
+            guard let self else { return }
+            let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
+            auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: 0)
+            if !allowed {
+                ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
+            }
+            let folderEvent = FolderOpenEvent(
+                operation: fileEvent.operation.rawValue,
+                path: fileEvent.path,
+                timestamp: Date(),
+                processID: fileEvent.processID,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID,
+                accessAllowed: allowed,
+                decisionReason: decision.reason,
+                ancestors: ancestors,
+                matchedRuleID: decision.matchedRuleID,
+                jailedRuleID: decision.jailedRuleID
+            )
+            let callback = onEvent
+            DispatchQueue.main.async { callback?(folderEvent) }
+        }
+    }
+
     func handle(_ event: FilterEvent) {
         switch event {
         case .fork(let child):

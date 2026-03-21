@@ -47,34 +47,34 @@ final class ESJailAdapter {
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
             case ES_EVENT_TYPE_AUTH_OPEN:
-                interactor.handle(.fileAuth(ESInboundAdapter.openFileEvent(from: message, esClient: esClient)))
+                interactor.handleJailEventSync(ESInboundAdapter.openFileEvent(from: message, esClient: esClient))
             case ES_EVENT_TYPE_AUTH_RENAME:
                 let path = ESInboundAdapter.string(from: message.pointee.event.rename.source.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
             case ES_EVENT_TYPE_AUTH_UNLINK:
                 let path = ESInboundAdapter.string(from: message.pointee.event.unlink.target.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
             case ES_EVENT_TYPE_AUTH_LINK:
                 let path = ESInboundAdapter.string(from: message.pointee.event.link.source.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
             case ES_EVENT_TYPE_AUTH_CREATE:
                 let path = ESInboundAdapter.createEventPath(from: message.pointee.event.create)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
             case ES_EVENT_TYPE_AUTH_TRUNCATE:
                 let path = ESInboundAdapter.string(from: message.pointee.event.truncate.target.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
             case ES_EVENT_TYPE_AUTH_COPYFILE:
                 let path = ESInboundAdapter.string(from: message.pointee.event.copyfile.source.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
             case ES_EVENT_TYPE_AUTH_READDIR:
                 let path = ESInboundAdapter.string(from: message.pointee.event.readdir.target.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
             case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
                 let path = ESInboundAdapter.string(from: message.pointee.event.exchangedata.file1.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
             case ES_EVENT_TYPE_AUTH_CLONE:
                 let path = ESInboundAdapter.string(from: message.pointee.event.clone.source.pointee.path)
-                interactor.handle(.fileAuth(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path)))
+                interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
             default:
                 fatalError("ESJailAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
             }
