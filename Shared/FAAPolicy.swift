@@ -128,9 +128,9 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public let source: RuleSource
 
     public let allowedProcessPaths: [String]
-    public let allowedSignatures: [ProcessSignature]
+    public var allowedSignatures: [ProcessSignature]
     public let allowedAncestorProcessPaths: [String]
-    public let allowedAncestorSignatures: [ProcessSignature]
+    public var allowedAncestorSignatures: [ProcessSignature]
 
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty

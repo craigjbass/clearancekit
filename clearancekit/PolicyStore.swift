@@ -70,22 +70,10 @@ final class PolicyStore: ObservableObject {
     }
 
     func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
-        guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        guard userRules.contains(where: { $0.id == ruleID }) else { return }
         try await authenticate("Allow this process")
-        let existing = userRules[index]
-        let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
-        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
-        var newSignatures = existing.allowedSignatures
-        if !newSignatures.contains(signature) { newSignatures.append(signature) }
-        let updated = FAARule(
-            id: existing.id,
-            protectedPathPrefix: existing.protectedPathPrefix,
-            allowedProcessPaths: existing.allowedProcessPaths,
-            allowedSignatures: newSignatures,
-            allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorSignatures: existing.allowedAncestorSignatures
-        )
-        userRules[index] = updated
+        let signature = normalisedSignature(teamID: teamID, signingID: signingID)
+        guard let updated = appendSignature(signature, toRuleWithID: ruleID, keyPath: \.allowedSignatures) else { return }
         service.updateRule(updated)
     }
 
@@ -134,22 +122,33 @@ final class PolicyStore: ObservableObject {
     }
 
     func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
-        guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
+        guard userRules.contains(where: { $0.id == ruleID }) else { return }
         try await authenticate("Allow this ancestor process")
-        let existing = userRules[index]
-        let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
-        let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
-        var newSignatures = existing.allowedAncestorSignatures
-        if !newSignatures.contains(signature) { newSignatures.append(signature) }
-        let updated = FAARule(
-            id: existing.id,
-            protectedPathPrefix: existing.protectedPathPrefix,
-            allowedProcessPaths: existing.allowedProcessPaths,
-            allowedSignatures: existing.allowedSignatures,
-            allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorSignatures: newSignatures
-        )
-        userRules[index] = updated
+        let signature = normalisedSignature(teamID: teamID, signingID: signingID)
+        guard let updated = appendSignature(signature, toRuleWithID: ruleID, keyPath: \.allowedAncestorSignatures) else { return }
         service.updateRule(updated)
+    }
+
+    // MARK: - Private helpers
+
+    private func normalisedSignature(teamID: String, signingID: String) -> ProcessSignature {
+        ProcessSignature(
+            teamID: teamID.isEmpty ? appleTeamID : teamID,
+            signingID: signingID.isEmpty ? "*" : signingID
+        )
+    }
+
+    private func appendSignature(
+        _ signature: ProcessSignature,
+        toRuleWithID ruleID: UUID,
+        keyPath: WritableKeyPath<FAARule, [ProcessSignature]>
+    ) -> FAARule? {
+        guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return nil }
+        var rule = userRules[index]
+        if !rule[keyPath: keyPath].contains(signature) {
+            rule[keyPath: keyPath].append(signature)
+        }
+        userRules[index] = rule
+        return rule
     }
 }
