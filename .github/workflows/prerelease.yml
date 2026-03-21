@@ -32,8 +32,8 @@ jobs:
             | sort -n \
             | tail -1 \
             || true)
-          LAST_MINOR=${LAST_MINOR:-0}
-          echo "name=v${MARKETING_VERSION}.${LAST_MINOR}-beta-${SHORT_HASH}" >> "$GITHUB_OUTPUT"
+          NEXT_MINOR=$(( ${LAST_MINOR:-0} + 1 ))
+          echo "name=v${MARKETING_VERSION}.${NEXT_MINOR}-beta-${SHORT_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Import Developer ID certificate
         env:
