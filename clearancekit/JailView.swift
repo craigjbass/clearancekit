@@ -99,7 +99,6 @@ private struct JailRuleEditView: View {
     @State private var name: String
     @State private var signatureText: String
     @State private var allowedPrefixes: [String]
-    @State private var newPrefix: String = ""
     @State private var showProcessPicker = false
 
     private let existingID: UUID?
@@ -145,14 +144,13 @@ private struct JailRuleEditView: View {
                     Text("Wildcards (*) are not supported for jail rules.")
                         .foregroundStyle(.secondary)
                 }
-                Section("Allowed Path Prefixes") {
-                    ForEach(allowedPrefixes, id: \.self) { prefix in
+                Section {
+                    ForEach(allowedPrefixes.indices, id: \.self) { index in
                         HStack {
-                            Text(prefix)
+                            TextField("e.g. /var/log/**", text: $allowedPrefixes[index])
                                 .font(.body.monospaced())
-                            Spacer()
                             Button {
-                                allowedPrefixes.removeAll { $0 == prefix }
+                                allowedPrefixes.remove(at: index)
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
@@ -160,16 +158,16 @@ private struct JailRuleEditView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    HStack {
-                        TextField("Path prefix", text: $newPrefix)
-                            .font(.body.monospaced())
-                        Button("Add") {
-                            guard !newPrefix.isEmpty else { return }
-                            allowedPrefixes.append(newPrefix)
-                            newPrefix = ""
-                        }
-                        .disabled(newPrefix.isEmpty)
+                    Button {
+                        allowedPrefixes.append("")
+                    } label: {
+                        Label("Add Path", systemImage: "plus.circle.fill")
                     }
+                } header: {
+                    Text("Allowed Paths")
+                } footer: {
+                    Text("Use * for one level of nesting or ** for any depth. Example: /var/log/** allows /var/log and everything below it. /var/log/* allows only direct children. /var/log matches only that exact path.")
+                        .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
