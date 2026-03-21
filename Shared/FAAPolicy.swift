@@ -127,10 +127,6 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public let protectedPathPrefix: String
     public let source: RuleSource
 
-    /// The literal path prefix passed to `es_mute_path`.
-    /// For wildcard patterns this is the last fully-literal directory component;
-    /// the kernel delivers a superset of events which the policy filter narrows down.
-    public var esMutePath: String { mutePath(for: protectedPathPrefix) }
     public let allowedProcessPaths: [String]
     public let allowedSignatures: [ProcessSignature]
     public let allowedAncestorProcessPaths: [String]
@@ -193,18 +189,6 @@ public let faaPolicy: [FAARule] = [
 ]
 
 // MARK: - Path matching
-
-/// Returns the literal path prefix to pass to `es_mute_path` for a given pattern.
-/// Stops at the first path component that contains a wildcard character.
-public func mutePath(for pattern: String) -> String {
-    var literal: [String] = []
-    for component in pattern.split(separator: "/", omittingEmptySubsequences: false).map(String.init) {
-        if component.contains("*") || component.contains("?") { break }
-        literal.append(component)
-    }
-    let result = literal.joined(separator: "/")
-    return result.isEmpty ? "/" : result
-}
 
 /// Returns true if `path` falls within the directory described by `pattern`.
 ///
