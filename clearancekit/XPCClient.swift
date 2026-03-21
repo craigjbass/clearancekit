@@ -368,6 +368,10 @@ final class XPCClient: NSObject, ObservableObject {
     }
 }
 
+// MARK: - PolicyServiceProtocol
+
+extension XPCClient: PolicyServiceProtocol {}
+
 // MARK: - ClientProtocol
 
 extension XPCClient: ClientProtocol {

@@ -12,7 +12,10 @@ import Combine
 /// pushed down via XPC and forwards all mutations up to opfilter.
 @MainActor
 final class AllowlistStore: ObservableObject {
-    static let shared = AllowlistStore()
+    static let shared = AllowlistStore(
+        service: XPCClient.shared,
+        authenticate: { try await BiometricAuth.authenticate(reason: $0) }
+    )
 
     /// Baseline entries: compiled-in signing-ID rules plus XProtect executables
     /// discovered by scanning the bundle at launch. Always allowed; read-only in the GUI.
@@ -30,7 +33,13 @@ final class AllowlistStore: ObservableObject {
     /// User-configurable ancestor allowlist entries managed by opfilter.
     @Published private(set) var userAncestorEntries: [AncestorAllowlistEntry] = []
 
-    private init() {}
+    private let service: PolicyServiceProtocol
+    private let authenticate: Authenticate
+
+    init(service: PolicyServiceProtocol, authenticate: @escaping Authenticate) {
+        self.service = service
+        self.authenticate = authenticate
+    }
 
     // MARK: - Service push
 
@@ -53,26 +62,26 @@ final class AllowlistStore: ObservableObject {
     // MARK: - Mutations
 
     func add(_ entry: AllowlistEntry) async throws {
-        try await BiometricAuth.authenticate(reason: "Add a global allowlist entry")
+        try await authenticate("Add a global allowlist entry")
         userEntries.append(entry)
-        XPCClient.shared.addAllowlistEntry(entry)
+        service.addAllowlistEntry(entry)
     }
 
     func remove(_ entry: AllowlistEntry) async throws {
-        try await BiometricAuth.authenticate(reason: "Remove a global allowlist entry")
+        try await authenticate("Remove a global allowlist entry")
         userEntries.removeAll { $0.id == entry.id }
-        XPCClient.shared.removeAllowlistEntry(entryID: entry.id)
+        service.removeAllowlistEntry(entryID: entry.id)
     }
 
     func addAncestor(_ entry: AncestorAllowlistEntry) async throws {
-        try await BiometricAuth.authenticate(reason: "Add a global ancestor allowlist entry")
+        try await authenticate("Add a global ancestor allowlist entry")
         userAncestorEntries.append(entry)
-        XPCClient.shared.addAncestorAllowlistEntry(entry)
+        service.addAncestorAllowlistEntry(entry)
     }
 
     func removeAncestor(_ entry: AncestorAllowlistEntry) async throws {
-        try await BiometricAuth.authenticate(reason: "Remove a global ancestor allowlist entry")
+        try await authenticate("Remove a global ancestor allowlist entry")
         userAncestorEntries.removeAll { $0.id == entry.id }
-        XPCClient.shared.removeAncestorAllowlistEntry(entryID: entry.id)
+        service.removeAncestorAllowlistEntry(entryID: entry.id)
     }
 }

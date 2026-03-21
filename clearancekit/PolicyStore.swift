@@ -13,7 +13,10 @@ import Combine
 /// There is no local disk I/O — opfilter owns persistence.
 @MainActor
 final class PolicyStore: ObservableObject {
-    static let shared = PolicyStore()
+    static let shared = PolicyStore(
+        service: XPCClient.shared,
+        authenticate: { try await BiometricAuth.authenticate(reason: $0) }
+    )
 
     /// Compile-time baseline rules. These are enforced by opfilter first and
     /// cannot be modified through the GUI.
@@ -27,7 +30,13 @@ final class PolicyStore: ObservableObject {
     /// the authoritative snapshot is pushed back via `receivedUserRules(_:)`.
     @Published private(set) var userRules: [FAARule] = []
 
-    private init() {}
+    private let service: PolicyServiceProtocol
+    private let authenticate: Authenticate
+
+    init(service: PolicyServiceProtocol, authenticate: @escaping Authenticate) {
+        self.service = service
+        self.authenticate = authenticate
+    }
 
     // MARK: - Service push
 
@@ -42,27 +51,27 @@ final class PolicyStore: ObservableObject {
     // MARK: - Mutations (Touch ID required, then optimistic local update + XPC)
 
     func add(_ rule: FAARule) async throws {
-        try await BiometricAuth.authenticate(reason: "Add a policy rule")
+        try await authenticate("Add a policy rule")
         userRules.append(rule)
-        XPCClient.shared.addRule(rule)
+        service.addRule(rule)
     }
 
     func update(_ rule: FAARule) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else { return }
-        try await BiometricAuth.authenticate(reason: "Update a policy rule")
+        try await authenticate("Update a policy rule")
         userRules[index] = rule
-        XPCClient.shared.updateRule(rule)
+        service.updateRule(rule)
     }
 
     func remove(_ rule: FAARule) async throws {
-        try await BiometricAuth.authenticate(reason: "Remove a policy rule")
+        try await authenticate("Remove a policy rule")
         userRules.removeAll { $0.id == rule.id }
-        XPCClient.shared.removeRule(ruleID: rule.id)
+        service.removeRule(ruleID: rule.id)
     }
 
     func allowProcess(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
-        try await BiometricAuth.authenticate(reason: "Allow this process")
+        try await authenticate("Allow this process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
@@ -77,7 +86,7 @@ final class PolicyStore: ObservableObject {
             allowedAncestorSignatures: existing.allowedAncestorSignatures
         )
         userRules[index] = updated
-        XPCClient.shared.updateRule(updated)
+        service.updateRule(updated)
     }
 
     // MARK: - Batch mutations (single Touch ID prompt for multiple rules)
@@ -85,48 +94,48 @@ final class PolicyStore: ObservableObject {
     func addAll(_ rules: [FAARule], reason: String) async throws {
         let newRules = rules.filter { rule in !userRules.contains { $0.id == rule.id } }
         guard !newRules.isEmpty else { return }
-        try await BiometricAuth.authenticate(reason: reason)
+        try await authenticate(reason)
         for rule in newRules {
             userRules.append(rule)
-            XPCClient.shared.addRule(rule)
+            service.addRule(rule)
         }
     }
 
     func removeAll(_ rules: [FAARule], reason: String) async throws {
         let ids = Set(rules.map(\.id))
         guard userRules.contains(where: { ids.contains($0.id) }) else { return }
-        try await BiometricAuth.authenticate(reason: reason)
+        try await authenticate(reason)
         userRules.removeAll { ids.contains($0.id) }
         for rule in rules {
-            XPCClient.shared.removeRule(ruleID: rule.id)
+            service.removeRule(ruleID: rule.id)
         }
     }
 
     func updateAll(_ rules: [FAARule], reason: String) async throws {
         let updates = rules.filter { rule in userRules.contains { $0.id == rule.id } }
         guard !updates.isEmpty else { return }
-        try await BiometricAuth.authenticate(reason: reason)
+        try await authenticate(reason)
         for rule in updates {
             guard let index = userRules.firstIndex(where: { $0.id == rule.id }) else { continue }
             userRules[index] = rule
-            XPCClient.shared.updateRule(rule)
+            service.updateRule(rule)
         }
     }
 
     func replaceAll(_ oldRules: [FAARule], with newRules: [FAARule], reason: String) async throws {
-        try await BiometricAuth.authenticate(reason: reason)
+        try await authenticate(reason)
         let oldIDs = Set(oldRules.map(\.id))
         userRules.removeAll { oldIDs.contains($0.id) }
-        for rule in oldRules { XPCClient.shared.removeRule(ruleID: rule.id) }
+        for rule in oldRules { service.removeRule(ruleID: rule.id) }
         for rule in newRules {
             userRules.append(rule)
-            XPCClient.shared.addRule(rule)
+            service.addRule(rule)
         }
     }
 
     func allowAncestor(teamID: String, signingID: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
-        try await BiometricAuth.authenticate(reason: "Allow this ancestor process")
+        try await authenticate("Allow this ancestor process")
         let existing = userRules[index]
         let effectiveTeamID = teamID.isEmpty ? appleTeamID : teamID
         let signature = ProcessSignature(teamID: effectiveTeamID, signingID: signingID.isEmpty ? "*" : signingID)
@@ -141,6 +150,6 @@ final class PolicyStore: ObservableObject {
             allowedAncestorSignatures: newSignatures
         )
         userRules[index] = updated
-        XPCClient.shared.updateRule(updated)
+        service.updateRule(updated)
     }
 }
