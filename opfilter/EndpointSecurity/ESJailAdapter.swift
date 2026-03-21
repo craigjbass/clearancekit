@@ -12,16 +12,22 @@
 //  muted via es_mute_process. This avoids receiving file events for the entire
 //  system — only jailed processes generate events on this client.
 //
-//  Lifecycle:
-//  • When the main client observes NOTIFY_FORK, it calls onFork. If the
-//    parent is already jailed the child inherits the same jail rule.
-//  • When the main client observes NOTIFY_EXEC, it calls onExec. If the
-//    process was already jailed (e.g., by ancestry) the new image is
-//    re-muted with its updated audit token.
-//  • When the main client observes NOTIFY_EXIT, it calls onProcessExited.
+//  Process identity key: (pid, pidVersion)
+//  pidVersion increments on exec AND on fork (for the child). Using the full
+//  audit token identity rather than just the PID prevents false inheritance
+//  when a PID is reused after exit and protects against daemon()-style
+//  double-fork patterns where the supervising intermediate process exits
+//  quickly. Each (pid, pidVersion) pair uniquely identifies one process
+//  image for the lifetime of the system.
 //
-//  Orphaned processes (jailed processes whose parent exits before them) are
-//  not currently tracked; their jail enforcement continues until they exit.
+//  Lifecycle:
+//  • FORK  → onFork. If the parent key is in the jailed set the child
+//    inherits the same rule. Otherwise a direct signing-ID check is done.
+//  • EXEC  → onExec. The pre-exec token is atomically replaced with the
+//    post-exec token so the process stays jailed across exec boundaries.
+//  • EXIT  → onProcessExited. The (pid, pidVersion) key is removed and
+//    the audit token is unmuted. Children that inherited the jail keep
+//    their own entries and remain jailed (orphan-safe).
 //
 
 import Foundation
@@ -31,16 +37,32 @@ import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "es-jail-adapter")
 
+// MARK: - ProcessKey
+
+/// Composite identity key for a jailed process.
+/// Using (pid, pidVersion) rather than pid alone prevents false inheritance
+/// when a PID is reused after its previous occupant exits.
+private struct ProcessKey: Hashable {
+    let pid: pid_t
+    let pidVersion: UInt32
+
+    init(_ token: audit_token_t) {
+        self.pid = pid_t(bitPattern: token.val.5)
+        self.pidVersion = token.val.7
+    }
+}
+
 // MARK: - ESJailAdapter
 
 final class ESJailAdapter {
     private let interactor: FilterInteractor
     private var client: OpaquePointer?
     private let rulesLock = OSAllocatedUnfairLock(initialState: [JailRule]())
-    /// Maps each jailed process's PID to the jail rule ID that covers it.
-    /// Populated for both direct matches (signing ID matches a rule) and
-    /// inherited jails (child of a jailed process).
-    private let jailedPIDsLock = OSAllocatedUnfairLock(initialState: [pid_t: UUID]())
+    /// Maps each jailed process's (pid, pidVersion) to the jail rule ID that
+    /// covers it. Populated for direct signature matches and inherited
+    /// descendants. Each entry is independent — a child's entry survives its
+    /// parent's exit, so orphaned processes remain correctly jailed.
+    private let jailedProcessesLock = OSAllocatedUnfairLock(initialState: [ProcessKey: UUID]())
 
     init(interactor: FilterInteractor) {
         self.interactor = interactor
@@ -50,11 +72,11 @@ final class ESJailAdapter {
 
     func start(initialRules: [JailRule]) {
         let interactor = self.interactor
-        let jailedPIDsLock = self.jailedPIDsLock
+        let jailedProcessesLock = self.jailedProcessesLock
 
         let result = es_new_client(&client) { esClient, message in
-            let pid = pid_t(message.pointee.process.pointee.audit_token.val.5)
-            guard let ruleID = jailedPIDsLock.withLock({ $0[pid] }) else {
+            let key = ProcessKey(message.pointee.process.pointee.audit_token)
+            guard let ruleID = jailedProcessesLock.withLock({ $0[key] }) else {
                 // Process is muted but not in our tracking — stale state, allow.
                 switch message.pointee.event_type {
                 case ES_EVENT_TYPE_AUTH_OPEN:
@@ -140,10 +162,10 @@ final class ESJailAdapter {
     // MARK: - Process lifecycle (forwarded from main ES client)
 
     func onFork(childToken: audit_token_t, teamID: String, signingID: String, parentToken: audit_token_t) {
-        let parentPID = pid_t(parentToken.val.5)
+        let parentKey = ProcessKey(parentToken)
 
-        // Inherit jail from parent if it is currently jailed.
-        if let parentRuleID = jailedPIDsLock.withLock({ $0[parentPID] }) {
+        // Inherit jail from parent if it is currently tracked.
+        if let parentRuleID = jailedProcessesLock.withLock({ $0[parentKey] }) {
             mute(childToken, ruleID: parentRuleID, signingID: signingID)
             return
         }
@@ -156,21 +178,31 @@ final class ESJailAdapter {
         mute(childToken, ruleID: rule.id, signingID: signingID)
     }
 
-    func onExec(newToken: audit_token_t, teamID: String, signingID: String) {
-        let pid = pid_t(newToken.val.5)
+    /// Called on NOTIFY_EXEC with both the pre-exec and post-exec audit tokens.
+    /// `message.pointee.process` holds the pre-exec token; `exec.target` holds
+    /// the post-exec token. pidVersion increments on exec, so the old key must
+    /// be atomically replaced with the new one to keep the jail in effect.
+    func onExec(oldToken: audit_token_t, newToken: audit_token_t, teamID: String, signingID: String) {
+        let oldKey = ProcessKey(oldToken)
+        let newKey = ProcessKey(newToken)
 
-        // If the process was already jailed, re-mute with the new token.
-        // The audit token's pidVersion increments on exec so the old mute
-        // may no longer match; re-issuing ensures the jail stays in effect.
-        if let existingRuleID = jailedPIDsLock.withLock({ $0[pid] }) {
+        // Atomically replace the old key with the new one if this process was jailed.
+        let existingRuleID = jailedProcessesLock.withLock { map -> UUID? in
+            guard let ruleID = map[oldKey] else { return nil }
+            map.removeValue(forKey: oldKey)
+            map[newKey] = ruleID
+            return ruleID
+        }
+
+        if let ruleID = existingRuleID {
             guard let client else { return }
             var t = newToken
             es_mute_process(client, &t)
-            logger.debug("ESJailAdapter: re-muted exec'd process pid=\(pid) signingID=\(signingID, privacy: .public)")
+            logger.debug("ESJailAdapter: re-muted exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public)")
             return
         }
 
-        // New process image — check for a direct signing-ID match.
+        // Not previously jailed — check direct signing-ID match on new image.
         let rules = rulesLock.withLock { $0 }
         guard !rules.isEmpty else { return }
         let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
@@ -179,8 +211,8 @@ final class ESJailAdapter {
     }
 
     func onProcessExited(auditToken: audit_token_t) {
-        let pid = pid_t(auditToken.val.5)
-        jailedPIDsLock.withLock { $0.removeValue(forKey: pid) }
+        let key = ProcessKey(auditToken)
+        jailedProcessesLock.withLock { $0.removeValue(forKey: key) }
         guard let client else { return }
         var token = auditToken
         es_unmute_process(client, &token)
@@ -190,10 +222,10 @@ final class ESJailAdapter {
 
     private func mute(_ token: audit_token_t, ruleID: UUID, signingID: String) {
         guard let client else { return }
-        let pid = pid_t(token.val.5)
-        jailedPIDsLock.withLock { $0[pid] = ruleID }
+        let key = ProcessKey(token)
+        jailedProcessesLock.withLock { $0[key] = ruleID }
         var t = token
         es_mute_process(client, &t)
-        logger.debug("ESJailAdapter: muted process pid=\(pid) signingID=\(signingID, privacy: .public)")
+        logger.debug("ESJailAdapter: muted process pid=\(key.pid) pidVersion=\(key.pidVersion) signingID=\(signingID, privacy: .public)")
     }
 }
