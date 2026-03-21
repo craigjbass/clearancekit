@@ -16,5 +16,5 @@ jobs:
       - name: Test
         run: |
           xcodebuild test \
-            -scheme clearancekit \
+            -scheme clearancekitTests \
             -destination 'platform=macOS'
