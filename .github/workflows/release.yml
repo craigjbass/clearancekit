@@ -17,6 +17,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test
+        run: |
+          xcodebuild test \
+            -scheme clearancekitTests \
+            -destination 'platform=macOS'
+
       - name: Import Developer ID certificate
         env:
           P12_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
