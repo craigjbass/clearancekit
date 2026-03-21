@@ -33,6 +33,11 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
 
 // MARK: - FilterInteractorTests
 
+// .serialized prevents thread starvation on low-core CI runners (e.g. 3 cores).
+// Each test blocks a cooperative thread on DispatchSemaphore.wait() while waiting
+// for a Task spawned by FilterInteractor.handle(.fileAuth) to call respond(). With
+// concurrent execution, all pool threads can be blocked simultaneously, deadlocking
+/// the spawned Tasks. See: https://github.com/craigjbass/clearancekit/issues/66
 @Suite("FilterInteractor", .serialized)
 struct FilterInteractorTests {
 
