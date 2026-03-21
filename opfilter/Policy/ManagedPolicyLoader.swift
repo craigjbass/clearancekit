@@ -38,7 +38,7 @@ enum ManagedPolicyLoader {
             NSLog("ManagedPolicyLoader: No managed FAAPolicy found — running without managed tier")
             return []
         }
-        let rules = raw.compactMap(parseRule)
+        let rules = raw.compactMap(parseManagedPolicyRule)
         NSLog("ManagedPolicyLoader: Loaded %d managed rule(s)", rules.count)
         return rules
     }
@@ -50,35 +50,4 @@ enum ManagedPolicyLoader {
         return load()
     }
 
-    // MARK: - Private
-
-    private static func parseRule(_ dict: [String: Any]) -> FAARule? {
-        guard let path = dict["ProtectedPathPrefix"] as? String, !path.isEmpty else {
-            NSLog("ManagedPolicyLoader: Skipping rule with missing or empty ProtectedPathPrefix")
-            return nil
-        }
-
-        let id: UUID
-        if let idString = dict["ID"] as? String, let parsed = UUID(uuidString: idString) {
-            id = parsed
-        } else {
-            id = deterministicID(forPath: path)
-        }
-
-        return FAARule(
-            id: id,
-            protectedPathPrefix: path,
-            source: .mdm,
-            allowedProcessPaths:         dict["AllowedProcessPaths"]         as? [String] ?? [],
-            allowedSignatures:           parseSignatures(dict["AllowedSignatures"]         as? [String] ?? []),
-            allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],
-            allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? [])
-        )
-    }
-
-    /// Derives a stable UUID v5 (RFC 4122, SHA-1) for a rule when no explicit
-    /// ID is provided. The name is the UTF-8 encoding of the ProtectedPathPrefix.
-    private static func deterministicID(forPath path: String) -> UUID {
-        uuidV5(namespace: uuidV5URLNamespace, name: path)
-    }
 }
