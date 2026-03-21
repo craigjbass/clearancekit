@@ -65,6 +65,8 @@ final class ESInboundAdapter {
             ES_EVENT_TYPE_AUTH_TRUNCATE,
             ES_EVENT_TYPE_AUTH_COPYFILE,
             ES_EVENT_TYPE_AUTH_READDIR,
+            ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
+            ES_EVENT_TYPE_AUTH_CLONE,
             ES_EVENT_TYPE_NOTIFY_FORK,
             ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_EXIT,
@@ -170,6 +172,12 @@ final class ESInboundAdapter {
         case ES_EVENT_TYPE_AUTH_READDIR:
             let path = string(from: message.pointee.event.readdir.target.pointee.path)
             return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
+        case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
+            let path = string(from: message.pointee.event.exchangedata.file1.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
+        case ES_EVENT_TYPE_AUTH_CLONE:
+            let path = string(from: message.pointee.event.clone.source.pointee.path)
+            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
         }

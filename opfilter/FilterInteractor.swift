@@ -17,8 +17,10 @@ enum FileOperation: String {
     case link     = "link"
     case create   = "create"
     case truncate = "truncate"
-    case copyfile = "copyfile"
-    case readdir  = "readdir"
+    case copyfile      = "copyfile"
+    case readdir       = "readdir"
+    case exchangedata  = "exchangedata"
+    case clone         = "clone"
 }
 
 // MARK: - FileAuthEvent
