@@ -74,6 +74,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let decisionReason: String
     @objc public let ancestors: [AncestorInfo]
     public let matchedRuleID: UUID?
+    public let jailedRuleID: UUID?
 
     public init(
         operation: String = "open",
@@ -87,6 +88,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         decisionReason: String = "",
         ancestors: [AncestorInfo] = [],
         matchedRuleID: UUID? = nil,
+        jailedRuleID: UUID? = nil,
         eventID: UUID = UUID()
     ) {
         self.eventID = eventID
@@ -101,6 +103,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.decisionReason = decisionReason
         self.ancestors = ancestors
         self.matchedRuleID = matchedRuleID
+        self.jailedRuleID = jailedRuleID
         super.init()
     }
 
@@ -123,6 +126,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         let decoded = coder.decodeObject(of: [NSArray.self, AncestorInfo.self], forKey: "ancestors") as? NSArray
         self.ancestors = decoded?.compactMap { $0 as? AncestorInfo } ?? []
         self.matchedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "matchedRuleID") as UUID?
+        self.jailedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "jailedRuleID") as UUID?
         super.init()
     }
 
@@ -139,6 +143,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(decisionReason as NSString, forKey: "decisionReason")
         coder.encode(ancestors as NSArray, forKey: "ancestors")
         if let matchedRuleID { coder.encode(matchedRuleID as NSUUID, forKey: "matchedRuleID") }
+        if let jailedRuleID { coder.encode(jailedRuleID as NSUUID, forKey: "jailedRuleID") }
     }
 
     public override var description: String {
@@ -248,6 +253,12 @@ public protocol ServiceProtocol {
     func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
+    // User jail-rule mutations (GUI → opfilter). Opfilter stores, then applies merged
+    // jail rules directly and pushes updated user jail rules to all GUI clients.
+    func addJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func updateJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeJailRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void)
+
     // GUI requests a full status resync. Opfilter pushes the current user-rule
     // and allowlist snapshots back to the caller.
     func requestResync(withReply reply: @escaping () -> Void)
@@ -280,6 +291,7 @@ public protocol ClientProtocol {
     func userAllowlistUpdated(_ allowlistData: NSData)
     func managedAncestorAllowlistUpdated(_ allowlistData: NSData)
     func userAncestorAllowlistUpdated(_ allowlistData: NSData)
+    func userJailRulesUpdated(_ rulesData: NSData)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)

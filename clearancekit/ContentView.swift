@@ -12,6 +12,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case events     = "Events"
     case policy     = "Policy"
     case presets    = "App Protections"
+    case jail       = "Jail"
     case allowlist  = "Allowlist"
     case processes  = "Processes"
     case setup      = "Setup"
@@ -23,6 +24,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .events:    return "list.bullet"
         case .policy:    return "shield"
         case .presets:   return "lock.app.dashed"
+        case .jail:      return "lock.rectangle.on.rectangle"
         case .allowlist: return "checkmark.shield"
         case .processes: return "cpu"
         case .setup:     return "gearshape"
@@ -55,6 +57,7 @@ struct ContentView: View {
                 case .events:    EventsWindowView()
                 case .policy:    PolicyView()
                 case .presets:   PresetsView()
+                case .jail:      JailView()
                 case .allowlist: AllowlistView()
                 case .processes: ProcessesView()
                 case .setup:     SetupView()

@@ -37,16 +37,32 @@ public enum PolicyDecision {
     case allowed(ruleID: UUID, ruleName: String, ruleSource: RuleSource, matchedCriterion: String)
     /// Covered by a rule but no criterion matched — denied.
     case denied(ruleID: UUID, ruleName: String, ruleSource: RuleSource, allowedCriteria: String)
+    /// Jailed process accessed a path within its allowed prefixes.
+    case jailAllowed(ruleID: UUID, ruleName: String, matchedPrefix: String)
+    /// Jailed process accessed a path outside its allowed prefixes — denied.
+    case jailDenied(ruleID: UUID, ruleName: String, allowedPrefixes: [String])
 
     public var isAllowed: Bool {
-        if case .denied = self { return false }
-        return true
+        switch self {
+        case .denied, .jailDenied: return false
+        default: return true
+        }
     }
 
     public var matchedRuleID: UUID? {
         switch self {
         case .allowed(let ruleID, _, _, _): return ruleID
         case .denied(let ruleID, _, _, _): return ruleID
+        case .jailAllowed(let ruleID, _, _): return ruleID
+        case .jailDenied(let ruleID, _, _): return ruleID
+        default: return nil
+        }
+    }
+
+    public var jailedRuleID: UUID? {
+        switch self {
+        case .jailAllowed(let ruleID, _, _): return ruleID
+        case .jailDenied(let ruleID, _, _): return ruleID
         default: return nil
         }
     }
@@ -55,6 +71,8 @@ public enum PolicyDecision {
         switch self {
         case .allowed(_, let name, _, _): return name
         case .denied(_, let name, _, _): return name
+        case .jailAllowed(_, let name, _): return name
+        case .jailDenied(_, let name, _): return name
         default: return ""
         }
     }
@@ -77,6 +95,10 @@ public enum PolicyDecision {
             return "Allowed: matched \(criterion)"
         case .denied(_, let ruleName, _, let criteria):
             return "Denied by rule \"\(ruleName)\" — allowed: \(criteria)"
+        case .jailAllowed(_, let ruleName, let prefix):
+            return "Jail \"\(ruleName)\" — allowed: matched prefix \(prefix)"
+        case .jailDenied(_, let ruleName, let prefixes):
+            return "Denied by jail \"\(ruleName)\" — allowed prefixes: \(prefixes.joined(separator: ", "))"
         }
     }
 }

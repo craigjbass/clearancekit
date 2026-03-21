@@ -42,6 +42,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         logger.info("XPCServer: Discovered \(xprotectCount) XProtect allowlist entry/entries")
         applyPolicyToFilter()
         applyAllowlistToFilter()
+        applyJailRulesToFilter()
     }
 
     func start() {
@@ -81,6 +82,10 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private func applyAllowlistToFilter() {
         interactor.updateAllowlist(policyRepository.mergedAllowlist())
         interactor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
+    }
+
+    private func applyJailRulesToFilter() {
+        interactor.updateJailRules(policyRepository.mergedJailRules())
     }
 
     // MARK: - Client registration
@@ -150,6 +155,26 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(self.policyRepository.encodedUserAncestorAllowlist()) }
     }
 
+    // MARK: - Jail rule mutations
+
+    fileprivate func applyAddJailRule(_ rule: JailRule) {
+        policyRepository.addJailRule(rule)
+        applyJailRulesToFilter()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+    }
+
+    fileprivate func applyUpdateJailRule(_ rule: JailRule) {
+        policyRepository.updateJailRule(rule)
+        applyJailRulesToFilter()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+    }
+
+    fileprivate func applyRemoveJailRule(ruleID: UUID) {
+        policyRepository.removeJailRule(ruleID: ruleID)
+        applyJailRulesToFilter()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+    }
+
     // MARK: - Discovery mode
 
     fileprivate func beginDiscovery() {
@@ -190,6 +215,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
             applyPolicyToFilter()
             applyAllowlistToFilter()
+            applyJailRulesToFilter()
             pushPolicySnapshotToGUIClient(requestingConnection)
             reply()
         }
@@ -205,6 +231,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy?.userAllowlistUpdated(policyRepository.encodedUserAllowlist())
         proxy?.managedAncestorAllowlistUpdated(policyRepository.encodedManagedAncestorAllowlist())
         proxy?.userAncestorAllowlistUpdated(policyRepository.encodedUserAncestorAllowlist())
+        proxy?.userJailRulesUpdated(policyRepository.encodedUserJailRules())
     }
 }
 
@@ -353,6 +380,32 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
         server.applyRemoveAncestorAllowlistEntry(entryID: entryID as UUID)
+        reply(true)
+    }
+
+    func addJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server,
+              let rule = try? JSONDecoder().decode(JailRule.self, from: ruleData as Data) else {
+            reply(false)
+            return
+        }
+        server.applyAddJailRule(rule)
+        reply(true)
+    }
+
+    func updateJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server,
+              let rule = try? JSONDecoder().decode(JailRule.self, from: ruleData as Data) else {
+            reply(false)
+            return
+        }
+        server.applyUpdateJailRule(rule)
+        reply(true)
+    }
+
+    func removeJailRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.applyRemoveJailRule(ruleID: ruleID as UUID)
         reply(true)
     }
 
