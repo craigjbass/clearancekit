@@ -96,6 +96,7 @@
 				Database/Database.swift,
 				Database/DatabaseMigrations.swift,
 				EndpointSecurity/ESInboundAdapter.swift,
+				EndpointSecurity/ESJailAdapter.swift,
 				EndpointSecurity/ESProcessRecord.swift,
 				Info.plist,
 				main.swift,
