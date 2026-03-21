@@ -12,13 +12,6 @@ import SQLite3
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-// MARK: - DatabaseLoadResult
-
-enum DatabaseLoadResult<T> {
-    case ok([T])
-    case suspect([T])
-}
-
 // MARK: - SQLiteBinding
 
 enum SQLiteBinding {
@@ -476,3 +469,7 @@ final class Database {
         return encoded
     }
 }
+
+// MARK: - PolicyDatabaseProtocol conformance
+
+extension Database: PolicyDatabaseProtocol {}
