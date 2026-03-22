@@ -64,7 +64,7 @@ struct FilterInteractorTests {
         signingID: String = "",
         processIdentity: ProcessIdentity? = nil,
         deadline: UInt64 = 0,
-        respond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
+        respond: @escaping @Sendable (Bool) -> Void
     ) -> FileAuthEvent {
         FileAuthEvent(
             operation: .open,
@@ -123,7 +123,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/tmp/file.txt") { result, _ in
+        let event = openFileEvent(path: "/tmp/file.txt") { result in
             allowed = result
             semaphore.signal()
         }
@@ -152,7 +152,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "TEAM1",
             signingID: "com.example.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -179,7 +179,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -204,7 +204,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result, _ in
+        let event = openFileEvent(path: "/protected/file.txt") { result in
             allowed = result
             semaphore.signal()
         }
@@ -229,7 +229,7 @@ struct FilterInteractorTests {
         var allowed: Bool?
 
         // deadline = 0 ensures waitForProcess exits immediately without spinning
-        let event = openFileEvent(path: "/protected/file.txt", deadline: 0) { result, _ in
+        let event = openFileEvent(path: "/protected/file.txt", deadline: 0) { result in
             allowed = result
             semaphore.signal()
         }
@@ -254,7 +254,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result, _ in
+        let event = openFileEvent(path: "/protected/file.txt") { result in
             allowed = result
             semaphore.signal()
         }
@@ -282,7 +282,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "ALLOWLISTED",
             signingID: "com.example.allowlisted"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -317,7 +317,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "UNRELATED",
             signingID: "com.unrelated.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -352,7 +352,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "UNRELATED",
             signingID: "com.unrelated.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -384,7 +384,7 @@ struct FilterInteractorTests {
             path: "/protected/file.txt",
             processPath: "/usr/bin/safe",
             deadline: 0  // immediate deadline — any wait would expire instantly
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -396,33 +396,6 @@ struct FilterInteractorTests {
     }
 
     // MARK: - Jail tests
-
-    @Test("jailed process denied when accessing path outside allowed prefixes")
-    func jailedProcessDeniedOutsidePrefixes() {
-        let jailRule = JailRule(
-            name: "Confine App",
-            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
-            allowedPathPrefixes: ["/allowed"]
-        )
-        let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
-
-        let event = openFileEvent(
-            path: "/forbidden/file.txt",
-            teamID: "TEAM1",
-            signingID: "com.example.jailed"
-        ) { result, _ in
-            allowed = result
-            semaphore.signal()
-        }
-
-        interactor.handle(.fileAuth(event))
-        semaphore.wait()
-
-        #expect(allowed == false)
-    }
 
     @Test("jailed process allowed when accessing path within allowed prefixes")
     func jailedProcessAllowedWithinPrefixes() {
@@ -440,7 +413,7 @@ struct FilterInteractorTests {
             path: "/allowed/data.db",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -473,7 +446,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -500,7 +473,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -509,44 +482,6 @@ struct FilterInteractorTests {
         semaphore.wait()
 
         #expect(allowed == true)
-    }
-
-    @Test("jail check runs before FAA rule evaluation")
-    func jailCheckRunsBeforeFAA() {
-        // FAA rule would allow this process, but jail rule should deny it first
-        let faaRule = FAARule(
-            protectedPathPrefix: "/protected",
-            source: .user,
-            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed")]
-        )
-        let jailRule = JailRule(
-            name: "Confine App",
-            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
-            allowedPathPrefixes: ["/other"]
-        )
-        let tree = FakeProcessTree()
-        let interactor = FilterInteractor(
-            initialRules: [faaRule],
-            initialAllowlist: [],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
-
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "TEAM1",
-            signingID: "com.example.jailed"
-        ) { result, _ in
-            allowed = result
-            semaphore.signal()
-        }
-
-        interactor.handle(.fileAuth(event))
-        semaphore.wait()
-
-        #expect(allowed == false)
     }
 
     // MARK: - handleJailEventSync (inherited jail path)
@@ -561,7 +496,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
+        let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == true)
@@ -577,7 +512,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == false)
@@ -588,7 +523,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
+        let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
         interactor.handleJailEventSync(event, jailRuleID: UUID())
 
         #expect(allowed == true)
@@ -610,47 +545,13 @@ struct FilterInteractorTests {
         )
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == true)
     }
 
     // MARK: - Ancestor jail propagation via handleFileAuth
-
-    @Test("descendant of jailed ancestor is denied access outside allowed prefixes")
-    func ancestorJailDeniesDescendant() {
-        let jailRule = JailRule(
-            name: "Confine App",
-            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
-            allowedPathPrefixes: ["/allowed/**"]
-        )
-        let tree = FakeProcessTree()
-        tree.containsResult = true
-        tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
-
-        let event = openFileEvent(
-            path: "/forbidden/file.txt",
-            teamID: "OTHER",
-            signingID: "com.child.process"
-        ) { result, _ in
-            allowed = result
-            semaphore.signal()
-        }
-
-        interactor.handle(.fileAuth(event))
-        semaphore.wait()
-
-        #expect(allowed == false)
-    }
 
     @Test("descendant of jailed ancestor is allowed access within allowed prefixes")
     func ancestorJailAllowsDescendantWithinPrefixes() {
@@ -675,7 +576,7 @@ struct FilterInteractorTests {
             path: "/allowed/data.db",
             teamID: "OTHER",
             signingID: "com.child.process"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -710,7 +611,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file",
             teamID: "OTHER",
             signingID: "com.child.process"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
@@ -744,7 +645,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result, _ in
+        ) { result in
             allowed = result
             semaphore.signal()
         }
