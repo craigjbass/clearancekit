@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ClearanceKit — macOS endpoint security that intercepts file-system access and enforces per-process policies, protecting your SSH keys, credentials, and sensitive data from supply chain attacks." />
+  <title>ClearanceKit — Supply Chain Attack Protection for macOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #09090b;
+      --surface: #111113;
+      --surface-2: #18181b;
+      --border: rgba(255,255,255,0.08);
+      --border-glow: rgba(139,92,246,0.4);
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --text-faint: #52525b;
+      --accent: #8b5cf6;
+      --accent-bright: #a78bfa;
+      --accent-glow: rgba(139,92,246,0.25);
+      --danger: #ef4444;
+      --green: #22c55e;
+      --radius: 14px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(9,9,11,0.7);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-logo svg { flex-shrink: 0; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(139,92,246,0.22) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 80% 80%, rgba(99,102,241,0.12) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(139,92,246,0.12);
+      border: 1px solid rgba(139,92,246,0.35);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent-bright);
+      margin-bottom: 32px;
+      letter-spacing: 0.01em;
+    }
+
+    .hero-badge span.dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 76px);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      max-width: 900px;
+      background: linear-gradient(135deg, #fff 40%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 24px;
+    }
+
+    .hero p.lead {
+      font-size: clamp(16px, 2vw, 20px);
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 48px;
+      font-weight: 400;
+      line-height: 1.65;
+    }
+
+    .hero-cta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 14px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+      box-shadow: 0 0 0 0 var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-bright);
+      box-shadow: 0 0 30px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-primary svg { flex-shrink: 0; }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 500;
+      padding: 14px 24px;
+      border-radius: 10px;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s, transform 0.15s;
+    }
+
+    .btn-secondary:hover {
+      color: var(--text);
+      border-color: rgba(255,255,255,0.2);
+      transform: translateY(-1px);
+    }
+
+    .download-meta {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-faint);
+    }
+
+    .download-meta span { color: var(--text-muted); }
+
+    /* ── DEMO GIF ── */
+    .demo-section {
+      padding: 0 24px 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .demo-frame {
+      position: relative;
+      max-width: 780px;
+      width: 100%;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow:
+        0 0 0 1px var(--border),
+        0 30px 80px rgba(0,0,0,0.6),
+        0 0 120px rgba(139,92,246,0.1);
+    }
+
+    .demo-frame::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 85%, rgba(9,9,11,0.6) 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .demo-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .demo-titlebar {
+      background: #1c1c1e;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .demo-titlebar .dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+
+    .demo-titlebar .dot.red   { background: #ff5f56; }
+    .demo-titlebar .dot.amber { background: #ffbd2e; }
+    .demo-titlebar .dot.green { background: #27c93f; }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+    }
+
+    .stat {
+      padding: 28px 40px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+    }
+
+    .stat:last-child { border-right: none; }
+
+    .stat-number {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      background: linear-gradient(135deg, #fff 30%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 100px 24px; }
+
+    .section-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 3.5vw, 46px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .section-subtitle {
+      font-size: 17px;
+      color: var(--text-muted);
+      max-width: 560px;
+      line-height: 1.65;
+      margin-bottom: 64px;
+    }
+
+    /* ── FEATURE GRID ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      padding: 36px;
+      transition: background 0.2s;
+    }
+
+    .feature-card:hover { background: var(--surface-2); }
+
+    .feature-icon {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      background: rgba(139,92,246,0.15);
+      border: 1px solid rgba(139,92,246,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      color: var(--accent-bright);
+    }
+
+    .feature-card h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    /* ── THREAT GRID ── */
+    .threat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .threat-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .threat-item:hover {
+      border-color: rgba(139,92,246,0.3);
+      background: var(--surface-2);
+    }
+
+    .threat-item .icon-wrap {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: #f87171;
+    }
+
+    .threat-item p {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: #0d0d10;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13.5px;
+      line-height: 1.8;
+      color: #c4b5fd;
+      overflow-x: auto;
+    }
+
+    .code-block .comment { color: #52525b; }
+    .code-block .cmd { color: #86efac; }
+    .code-block .arg { color: #fde68a; }
+
+    /* ── HOW IT WORKS ── */
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+    }
+
+    .steps-list::before {
+      content: '';
+      position: absolute;
+      left: 22px;
+      top: 44px;
+      bottom: 44px;
+      width: 1px;
+      background: linear-gradient(to bottom, var(--accent) 0%, var(--border) 100%);
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+      padding: 24px 0;
+    }
+
+    .step-number {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border-glow);
+      color: var(--accent-bright);
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-content h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+
+    .step-content p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    /* ── SCREENSHOT ── */
+    .screenshot-wrap {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    }
+
+    .screenshot-wrap img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* ── COMPARISON ── */
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .comparison-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+
+    .comparison-card.highlight {
+      border-color: rgba(139,92,246,0.4);
+      background: rgba(139,92,246,0.06);
+    }
+
+    .comparison-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .comparison-card .tag {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      margin-bottom: 20px;
+      display: inline-block;
+    }
+
+    .comparison-card.highlight .tag {
+      background: rgba(139,92,246,0.2);
+      color: var(--accent-bright);
+      border: 1px solid rgba(139,92,246,0.3);
+    }
+
+    .comparison-card:not(.highlight) .tag {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .check-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .check-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .check-list li svg { flex-shrink: 0; margin-top: 2px; }
+
+    /* ── DOWNLOAD SECTION ── */
+    .download-section {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .download-card {
+      background: linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.06) 100%);
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 20px;
+      padding: 56px 48px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .download-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 300px;
+      background: radial-gradient(ellipse, rgba(139,92,246,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .download-card h2 {
+      font-size: clamp(26px, 3vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+    }
+
+    .download-card p {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 40px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 24px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 13px;
+      color: var(--text-faint);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--text-muted); }
+
+    .footer-copy {
+      font-size: 13px;
+      color: var(--text-faint);
+    }
+
+    /* ── UTILS ── */
+    .text-center { text-align: center; }
+    .mt-8 { margin-top: 32px; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      section { padding: 64px 20px; }
+      .comparison-grid { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .stat { padding: 24px 20px; }
+      .download-card { padding: 40px 24px; }
+      .steps-list::before { left: 21px; }
+      footer { padding: 32px 20px; }
+      .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <rect width="22" height="22" rx="6" fill="url(#logoGrad)"/>
+      <path d="M11 4L6 7.5V14.5L11 18L16 14.5V7.5L11 4Z" stroke="white" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+      <circle cx="11" cy="11" r="2.5" fill="white"/>
+      <defs>
+        <linearGradient id="logoGrad" x1="0" y1="0" x2="22" y2="22">
+          <stop offset="0%" stop-color="#8b5cf6"/>
+          <stop offset="100%" stop-color="#6366f1"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    ClearanceKit
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">How it works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#threats">Threats</a></li>
+    <li><a href="#download">Download</a></li>
+    <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    macOS Endpoint Security
+  </div>
+  <h1>Stop supply chain attacks<br/>before they read your secrets</h1>
+  <p class="lead">
+    Every <code>npm install</code> executes arbitrary native code with your full file-system permissions.
+    ClearanceKit intercepts every file-system access event and enforces per-process allow policies —
+    so a compromised package can't silently reach your SSH keys, credentials, or private data.
+  </p>
+  <div class="hero-cta">
+    <a href="#download" class="btn-primary" id="hero-download-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download for macOS
+    </a>
+    <a href="https://github.com/craigjbass/clearancekit" class="btn-secondary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+      </svg>
+      View on GitHub
+    </a>
+  </div>
+  <p class="download-meta" id="release-meta">Loading latest release…</p>
+</header>
+
+<!-- DEMO -->
+<div class="demo-section">
+  <div class="demo-frame" style="max-width:780px">
+    <div class="demo-titlebar">
+      <div class="dot red"></div>
+      <div class="dot amber"></div>
+      <div class="dot green"></div>
+    </div>
+    <img
+      src="recording.gif"
+      alt="ClearanceKit intercepting a file-system access attempt in real time"
+      loading="lazy"
+    />
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat">
+    <div class="stat-number">10</div>
+    <div class="stat-label">ES event types intercepted</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">2</div>
+    <div class="stat-label">ES clients — policy + jail</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">0</div>
+    <div class="stat-label">Network calls made by the app</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">MDM</div>
+    <div class="stat-label">Fleet management via profiles</div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="section-inner">
+    <p class="section-eyebrow">How it works</p>
+    <h2 class="section-title">Enforce policy at the kernel boundary</h2>
+    <p class="section-subtitle">
+      ClearanceKit uses Apple's Endpoint Security framework to place itself between every
+      file-system operation and the process that triggered it — before the access is granted.
+    </p>
+    <div class="grid-2">
+      <div class="steps-list">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Process requests file access</h3>
+            <p>Any process — including those spawned by <code>npm install</code>, <code>pip install</code>, or <code>brew upgrade</code> — attempts to open, rename, read, or write a file.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Endpoint Security intercepts the event</h3>
+            <p>The kernel delivers an authorisation event to ClearanceKit's system extension before the access is permitted. The extension must respond within the deadline.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Policy is evaluated by code signature</h3>
+            <p>The extension checks the process's cryptographic Team ID and Signing ID against your rules — not file paths or hashes, which can be spoofed or go stale after updates.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <div class="step-content">
+            <h3>Access is allowed or denied instantly</h3>
+            <p>Denied events surface in the SwiftUI interface so you can review them and build policy as you work. Allowed accesses pass through with zero latency.</p>
+          </div>
+        </div>
+      </div>
+      <div class="screenshot-wrap">
+        <img
+          src="app-protections.png"
+          alt="ClearanceKit App Protections UI"
+          loading="lazy"
+        />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="section-inner">
+    <p class="section-eyebrow">Features</p>
+    <h2 class="section-title">Everything you need to lock down your workstation</h2>
+    <p class="section-subtitle">
+      Surgical, per-process file-system control with zero-maintenance policies that survive software updates.
+    </p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h3>Code-signature policies</h3>
+        <p>Bind rules to the cryptographic Team ID and Signing ID embedded in every binary — not file paths that can be spoofed or hashes that go stale after each update.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+          </svg>
+        </div>
+        <h3>Jail rules</h3>
+        <p>Confine any process to a specific set of path prefixes. Any access outside the allowed set is denied regardless of other policy rules — zero escape.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <h3>Process ancestry</h3>
+        <p>Allow access only when the process was launched by a trusted parent. Grant a build tool read access to source files only when invoked from your trusted CI runner.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <h3>Native SwiftUI interface</h3>
+        <p>Live event stream, one-click policy creation, app protections, and process tree visualisation — all in a menu-bar app that stays out of your way until you need it.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+        </div>
+        <h3>MDM fleet management</h3>
+        <p>Deploy policies across your entire developer fleet via Apple Configuration Profiles. Any MDM that supports managed preferences works — Jamf, Kandji, Mosyle, and more.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+        <h3>Zero network calls</h3>
+        <p>ClearanceKit never makes outbound connections. No telemetry, no update checks, no cloud policy sync. The app that watches what other processes do should not itself phone home.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THREATS -->
+<section id="threats">
+  <div class="section-inner">
+    <p class="section-eyebrow">What's at risk</p>
+    <h2 class="section-title">One <code style="font-size:0.85em">postinstall</code> script can reach all of this</h2>
+    <p class="section-subtitle">
+      Any unsandboxed process runs with your full file-system permissions. A malicious
+      package or compromised dependency can silently exfiltrate all of the following.
+    </p>
+    <div class="threat-grid">
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <p>SSH private keys <br/><code style="font-size:11px;color:#71717a">~/.ssh/id_*</code></p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2H3v16h5l3 3 3-3h7V2z"/></svg>
+        </div>
+        <p>AWS / GCP / Azure credentials</p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <p>iMessage chat history <br/><code style="font-size:11px;color:#71717a">~/Library/Messages/</code></p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8.56 2.75c4.37 6.03 6.02 9.42 8.03 17.72m2.54-15.38c-3.72 4.35-8.94 5.66-16.88 5.85m19.5 1.9c-3.5-.93-6.63-.82-8.94 0-2.58.92-5.01 2.86-7.44 6.32"/></svg>
+        </div>
+        <p>Safari & browser cookies</p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+        </div>
+        <p>Git credentials <br/><code style="font-size:11px;color:#71717a">~/.git-credentials</code></p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <p>GPG private keys <br/><code style="font-size:11px;color:#71717a">~/.gnupg/</code></p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <p>Signal, Slack, Discord data</p>
+      </div>
+      <div class="threat-item">
+        <div class="icon-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <p>VS Code / IDE state &amp; workspace</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY SIGNATURES -->
+<section style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="section-inner">
+    <p class="section-eyebrow">Why code signing beats file paths</p>
+    <h2 class="section-title">Policies that can't be spoofed,<br/>and never go stale</h2>
+    <p class="section-subtitle">
+      Traditional MAC systems bind permissions to file paths or binary hashes.
+      ClearanceKit binds them to the Developer ID certificate embedded in the binary.
+    </p>
+    <div class="comparison-grid">
+      <div class="comparison-card">
+        <h3>Path &amp; hash-based MAC</h3>
+        <div class="tag">SELinux / IMA / AIDE</div>
+        <ul class="check-list">
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Every software update invalidates hashes — manual policy refresh required
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            A trojanised binary at the expected path inherits all permissions
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            High maintenance burden on active developer workstations
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            No concept of process ancestry — evaluates immediate process only
+          </li>
+        </ul>
+      </div>
+      <div class="comparison-card highlight">
+        <h3>ClearanceKit</h3>
+        <div class="tag">Cryptographic identity</div>
+        <ul class="check-list">
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Signing identity unchanged across updates — write once, maintain never
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Trojanised binary carries different or no signature — denied regardless of path
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Zero-maintenance policies on developer workstations with frequent updates
+          </li>
+          <li>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Full process ancestry: grant access only when invoked by trusted parent
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="section-inner">
+    <p class="section-eyebrow">Installation</p>
+    <h2 class="section-title">Up and running in under a minute</h2>
+    <p class="section-subtitle">
+      No configuration files. No command-line setup. Download, drag, and grant the two permissions macOS requires.
+    </p>
+    <div class="grid-2">
+      <div>
+        <div class="steps-list">
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h3>Download the DMG</h3>
+              <p>Get the latest signed and notarized release below. Every release is attested with GitHub's build provenance attestation.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h3>Drag to Applications</h3>
+              <p>Open the DMG and drag <strong>clearancekit.app</strong> to the Applications folder shortcut.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>Activate the system extension</h3>
+              <p>On first launch, open the <strong>Setup</strong> tab and click <strong>Activate Extension</strong>. macOS prompts for approval in System Settings — once only.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <h3>Grant Full Disk Access</h3>
+              <p>Endpoint Security requires Full Disk Access for the system extension. Grant it when prompted, or navigate to System Settings → Privacy &amp; Security.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="code-block">
+          <div class="comment"># No auto-updates by design.</div>
+          <div class="comment"># Check the Releases page manually.</div>
+          <br/>
+          <div>
+            <span class="comment"># Verify build provenance</span>
+          </div>
+          <div>
+            <span class="cmd">gh</span>
+            <span class="arg"> attestation verify</span>
+          </div>
+          <div style="padding-left:20px">
+            <span class="arg">clearancekit-vX.Y.dmg</span>
+          </div>
+          <div style="padding-left:20px">
+            <span class="arg">--owner craigjbass</span>
+          </div>
+          <br/>
+          <div>
+            <span class="comment"># View system extension logs</span>
+          </div>
+          <div>
+            <span class="cmd">log</span>
+            <span class="arg"> stream \</span>
+          </div>
+          <div style="padding-left:20px">
+            <span class="arg">--predicate 'subsystem ==</span>
+          </div>
+          <div style="padding-left:20px">
+            <span class="arg">"uk.craigbass.clearancekit.opfilter"'</span>
+          </div>
+          <div style="padding-left:20px">
+            <span class="arg">--level debug</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD CTA -->
+<section id="download" class="download-section">
+  <div class="section-inner">
+    <div class="download-card">
+      <h2>Download ClearanceKit</h2>
+      <p>
+        Free and open source. Signed, notarized, and attested.
+        No account required. No telemetry. No auto-updates.
+      </p>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        <a href="https://github.com/craigjbass/clearancekit/releases/latest" class="btn-primary" id="footer-download-btn" style="font-size:17px;padding:18px 36px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download Latest Release
+        </a>
+        <p id="footer-release-meta" style="font-size:13px;color:var(--text-faint)">Loading release info…</p>
+        <a href="https://github.com/craigjbass/clearancekit/releases" style="font-size:13px;color:var(--text-faint);text-decoration:none;margin-top:4px">
+          View all releases →
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <span class="footer-copy">© 2026 Craig J. Bass — MIT License</span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
+      <li><a href="https://github.com/craigjbass/clearancekit/releases">Releases</a></li>
+      <li><a href="https://github.com/craigjbass/clearancekit/blob/main/SECURITY.md">Security</a></li>
+      <li><a href="https://ko-fi.com/craigjbass">Support</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script type="module">
+  const RELEASES_API = 'https://api.github.com/repos/craigjbass/clearancekit/releases/latest';
+  const RELEASES_PAGE = 'https://github.com/craigjbass/clearancekit/releases/latest';
+
+  function formatDate(iso) {
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function formatBytes(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function applyRelease(release) {
+    const dmg = (release.assets || []).find(a => a.name.endsWith('.dmg'));
+    const downloadUrl = dmg ? dmg.browser_download_url : RELEASES_PAGE;
+    const version = release.tag_name || '';
+    const date = release.published_at ? formatDate(release.published_at) : '';
+    const size = dmg ? formatBytes(dmg.size) : '';
+
+    document.querySelectorAll('#hero-download-btn, #footer-download-btn').forEach(btn => {
+      btn.href = downloadUrl;
+    });
+
+    const metaText = [version, date, size ? size + ' DMG' : ''].filter(Boolean).join(' · ');
+
+    const heroBadge = document.getElementById('release-meta');
+    if (heroBadge) heroBadge.innerHTML = 'Latest: <span>' + metaText + '</span>';
+
+    const footerBadge = document.getElementById('footer-release-meta');
+    if (footerBadge) footerBadge.innerHTML = version + (date ? ' · Released ' + date : '') + (size ? ' · ' + size : '');
+  }
+
+  function applyFallback() {
+    const heroBadge = document.getElementById('release-meta');
+    if (heroBadge) heroBadge.innerHTML = '<a href="' + RELEASES_PAGE + '" style="color:var(--accent-bright)">See all releases →</a>';
+
+    const footerBadge = document.getElementById('footer-release-meta');
+    if (footerBadge) footerBadge.textContent = 'Check GitHub for the latest version';
+  }
+
+  try {
+    const response = await fetch(RELEASES_API);
+    if (!response.ok) throw new Error(String(response.status));
+    applyRelease(await response.json());
+  } catch {
+    applyFallback();
+  }
+</script>
+
+</body>
+</html>
