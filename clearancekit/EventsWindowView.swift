@@ -130,6 +130,18 @@ struct EventRow: View {
 
     private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
 
+    private var suggestBaselineIssueURL: URL? {
+        guard !event.accessAllowed, event.teamID.isEmpty, !event.signingID.isEmpty else { return nil }
+        let title = "Add `\(event.signingID)` to baseline allowlist"
+        let body = "**Signing ID**: `\(event.signingID)`\n**Process path**: `\(event.processPath)`\n\nThis Apple platform binary is triggering deny events and should be added to the baseline global allowlist."
+        var components = URLComponents(string: "https://github.com/craigjbass/clearancekit/issues/new")
+        components?.queryItems = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "body", value: body),
+        ]
+        return components?.url
+    }
+
     private var isJailedUserDeny: Bool {
         guard let ruleID = event.jailedRuleID, !event.accessAllowed else { return false }
         return JailStore.shared.userRules.contains { $0.id == ruleID }
@@ -359,6 +371,13 @@ struct EventRow: View {
                     Text("Signing: \(event.signingID)")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+                if let url = suggestBaselineIssueURL {
+                    Link(destination: url) {
+                        Image(systemName: "ladybug")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }

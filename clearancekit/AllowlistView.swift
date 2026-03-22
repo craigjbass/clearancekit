@@ -106,6 +106,18 @@ struct AllowlistView: View {
 
 // MARK: - AllowlistEntryRow
 
+private func suggestBaselineIssueURL(signingID: String) -> URL? {
+    guard !signingID.isEmpty else { return nil }
+    let title = "Add `\(signingID)` to baseline allowlist"
+    let body = "**Signing ID**: `\(signingID)`\n\nThis Apple platform binary should be added to the baseline global allowlist."
+    var components = URLComponents(string: "https://github.com/craigjbass/clearancekit/issues/new")
+    components?.queryItems = [
+        URLQueryItem(name: "title", value: title),
+        URLQueryItem(name: "body", value: body),
+    ]
+    return components?.url
+}
+
 private struct AllowlistEntryRow: View {
     let entry: AllowlistEntry
     let isEditable: Bool
@@ -133,6 +145,13 @@ private struct AllowlistEntryRow: View {
                 }
             }
             Spacer()
+            if entry.platformBinary, let url = suggestBaselineIssueURL(signingID: entry.signingID) {
+                Link(destination: url) {
+                    Image(systemName: "ladybug")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if isEditable {
                 Button { onDelete() } label: {
                     Image(systemName: "trash")
