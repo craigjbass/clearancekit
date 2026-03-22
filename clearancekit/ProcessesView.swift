@@ -12,8 +12,10 @@ struct ProcessesView: View {
     @StateObject private var jailStore = JailStore.shared
     @State private var jailedProcesses: [RunningProcessInfo] = []
 
+    private var allRules: [JailRule] { jailStore.managedRules + jailStore.userRules }
+
     private var jailedTree: [JailedProcessNode] {
-        buildJailedTree(from: jailedProcesses, rules: jailStore.userRules)
+        buildJailedTree(from: jailedProcesses, rules: allRules, events: xpcClient.events)
     }
 
     private var denyGroups: [DenyGroup] {
@@ -77,12 +79,25 @@ struct ProcessesView: View {
     }
 }
 
+// MARK: - DeniedJailAccess
+
+private struct DeniedJailAccess: Identifiable {
+    var id: String { "\(ruleID?.uuidString ?? ""):\(path)" }
+    let path: String
+    let ruleID: UUID?
+    let count: Int
+}
+
 // MARK: - JailedProcessNode
 
 private struct JailedProcessNode: Identifiable {
     let id: pid_t
     let process: RunningProcessInfo
+    /// Non-nil when this process is the direct target of a jail rule.
     let matchedRule: JailRule?
+    /// The rule in effect — either matchedRule or an ancestor's rule.
+    let effectiveRule: JailRule?
+    let deniedAccesses: [DeniedJailAccess]
     var children: [JailedProcessNode]?
 
     var name: String { URL(fileURLWithPath: process.path).lastPathComponent }
@@ -92,30 +107,44 @@ private struct JailedProcessNode: Identifiable {
 
 private struct JailedProcessRow: View {
     let node: JailedProcessNode
+    @State private var isExpanded = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                guard !node.deniedAccesses.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                rowHeader
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(node.deniedAccesses) { access in
+                        Divider()
+                        DeniedJailAccessRow(access: access)
+                            .padding(.leading, 16)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 2)
+    }
+
+    private var rowHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(node.name)
                     .fontWeight(.medium)
-                if let rule = node.matchedRule {
-                    Text(rule.name)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                } else {
-                    Text("inherited")
+                ruleBadge
+                Spacer()
+                if !node.deniedAccesses.isEmpty {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
-                Spacer()
                 Text("PID \(node.process.pid)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -125,7 +154,97 @@ private struct JailedProcessRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder private var ruleBadge: some View {
+        if let rule = node.matchedRule {
+            Text(rule.name)
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else if let rule = node.effectiveRule {
+            Text("↑ \(rule.name)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
+    }
+}
+
+// MARK: - DeniedJailAccessRow
+
+private struct DeniedJailAccessRow: View {
+    let access: DeniedJailAccess
+    @StateObject private var jailStore = JailStore.shared
+    @State private var isAllowing = false
+
+    private var effectiveRule: JailRule? {
+        guard let ruleID = access.ruleID else { return nil }
+        return (jailStore.managedRules + jailStore.userRules).first { $0.id == ruleID }
+    }
+
+    private var isAlreadyCovered: Bool {
+        guard let rule = effectiveRule else { return false }
+        return checkJailPath(rule: rule, path: access.path).isAllowed
+    }
+
+    private var canAllow: Bool {
+        guard let rule = effectiveRule else { return false }
+        return rule.source == .user && !isAlreadyCovered
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.red)
+                .font(.caption2)
+            Text(access.path)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+            if access.count > 1 {
+                Text("×\(access.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.red.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+            allowControl
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder private var allowControl: some View {
+        if isAlreadyCovered {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption)
+        } else if canAllow {
+            Button {
+                Task {
+                    isAllowing = true
+                    if let ruleID = access.ruleID {
+                        try? await jailStore.allowPath(access.path, inRule: ruleID)
+                    }
+                    isAllowing = false
+                }
+            } label: {
+                Image(systemName: isAllowing ? "ellipsis.circle" : "plus.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .disabled(isAllowing)
+        }
     }
 }
 
@@ -245,8 +364,23 @@ private struct DenyGroupRow: View {
 
 // MARK: - Jailed tree building
 
-private func buildJailedTree(from processes: [RunningProcessInfo], rules: [JailRule]) -> [JailedProcessNode] {
+private func buildJailedTree(
+    from processes: [RunningProcessInfo],
+    rules: [JailRule],
+    events: [FolderOpenEvent]
+) -> [JailedProcessNode] {
     guard !processes.isEmpty else { return [] }
+
+    var deniedByPID: [Int32: [String: (count: Int, ruleID: UUID?)]] = [:]
+    for event in events where !event.accessAllowed && event.jailedRuleID != nil {
+        var pathMap = deniedByPID[event.processID] ?? [:]
+        if let existing = pathMap[event.path] {
+            pathMap[event.path] = (count: existing.count + 1, ruleID: event.jailedRuleID)
+        } else {
+            pathMap[event.path] = (count: 1, ruleID: event.jailedRuleID)
+        }
+        deniedByPID[event.processID] = pathMap
+    }
 
     let jailedPIDs = Set(processes.map { pid_t($0.pid) })
     var childPIDs: [pid_t: [pid_t]] = [:]
@@ -261,23 +395,35 @@ private func buildJailedTree(from processes: [RunningProcessInfo], rules: [JailR
     let byPID = Dictionary(uniqueKeysWithValues: processes.map { (pid_t($0.pid), $0) })
     let roots = processes.filter { !jailedPIDs.contains(pid_t($0.parentPID)) }
 
-    func buildNode(pid: pid_t) -> JailedProcessNode? {
+    func buildNode(pid: pid_t, inheritedRule: JailRule?) -> JailedProcessNode? {
         guard let process = byPID[pid] else { return nil }
         let resolvedTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
-        let rule = rules.first { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: process.signingID) }
+        let matchedRule = rules.first {
+            $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: process.signingID)
+        }
+        let effectiveRule = matchedRule ?? inheritedRule
+
+        let pathMap = deniedByPID[process.pid] ?? [:]
+        let deniedAccesses = pathMap
+            .map { path, info in DeniedJailAccess(path: path, ruleID: info.ruleID, count: info.count) }
+            .sorted { $0.path < $1.path }
+
         let children = (childPIDs[pid] ?? [])
-            .compactMap { buildNode(pid: $0) }
+            .compactMap { buildNode(pid: $0, inheritedRule: effectiveRule) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
         return JailedProcessNode(
             id: pid,
             process: process,
-            matchedRule: rule,
+            matchedRule: matchedRule,
+            effectiveRule: effectiveRule,
+            deniedAccesses: deniedAccesses,
             children: children.isEmpty ? nil : children
         )
     }
 
     return roots
-        .compactMap { buildNode(pid: pid_t($0.pid)) }
+        .compactMap { buildNode(pid: pid_t($0.pid), inheritedRule: nil) }
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 }
 

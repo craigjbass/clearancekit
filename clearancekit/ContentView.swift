@@ -47,9 +47,25 @@ struct ContentView: View {
                 }
             }
             NavigationSplitView {
-                List(SidebarItem.allCases, selection: $nav.selection) { item in
-                    Label(item.rawValue, systemImage: item.icon)
-                        .tag(item)
+                List(selection: $nav.selection) {
+                    Section("Monitor") {
+                        Label(SidebarItem.events.rawValue, systemImage: SidebarItem.events.icon)
+                            .tag(SidebarItem.events)
+                        Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
+                            .tag(SidebarItem.processes)
+                    }
+                    Section("Configure") {
+                        Label(SidebarItem.policy.rawValue, systemImage: SidebarItem.policy.icon)
+                            .tag(SidebarItem.policy)
+                        Label(SidebarItem.presets.rawValue, systemImage: SidebarItem.presets.icon)
+                            .tag(SidebarItem.presets)
+                        Label(SidebarItem.jail.rawValue, systemImage: SidebarItem.jail.icon)
+                            .tag(SidebarItem.jail)
+                        Label(SidebarItem.allowlist.rawValue, systemImage: SidebarItem.allowlist.icon)
+                            .tag(SidebarItem.allowlist)
+                        Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
+                            .tag(SidebarItem.setup)
+                    }
                 }
                 .navigationSplitViewColumnWidth(min: 160, ideal: 180)
             } detail: {
