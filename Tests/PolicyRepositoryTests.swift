@@ -289,7 +289,7 @@ struct PolicyRepositoryTests {
         let repo = PolicyRepository(database: FakeDatabase(), managedRules: [initial])
         let replacement = makeRule(prefix: "/after", source: .mdm)
 
-        repo.resync(managedRules: [replacement], managedAllowlist: [], xprotectEntries: [])
+        repo.resync(managedRules: [replacement], managedAllowlist: [], managedJailRules: [], xprotectEntries: [])
 
         let merged = repo.mergedRules()
         #expect(!merged.contains { $0.id == initial.id })
