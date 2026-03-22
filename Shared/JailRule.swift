@@ -84,15 +84,27 @@ public func checkAncestorJailPolicy(
 }
 
 private func pathMatchesPattern(_ path: String, pattern: String) -> Bool {
-    if pattern.hasSuffix("/**") {
-        let base = String(pattern.dropLast(3))
-        return path == base || path.hasPrefix(base + "/")
+    let pathSegments = path.split(separator: "/").map(String.init)
+    let patternSegments = pattern.split(separator: "/").map(String.init)
+    var pathIndex = 0
+    for patternSegment in patternSegments {
+        if patternSegment == "**" {
+            return true
+        }
+        guard pathIndex < pathSegments.count else { return false }
+        guard segmentMatches(pathSegments[pathIndex], pattern: patternSegment) else { return false }
+        pathIndex += 1
     }
-    if pattern.hasSuffix("/*") {
-        let base = String(pattern.dropLast(2))
-        guard path.hasPrefix(base + "/") else { return false }
-        let rest = path.dropFirst(base.count + 1)
-        return !rest.isEmpty && !rest.contains("/")
+    return pathIndex == pathSegments.count
+}
+
+private func segmentMatches(_ segment: String, pattern: String) -> Bool {
+    guard pattern.contains("***") else {
+        return pattern == "*" || segment == pattern
     }
-    return path == pattern
+    let parts = pattern.components(separatedBy: "***")
+    let prefix = parts[0]
+    let suffix = parts[parts.count - 1]
+    guard segment.count >= prefix.count + suffix.count else { return false }
+    return segment.hasPrefix(prefix) && segment.hasSuffix(suffix)
 }

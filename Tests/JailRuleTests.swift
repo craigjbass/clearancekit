@@ -105,6 +105,39 @@ struct JailPolicyTests {
         #expect(prefixes == jailRule.allowedPathPrefixes)
     }
 
+    @Test("/* in the middle of a pattern matches any single path component")
+    func singleStarInMiddleMatchesAnyComponent() {
+        let rule = JailRule(
+            name: "Locale Rule",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/usr/share/locale/*/**"]
+        )
+        let allowed1 = checkJailPolicy(jailRules: [rule], path: "/usr/share/locale/en_US.UTF-8/LC_NUMERIC", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = allowed1 else {
+            Issue.record("Expected jailAllowed for en_US.UTF-8/LC_NUMERIC, got \(allowed1)")
+            return
+        }
+        let allowed2 = checkJailPolicy(jailRules: [rule], path: "/usr/share/locale/en_GB.UTF-8/LC_WHATEVER", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = allowed2 else {
+            Issue.record("Expected jailAllowed for en_GB.UTF-8/LC_WHATEVER, got \(allowed2)")
+            return
+        }
+    }
+
+    @Test("/* in the middle requires exactly one path component to be present")
+    func singleStarInMiddleRequiresComponent() {
+        let rule = JailRule(
+            name: "Locale Rule",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/usr/share/locale/*/**"]
+        )
+        let denied = checkJailPolicy(jailRules: [rule], path: "/usr/share/locale", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailDenied = denied else {
+            Issue.record("Expected jailDenied for base without wildcard component, got \(denied)")
+            return
+        }
+    }
+
     @Test("rejects path that shares a prefix but not at a component boundary")
     func partialComponentBoundary() {
         let decision = checkJailPolicy(jailRules: [jailRule], path: "/Users/admin/Documents/ExampleExtra/file.txt", teamID: "TEAM1", signingID: "com.example.app")
@@ -146,6 +179,50 @@ struct JailPolicyTests {
     func decisionReasonIncludesRuleName() {
         let decision = checkJailPolicy(jailRules: [jailRule], path: "/etc/passwd", teamID: "TEAM1", signingID: "com.example.app")
         #expect(decision.reason.contains("Confine Example App"))
+    }
+}
+
+// MARK: - *** component wildcard
+
+@Suite("*** component wildcard in checkJailPolicy")
+struct ComponentWildcardTests {
+
+    private let rule = JailRule(
+        name: "TTY Rule",
+        jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+        allowedPathPrefixes: ["/dev/ttys***"]
+    )
+
+    @Test("*** matches any suffix within a path component")
+    func tripleStarMatchesSuffix() {
+        let decision1 = checkJailPolicy(jailRules: [rule], path: "/dev/ttys001", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = decision1 else {
+            Issue.record("Expected jailAllowed for /dev/ttys001, got \(decision1)")
+            return
+        }
+        let decision2 = checkJailPolicy(jailRules: [rule], path: "/dev/ttysA", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailAllowed = decision2 else {
+            Issue.record("Expected jailAllowed for /dev/ttysA, got \(decision2)")
+            return
+        }
+    }
+
+    @Test("*** does not match a component with a different prefix")
+    func tripleStarRejectsDifferentPrefix() {
+        let decision = checkJailPolicy(jailRules: [rule], path: "/dev/ttyp001", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailDenied = decision else {
+            Issue.record("Expected jailDenied for /dev/ttyp001, got \(decision)")
+            return
+        }
+    }
+
+    @Test("*** does not cross path separators")
+    func tripleStarDoesNotMatchSlash() {
+        let decision = checkJailPolicy(jailRules: [rule], path: "/dev/ttys001/subpath", teamID: "TEAM1", signingID: "com.example.app")
+        guard case .jailDenied = decision else {
+            Issue.record("Expected jailDenied for /dev/ttys001/subpath, got \(decision)")
+            return
+        }
     }
 }
 
