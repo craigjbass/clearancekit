@@ -24,6 +24,13 @@ struct ProcessesView: View {
         )
     }
 
+    private var flattenedJailedTree: [(node: JailedProcessNode, depth: Int)] {
+        func flatten(_ nodes: [JailedProcessNode], depth: Int) -> [(node: JailedProcessNode, depth: Int)] {
+            nodes.flatMap { node in [(node, depth)] + flatten(node.children ?? [], depth + 1) }
+        }
+        return flatten(jailedTree, 0)
+    }
+
     private var denyGroups: [DenyGroup] {
         buildDenyGroups(from: xpcClient.events)
     }
@@ -44,8 +51,8 @@ struct ProcessesView: View {
         List {
             if !jailedTree.isEmpty {
                 Section("Jailed Processes") {
-                    OutlineGroup(jailedTree, children: \.children) { node in
-                        JailedProcessRow(node: node)
+                    ForEach(flattenedJailedTree, id: \.node.id) { item in
+                        JailedProcessRow(node: item.node, depth: item.depth)
                     }
                 }
             }
@@ -118,6 +125,7 @@ private struct JailedProcessNode: Identifiable {
 
 private struct JailedProcessRow: View {
     let node: JailedProcessNode
+    let depth: Int
     @State private var isExpanded = false
 
     var body: some View {
@@ -139,23 +147,30 @@ private struct JailedProcessRow: View {
     }
 
     private var rowHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Circle()
-                    .fill(node.isActive ? Color.green : Color.secondary)
-                    .frame(width: 6, height: 6)
-                Text(node.name)
-                    .fontWeight(.medium)
-                ruleBadge
-                Spacer()
-                Text("PID \(node.process.pid)")
+        HStack(alignment: .top, spacing: 4) {
+            if depth > 0 {
+                Text(String(repeating: "  ", count: depth - 1) + "↳")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
-            Text(node.process.path)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Circle()
+                        .fill(node.isActive ? Color.green : Color.secondary)
+                        .frame(width: 6, height: 6)
+                    Text(node.name)
+                        .fontWeight(.medium)
+                    ruleBadge
+                    Spacer()
+                    Text("PID \(node.process.pid)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Text(node.process.path)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 
