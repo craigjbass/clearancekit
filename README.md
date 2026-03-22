@@ -2,7 +2,7 @@
 
 Every `npm install`, `pip install`, and `brew upgrade` executes arbitrary native code with your full file system permissions. One compromised package can silently read your SSH keys, AWS credentials, iMessages, and browser cookies. You will not know until it is too late.
 
-ClearanceKit intercepts file-system access events on macOS — opens, renames, deletions, hard links, creates, truncations, copies, and directory reads — and enforces per-process access policies. Any process without an explicit allow rule is blocked. Denied events surface in a native SwiftUI interface so you can review them and build policy as you work — no configuration files required.
+ClearanceKit intercepts file-system access events on macOS — opens, renames, deletions, hard links, creates, truncations, copies, directory reads, data exchanges, and clones — and enforces per-process access policies for paths you designate as protected. Any process accessing a protected path without an explicit allow rule is blocked. Jail rules go further: a jailed process is confined to a specified set of path prefixes, and any file access outside those prefixes is denied regardless of other policy rules. Denied events surface in a native SwiftUI interface so you can review them and build policy as you work — no configuration files required.
 
 Policies are bound to cryptographic code signing identity — the Developer ID certificate and bundle identifier embedded in the binary — not to file paths or hashes. A trojanised binary is denied even if it sits at the expected path. Policies survive software updates without any maintenance, because a developer's signing identity does not change between releases.
 
@@ -68,7 +68,7 @@ ClearanceKit occupies a specific part of the macOS endpoint security space. Two 
 Two components work together:
 
 - **clearancekit.app** — SwiftUI menu bar app. Manages policies, displays live events, and communicates with the system extension over XPC.
-- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`), evaluates policies, and serves the GUI over XPC.
+- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Runs two Endpoint Security clients: one for path-based policy enforcement that intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`, `AUTH_EXCHANGEDATA`, `AUTH_CLONE`), and a second dedicated jail client that tracks jailed processes by audit token and denies file access outside their allowed path prefixes. Both clients evaluate policies and serve the GUI over XPC.
 
 ## Development
 
@@ -199,7 +199,7 @@ Ancestor entries are managed via the **Add Ancestor Entry** button in the allowl
 
 ### JailRules — process jail rules
 
-Delivered as an array under the `JailRules` preference key. Each entry confines a specific process to only access a specified set of path prefixes. Any file-system access outside the allowed set is denied. Managed jail rules appear read-only in the GUI under **Jail → Managed Jail Rules**.
+Delivered as an array under the `JailRules` preference key. Each entry confines a specific process to only access a specified set of path prefixes. Any file-system access outside the allowed set is denied. Processes on the global allowlist bypass jail rules and retain unrestricted file access. Managed jail rules appear read-only in the GUI under **Jail → Managed Jail Rules**.
 
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
