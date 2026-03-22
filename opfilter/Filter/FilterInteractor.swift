@@ -39,6 +39,15 @@ struct FileAuthEvent: Sendable {
     let ttyPath: String?
     let deadline: UInt64
     let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
+
+    func wrappingRespond(_ newRespond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void) -> FileAuthEvent {
+        FileAuthEvent(
+            operation: operation, path: path, processIdentity: processIdentity,
+            processID: processID, parentPID: parentPID, processPath: processPath,
+            teamID: teamID, signingID: signingID, uid: uid, gid: gid,
+            ttyPath: ttyPath, deadline: deadline, respond: newRespond
+        )
+    }
 }
 
 // MARK: - MachTime
@@ -93,7 +102,7 @@ private enum MachTime {
 /// GCD threads are independent of the Swift cooperative thread pool, so the
 /// timer fires reliably even when all cooperative threads are blocked.
 private final class DeadlineGuard: @unchecked Sendable {
-    private static let guardMarginNanoseconds: UInt64 = 200_000_000 // 200 ms
+    private static let guardMarginNanoseconds: UInt64 = 200_000_000
 
     private let responded = OSAllocatedUnfairLock(initialState: false)
     private let originalRespond: @Sendable (Bool, Bool) -> Void
@@ -102,7 +111,7 @@ private final class DeadlineGuard: @unchecked Sendable {
     init(deadline: UInt64, respond: @escaping @Sendable (Bool, Bool) -> Void) {
         self.originalRespond = respond
 
-        // A zero deadline is a test sentinel — no real ES message uses it.
+        // Tests pass deadline 0 to avoid real timers; skip the guard for those.
         guard deadline > 0 else {
             self.timer = nil
             return
@@ -263,21 +272,7 @@ final class FilterInteractor: @unchecked Sendable {
             let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
             logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
             let deadlineGuard = DeadlineGuard(deadline: fileEvent.deadline, respond: fileEvent.respond)
-            let guardedEvent = FileAuthEvent(
-                operation: fileEvent.operation,
-                path: fileEvent.path,
-                processIdentity: fileEvent.processIdentity,
-                processID: fileEvent.processID,
-                parentPID: fileEvent.parentPID,
-                processPath: fileEvent.processPath,
-                teamID: fileEvent.teamID,
-                signingID: fileEvent.signingID,
-                uid: fileEvent.uid,
-                gid: fileEvent.gid,
-                ttyPath: fileEvent.ttyPath,
-                deadline: fileEvent.deadline,
-                respond: deadlineGuard.respond
-            )
+            let guardedEvent = fileEvent.wrappingRespond(deadlineGuard.respond)
             Task { await self.handleFileAuth(guardedEvent) }
         }
     }
