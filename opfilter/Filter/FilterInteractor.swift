@@ -68,6 +68,74 @@ private enum MachTime {
         guard end >= start else { return 0 }
         return (end - start) * UInt64(timebase.numer) / UInt64(timebase.denom)
     }
+
+    /// Nanoseconds remaining until `deadline` minus `margin` nanoseconds, clamped to 0.
+    static func nanosecondsRemaining(until deadline: UInt64, margin nanoseconds: UInt64) -> UInt64 {
+        let marginMach = nanoseconds * UInt64(timebase.denom) / UInt64(timebase.numer)
+        let now = mach_absolute_time()
+        guard deadline > now + marginMach else { return 0 }
+        let remaining = deadline - now - marginMach
+        return remaining * UInt64(timebase.numer) / UInt64(timebase.denom)
+    }
+}
+
+// MARK: - DeadlineGuard
+
+/// Ensures an ES AUTH event receives a response before its deadline, even when
+/// the async policy-evaluation task is delayed by cooperative-thread-pool contention.
+///
+/// The guard arms a GCD timer that fires 200 ms before the ES deadline. If the
+/// normal policy-evaluation path responds first, the timer is cancelled. If the
+/// timer fires first, it sends an unconditional ALLOW — losing one policy
+/// decision is strictly preferable to having the ES framework terminate the
+/// entire client process (Code 2).
+///
+/// GCD threads are independent of the Swift cooperative thread pool, so the
+/// timer fires reliably even when all cooperative threads are blocked.
+private final class DeadlineGuard: @unchecked Sendable {
+    private static let guardMarginNanoseconds: UInt64 = 200_000_000 // 200 ms
+
+    private let responded = OSAllocatedUnfairLock(initialState: false)
+    private let originalRespond: @Sendable (Bool, Bool) -> Void
+    private let timer: DispatchSourceTimer?
+
+    init(deadline: UInt64, respond: @escaping @Sendable (Bool, Bool) -> Void) {
+        self.originalRespond = respond
+
+        // A zero deadline is a test sentinel — no real ES message uses it.
+        guard deadline > 0 else {
+            self.timer = nil
+            return
+        }
+
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
+        self.timer = timer
+
+        let remaining = MachTime.nanosecondsRemaining(until: deadline, margin: Self.guardMarginNanoseconds)
+        if remaining > 0 {
+            timer.schedule(deadline: .now() + .nanoseconds(Int(remaining)))
+        } else {
+            timer.schedule(deadline: .now())
+        }
+
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            logger.warning("DeadlineGuard: safety-net ALLOW — async task did not respond in time")
+            self.respond(allowed: true, cache: false)
+        }
+        timer.resume()
+    }
+
+    func respond(allowed: Bool, cache: Bool) {
+        let alreadyResponded = responded.withLock { value -> Bool in
+            if value { return true }
+            value = true
+            return false
+        }
+        guard !alreadyResponded else { return }
+        timer?.cancel()
+        originalRespond(allowed, cache)
+    }
 }
 
 // MARK: - FilterEvent
@@ -194,7 +262,23 @@ final class FilterInteractor: @unchecked Sendable {
         case .fileAuth(let fileEvent):
             let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
             logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
-            Task { await self.handleFileAuth(fileEvent) }
+            let deadlineGuard = DeadlineGuard(deadline: fileEvent.deadline, respond: fileEvent.respond)
+            let guardedEvent = FileAuthEvent(
+                operation: fileEvent.operation,
+                path: fileEvent.path,
+                processIdentity: fileEvent.processIdentity,
+                processID: fileEvent.processID,
+                parentPID: fileEvent.parentPID,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID,
+                uid: fileEvent.uid,
+                gid: fileEvent.gid,
+                ttyPath: fileEvent.ttyPath,
+                deadline: fileEvent.deadline,
+                respond: deadlineGuard.respond
+            )
+            Task { await self.handleFileAuth(guardedEvent) }
         }
     }
 

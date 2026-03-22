@@ -395,6 +395,40 @@ struct FilterInteractorTests {
         #expect(allowed == true)
     }
 
+    // MARK: - Deadline guard tests
+
+    @Test("deadline guard responds ALLOW when deadline has already passed")
+    func deadlineGuardAllowsWhenDeadlineExpired() {
+        let rule = FAARule(
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let tree = FakeProcessTree()
+        tree.containsResult = false
+        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var allowed: Bool?
+
+        // deadline: 1 is a mach_absolute_time value from the distant past. The
+        // DeadlineGuard fires its safety-net timer immediately, responding with
+        // ALLOW before the async task can evaluate policy (which would deny).
+        let event = openFileEvent(
+            path: "/protected/data.db",
+            teamID: "OTHER",
+            signingID: "com.other.app",
+            deadline: 1
+        ) { result in
+            allowed = result
+            semaphore.signal()
+        }
+
+        interactor.handle(.fileAuth(event))
+        semaphore.wait()
+
+        #expect(allowed == true)
+    }
+
     // MARK: - Jail tests
 
     @Test("jailed process allowed when accessing path within allowed prefixes")
