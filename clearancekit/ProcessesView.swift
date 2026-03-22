@@ -37,6 +37,15 @@ struct ProcessesView: View {
             }
         }
         .navigationTitle("Processes")
+        .toolbar {
+            if knownProcesses.keys.contains(where: { !activeProcessPIDs.contains($0) }) {
+                ToolbarItem {
+                    Button("Clear Inactive") {
+                        knownProcesses = knownProcesses.filter { activeProcessPIDs.contains($0.key) }
+                    }
+                }
+            }
+        }
         .task { await pollJailedProcesses() }
     }
 
