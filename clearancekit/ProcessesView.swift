@@ -26,9 +26,9 @@ struct ProcessesView: View {
 
     private var flattenedJailedTree: [(node: JailedProcessNode, depth: Int)] {
         func flatten(_ nodes: [JailedProcessNode], depth: Int) -> [(node: JailedProcessNode, depth: Int)] {
-            nodes.flatMap { node in [(node, depth)] + flatten(node.children ?? [], depth + 1) }
+            nodes.flatMap { node in [(node: node, depth: depth)] + flatten(node.children ?? [], depth: depth + 1) }
         }
-        return flatten(jailedTree, 0)
+        return flatten(jailedTree, depth: 0)
     }
 
     private var denyGroups: [DenyGroup] {
