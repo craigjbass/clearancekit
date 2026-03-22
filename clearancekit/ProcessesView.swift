@@ -5,257 +5,250 @@
 
 import SwiftUI
 
-// MARK: - Data models
-
-private struct SnapshotProcess: Identifiable {
-    let id: pid_t
-    let parentPID: pid_t
-    let path: String
-    let teamID: String
-    let signingID: String
-    let uid: uid_t
-
-    var name: String { URL(fileURLWithPath: path).lastPathComponent }
-    var displayTeamID: String {
-        if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
-        return teamID.isEmpty ? "apple" : teamID
-    }
-
-    var appBundlePath: String? {
-        let parts = path.components(separatedBy: "/")
-        guard let appIdx = parts.firstIndex(where: { $0.hasSuffix(".app") }) else { return nil }
-        return "/" + parts[1...appIdx].joined(separator: "/")
-    }
-
-    init(_ info: RunningProcessInfo) {
-        self.id = info.pid
-        self.parentPID = info.parentPID
-        self.path = info.path
-        self.teamID = info.teamID
-        self.signingID = info.signingID
-        self.uid = info.uid
-    }
-}
-
-private struct ProcessNode: Identifiable {
-    enum Kind {
-        case bundle(name: String)
-        case process(SnapshotProcess)
-    }
-    let id: String
-    let kind: Kind
-    var children: [ProcessNode]?   // nil = leaf; OutlineGroup shows no disclosure for nil
-}
-
-private struct ProcessSnapshot {
-    static let empty = ProcessSnapshot(appBundles: [], userProcesses: [], applePlatform: [], other: [])
-    let appBundles: [ProcessNode]    // each is a .bundle node with .process children
-    let userProcesses: [ProcessNode]
-    let applePlatform: [ProcessNode]
-    let other: [ProcessNode]
-}
-
 // MARK: - ProcessesView
 
 struct ProcessesView: View {
-    @State private var snapshot: ProcessSnapshot = .empty
-    @State private var isLoading = false
+    @StateObject private var xpcClient = XPCClient.shared
+    @StateObject private var jailStore = JailStore.shared
+    @State private var jailedProcesses: [RunningProcessInfo] = []
+
+    private var jailedTree: [JailedProcessNode] {
+        buildJailedTree(from: jailedProcesses, rules: jailStore.userRules)
+    }
+
+    private var denyGroups: [DenyGroup] {
+        buildDenyGroups(from: xpcClient.events)
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            content
+        Group {
+            if jailedTree.isEmpty && denyGroups.isEmpty {
+                emptyState
+            } else {
+                activityList
+            }
         }
-        .task { await load() }
+        .navigationTitle("Processes")
+        .task { await pollJailedProcesses() }
     }
 
-    private var toolbar: some View {
-        HStack {
-            Spacer()
-            if isLoading {
-                ProgressView()
-                    .scaleEffect(0.7)
-                    .padding(.trailing, 4)
+    private var activityList: some View {
+        List {
+            if !jailedTree.isEmpty {
+                Section("Jailed Processes") {
+                    OutlineGroup(jailedTree, children: \.children) { node in
+                        JailedProcessRow(node: node)
+                    }
+                }
             }
-            Button("Refresh") { Task { await load() } }
-                .disabled(isLoading)
-        }
-        .padding()
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if isLoading && snapshot.appBundles.isEmpty && snapshot.userProcesses.isEmpty
-            && snapshot.applePlatform.isEmpty && snapshot.other.isEmpty {
-            VStack {
-                Spacer()
-                ProgressView("Loading processes...")
-                Spacer()
-            }
-        } else {
-            List {
-                outlineSection("Applications", nodes: snapshot.appBundles)
-                outlineSection("User Processes", nodes: snapshot.userProcesses)
-                outlineSection("Apple Platform", nodes: snapshot.applePlatform)
-                outlineSection("Other", nodes: snapshot.other)
-            }
-            .listStyle(.inset)
-        }
-    }
-
-    @ViewBuilder
-    private func outlineSection(_ title: String, nodes: [ProcessNode]) -> some View {
-        if !nodes.isEmpty {
-            Section(title) {
-                OutlineGroup(nodes, children: \.children) { node in
-                    ProcessNodeRow(node: node)
+            if !denyGroups.isEmpty {
+                Section("Denied Processes") {
+                    ForEach(denyGroups) { group in
+                        DenyGroupRow(group: group)
+                    }
                 }
             }
         }
+        .listStyle(.inset)
     }
 
-    private func load() async {
-        isLoading = true
-        let rawProcesses = await XPCClient.shared.fetchProcessList()
-        snapshot = buildSnapshot(from: rawProcesses.map(SnapshotProcess.init))
-        isLoading = false
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Text("No activity")
+                .foregroundStyle(.secondary)
+            Text(jailStore.userRules.isEmpty
+                ? "Configure jail rules to start monitoring jailed processes."
+                : "No jailed processes are currently running and no deny events have been recorded.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func pollJailedProcesses() async {
+        while !Task.isCancelled {
+            jailedProcesses = await xpcClient.fetchActiveJailedProcesses()
+            try? await Task.sleep(for: .seconds(2))
+        }
     }
 }
 
-// MARK: - ProcessNodeRow
+// MARK: - JailedProcessNode
 
-private struct ProcessNodeRow: View {
-    let node: ProcessNode
+private struct JailedProcessNode: Identifiable {
+    let id: pid_t
+    let process: RunningProcessInfo
+    let matchedRule: JailRule?
+    var children: [JailedProcessNode]?
+
+    var name: String { URL(fileURLWithPath: process.path).lastPathComponent }
+}
+
+// MARK: - JailedProcessRow
+
+private struct JailedProcessRow: View {
+    let node: JailedProcessNode
 
     var body: some View {
-        switch node.kind {
-        case .bundle(let name):
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(name)
-                    .fontWeight(.semibold)
-                if let count = node.children?.count {
-                    Text("\(count) processes")
+                Text(node.name)
+                    .fontWeight(.medium)
+                if let rule = node.matchedRule {
+                    Text(rule.name)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                } else {
+                    Text("inherited")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                Spacer()
+                Text("PID \(node.process.pid)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(node.process.path)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - DenyGroup
+
+private struct DenyGroup: Identifiable {
+    let id: String
+    let processPath: String
+    let teamID: String
+    let signingID: String
+    let events: [FolderOpenEvent]
+
+    var name: String { URL(fileURLWithPath: processPath).lastPathComponent }
+}
+
+// MARK: - DenyGroupRow
+
+private struct DenyGroupRow: View {
+    let group: DenyGroup
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack {
+                    Image(systemName: "xmark.shield.fill")
+                        .foregroundStyle(.red)
+                    Text(group.name)
+                        .fontWeight(.medium)
+                    if !group.signingID.isEmpty {
+                        Text(group.signingID)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Text("\(group.events.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-            }
-        case .process(let p):
-            VStack(alignment: .leading, spacing: 2) {
-                Text(p.name)
-                Text(p.path)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                HStack(spacing: 12) {
-                    Text("Team: \(p.displayTeamID)")
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if p.teamID.isEmpty && p.signingID.isEmpty {
-                        Text("Signing: \(invalidSignature)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if !p.signingID.isEmpty {
-                        Text("Signing: \(p.signingID)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("PID \(p.id)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.vertical, 1)
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(spacing: 0) {
+                    ForEach(group.events, id: \.eventID) { event in
+                        Divider()
+                        EventRow(event: event, isHighlighted: false)
+                            .padding(.leading, 12)
+                    }
+                }
+            }
         }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
     }
 }
 
-// MARK: - Tree building
+// MARK: - Jailed tree building
 
-private final class TreeNode {
-    let process: SnapshotProcess
-    var children: [TreeNode] = []
-    init(_ process: SnapshotProcess) { self.process = process }
-}
+private func buildJailedTree(from processes: [RunningProcessInfo], rules: [JailRule]) -> [JailedProcessNode] {
+    guard !processes.isEmpty else { return [] }
 
-private func buildProcessNodes(from processes: [SnapshotProcess]) -> [ProcessNode] {
-    let pids = Set(processes.map { $0.id })
-    var treeNodes: [pid_t: TreeNode] = [:]
-    for p in processes { treeNodes[p.id] = TreeNode(p) }
-
-    var roots: [TreeNode] = []
+    let jailedPIDs = Set(processes.map { pid_t($0.pid) })
+    var childPIDs: [pid_t: [pid_t]] = [:]
+    for p in processes { childPIDs[pid_t(p.pid)] = [] }
     for p in processes {
-        if pids.contains(p.parentPID), let parent = treeNodes[p.parentPID] {
-            parent.children.append(treeNodes[p.id]!)
-        } else {
-            roots.append(treeNodes[p.id]!)
+        let parentPID = pid_t(p.parentPID)
+        if jailedPIDs.contains(parentPID) {
+            childPIDs[parentPID]?.append(pid_t(p.pid))
         }
     }
 
-    sortTreeNodes(&roots)
-    return roots.map(toProcessNode)
-}
+    let byPID = Dictionary(uniqueKeysWithValues: processes.map { (pid_t($0.pid), $0) })
+    let roots = processes.filter { !jailedPIDs.contains(pid_t($0.parentPID)) }
 
-private func sortTreeNodes(_ nodes: inout [TreeNode]) {
-    nodes.sort {
-        $0.process.name.localizedCaseInsensitiveCompare($1.process.name) == .orderedAscending
-    }
-    for node in nodes { sortTreeNodes(&node.children) }
-}
-
-private func toProcessNode(_ tree: TreeNode) -> ProcessNode {
-    let children = tree.children.map(toProcessNode)
-    return ProcessNode(
-        id: "\(tree.process.id)",
-        kind: .process(tree.process),
-        children: children.isEmpty ? nil : children
-    )
-}
-
-// MARK: - Snapshot building
-
-private func buildSnapshot(from processes: [SnapshotProcess]) -> ProcessSnapshot {
-    let currentUID = getuid()
-
-    var bundleMap: [String: [SnapshotProcess]] = [:]
-    var userProcesses: [SnapshotProcess] = []
-    var applePlatform: [SnapshotProcess] = []
-    var other: [SnapshotProcess] = []
-
-    for process in processes {
-        if let bundlePath = process.appBundlePath {
-            bundleMap[bundlePath, default: []].append(process)
-        } else if process.uid == currentUID {
-            userProcesses.append(process)
-        } else if process.teamID.isEmpty {
-            applePlatform.append(process)
-        } else {
-            other.append(process)
-        }
+    func buildNode(pid: pid_t) -> JailedProcessNode? {
+        guard let process = byPID[pid] else { return nil }
+        let resolvedTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
+        let rule = rules.first { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: process.signingID) }
+        let children = (childPIDs[pid] ?? [])
+            .compactMap { buildNode(pid: $0) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return JailedProcessNode(
+            id: pid,
+            process: process,
+            matchedRule: rule,
+            children: children.isEmpty ? nil : children
+        )
     }
 
-    let appBundles = bundleMap
-        .map { bundlePath, procs -> ProcessNode in
-            let name = URL(fileURLWithPath: bundlePath)
-                .deletingPathExtension()
-                .lastPathComponent
-            let children = buildProcessNodes(from: procs)
-            return ProcessNode(
-                id: bundlePath,
-                kind: .bundle(name: name),
-                children: children.isEmpty ? nil : children
-            )
-        }
-        .sorted { lhs, rhs in
-            guard case .bundle(let a) = lhs.kind, case .bundle(let b) = rhs.kind else { return false }
-            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
-        }
+    return roots
+        .compactMap { buildNode(pid: pid_t($0.pid)) }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+}
 
-    return ProcessSnapshot(
-        appBundles: appBundles,
-        userProcesses: buildProcessNodes(from: userProcesses),
-        applePlatform: buildProcessNodes(from: applePlatform),
-        other: buildProcessNodes(from: other)
-    )
+// MARK: - Deny group building
+
+private func buildDenyGroups(from events: [FolderOpenEvent]) -> [DenyGroup] {
+    let denies = events.filter { !$0.accessAllowed && $0.jailedRuleID == nil }
+    guard !denies.isEmpty else { return [] }
+
+    var buckets: [String: (path: String, teamID: String, signingID: String, events: [FolderOpenEvent])] = [:]
+    for event in denies {
+        let key = event.signingID.isEmpty ? event.processPath : event.signingID
+        if buckets[key] == nil {
+            buckets[key] = (path: event.processPath, teamID: event.teamID, signingID: event.signingID, events: [])
+        }
+        buckets[key]?.events.append(event)
+    }
+
+    return buckets
+        .map { key, value in
+            DenyGroup(id: key, processPath: value.path, teamID: value.teamID, signingID: value.signingID, events: value.events)
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 }
