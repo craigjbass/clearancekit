@@ -118,6 +118,11 @@ final class ESInboundAdapter {
         logger.info("ESInboundAdapter: discovery paths updated — \(paths.count) path(s)")
     }
 
+    func clearCache() {
+        guard let client else { return }
+        es_clear_cache(client)
+    }
+
     private func applyPrefixDiff(from old: Set<String>, to new: Set<String>, client: OpaquePointer) {
         for prefix in old.subtracting(new) {
             es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
@@ -200,8 +205,8 @@ final class ESInboundAdapter {
 
     static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
         let path = string(from: message.pointee.event.open.file.pointee.path)
-        let respond: @Sendable (Bool) -> Void = { allowed in
-            es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, allowed)
+        let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
+            es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, cache)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, respond: respond)
     }
@@ -212,8 +217,8 @@ final class ESInboundAdapter {
         operation: FileOperation,
         path: String
     ) -> FileAuthEvent {
-        let respond: @Sendable (Bool) -> Void = { allowed in
-            es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, false)
+        let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
+            es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, respond: respond)
     }
@@ -223,7 +228,7 @@ final class ESInboundAdapter {
         esClient: OpaquePointer,
         operation: FileOperation,
         path: String,
-        respond: @escaping @Sendable (Bool) -> Void
+        respond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
     ) -> FileAuthEvent {
         let process = message.pointee.process.pointee
         let ttyPath: String? = process.tty.map { string(from: $0.pointee.path) }.flatMap { $0.isEmpty ? nil : $0 }

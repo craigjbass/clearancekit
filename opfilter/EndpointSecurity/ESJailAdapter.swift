@@ -64,6 +64,7 @@ final class ESJailAdapter {
     /// descendants. Each entry is independent — a child's entry survives its
     /// parent's exit, so orphaned processes remain correctly jailed.
     private let jailedProcessesLock = OSAllocatedUnfairLock(initialState: [ProcessKey: UUID]())
+    private let jailCacheProcessor = JailFileAccessEventCacheDecisionProcessor()
 
     init(interactor: FilterInteractor) {
         self.interactor = interactor
@@ -75,6 +76,7 @@ final class ESJailAdapter {
         let interactor = self.interactor
         let jailedProcessesLock = self.jailedProcessesLock
         let rulesLock = self.rulesLock
+        let jailCacheProcessor = self.jailCacheProcessor
 
         let result = es_new_client(&client) { esClient, message in
             switch message.pointee.event_type {
@@ -124,7 +126,8 @@ final class ESJailAdapter {
 
                 if inheritedRuleID != nil {
                     logger.debug("ESJailAdapter: jailed exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public) (inherited)")
-                    es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                    let cache = jailCacheProcessor.decide(jailsConfigured: !rulesLock.withLock({ $0 }).isEmpty).shouldCache
+                    es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, cache)
                     return
                 }
 
@@ -138,7 +141,8 @@ final class ESJailAdapter {
                     }
                 }
 
-                es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                let execCache = jailCacheProcessor.decide(jailsConfigured: !rulesLock.withLock({ $0 }).isEmpty).shouldCache
+                es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, execCache)
 
             case ES_EVENT_TYPE_NOTIFY_EXIT:
                 let key = ProcessKey(message.pointee.process.pointee.audit_token)
@@ -158,9 +162,10 @@ final class ESJailAdapter {
                  ES_EVENT_TYPE_AUTH_CLONE:
                 let key = ProcessKey(message.pointee.process.pointee.audit_token)
                 guard let ruleID = jailedProcessesLock.withLock({ $0[key] }) else {
+                    let nonJailedCache = jailCacheProcessor.decide(jailsConfigured: !rulesLock.withLock({ $0 }).isEmpty).shouldCache
                     switch message.pointee.event_type {
                     case ES_EVENT_TYPE_AUTH_OPEN:
-                        es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
+                        es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), nonJailedCache)
                     case ES_EVENT_TYPE_AUTH_RENAME,
                          ES_EVENT_TYPE_AUTH_UNLINK,
                          ES_EVENT_TYPE_AUTH_LINK,
@@ -170,7 +175,7 @@ final class ESJailAdapter {
                          ES_EVENT_TYPE_AUTH_READDIR,
                          ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
                          ES_EVENT_TYPE_AUTH_CLONE:
-                        es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                        es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, nonJailedCache)
                     default:
                         fatalError("ESJailAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
                     }
@@ -251,7 +256,10 @@ final class ESJailAdapter {
 
     func updateJailRules(_ rules: [JailRule]) {
         rulesLock.withLock { $0 = rules }
-        logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s)")
+        if let client {
+            es_clear_cache(client)
+        }
+        logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s), cache cleared")
     }
 
     func activeJailedPIDs() -> Set<pid_t> {

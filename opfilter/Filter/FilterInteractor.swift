@@ -38,7 +38,7 @@ struct FileAuthEvent: Sendable {
     let gid: gid_t
     let ttyPath: String?
     let deadline: UInt64
-    let respond: @Sendable (Bool) -> Void
+    let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
 }
 
 // MARK: - MachTime
@@ -91,6 +91,8 @@ final class FilterInteractor: @unchecked Sendable {
     private let processTree: ProcessTreeProtocol
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
+    private let jailCacheProcessor = JailFileAccessEventCacheDecisionProcessor()
+    private let faaCacheProcessor = FileAccessEventCacheDecisionProcessor()
 
     init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], initialJailRules: [JailRule] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
@@ -131,18 +133,19 @@ final class FilterInteractor: @unchecked Sendable {
         logger.debug("JAIL-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
 
         let allowlist = allowlistStorage.withLock { $0 }
+        let jailRules = jailRulesStorage.withLock { $0 }
+        let cache = jailCacheProcessor.decide(jailsConfigured: !jailRules.isEmpty).shouldCache
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, cache)
             return
         }
 
-        let jailRules = jailRulesStorage.withLock { $0 }
         guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
             // Stale mute: the jail rule was removed while this process was still muted.
             logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, cache)
             return
         }
 
@@ -150,7 +153,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         let allowed = decision.isAllowed
         logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public)")
-        fileEvent.respond(allowed)
+        fileEvent.respond(allowed, cache)
 
         Task { [weak self] in
             guard let self else { return }
@@ -208,7 +211,7 @@ final class FilterInteractor: @unchecked Sendable {
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, true)
             return
         }
 
@@ -217,6 +220,7 @@ final class FilterInteractor: @unchecked Sendable {
         // global allowlist (globally allowlisted processes escape jail) but before
         // FAA rule evaluation.
         let jailRules = jailRulesStorage.withLock { $0 }
+        let jailCache = jailCacheProcessor.decide(jailsConfigured: !jailRules.isEmpty).shouldCache
         logger.debug("FILEAUTH-JAIL-CHECK pid=\(fileEvent.processID) process=\(name, privacy: .public) jailRuleCount=\(jailRules.count)")
         var jailDecision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
 
@@ -232,7 +236,7 @@ final class FilterInteractor: @unchecked Sendable {
         if jailDecision.jailedRuleID != nil {
             logger.debug("FILEAUTH-JAIL-MATCH pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(jailDecision.isAllowed)")
             let allowed = jailDecision.isAllowed
-            fileEvent.respond(allowed)
+            fileEvent.respond(allowed, jailCache)
 
             let logAncestors = processTree.ancestors(of: fileEvent.processIdentity)
             auditLogger.log(jailDecision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: 0)
@@ -268,6 +272,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         let decision: PolicyDecision
         var dwellNanoseconds: UInt64 = 0
+        let ancestorEvaluationRequired: Bool
 
         switch classification {
         case .noRuleApplies:
@@ -275,6 +280,7 @@ final class FilterInteractor: @unchecked Sendable {
             // needs to be checked when a policy rule could deny access; for paths
             // with no rules the access is allowed regardless of ancestry.
             decision = .noRuleApplies
+            ancestorEvaluationRequired = false
 
         case .processLevelOnly where ancestorAllowlist.isEmpty:
             // Matching rule has only process-level criteria and the ancestor
@@ -286,6 +292,7 @@ final class FilterInteractor: @unchecked Sendable {
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID
             )
+            ancestorEvaluationRequired = false
 
         case .processLevelOnly, .ancestryRequired:
             // Either the ancestor allowlist is non-empty (so we must check ancestors
@@ -309,13 +316,16 @@ final class FilterInteractor: @unchecked Sendable {
                 }
             )
             dwellNanoseconds = dwellStorage.withLock { $0 }
+            ancestorEvaluationRequired = true
         }
 
         let allowed = decision.isAllowed
+        let outcome: FAADecisionOutcome = allowed ? .allow : .deny
+        let cache = faaCacheProcessor.decide(outcome: outcome, ancestorEvaluationRequired: ancestorEvaluationRequired)
 
         // Respond immediately — the ES deadline is strict and all work after
         // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
-        fileEvent.respond(allowed)
+        fileEvent.respond(allowed, cache)
 
         // Best-efforts ancestry for logging — the tree may have been populated
         // since the decision was made, so re-query unconditionally.
