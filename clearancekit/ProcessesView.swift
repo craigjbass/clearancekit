@@ -24,13 +24,6 @@ struct ProcessesView: View {
         )
     }
 
-    private var flattenedJailedTree: [(node: JailedProcessNode, depth: Int)] {
-        func flatten(_ nodes: [JailedProcessNode], depth: Int) -> [(node: JailedProcessNode, depth: Int)] {
-            nodes.flatMap { node in [(node: node, depth: depth)] + flatten(node.children ?? [], depth: depth + 1) }
-        }
-        return flatten(jailedTree, depth: 0)
-    }
-
     private var denyGroups: [DenyGroup] {
         buildDenyGroups(from: xpcClient.events)
     }
@@ -51,8 +44,8 @@ struct ProcessesView: View {
         List {
             if !jailedTree.isEmpty {
                 Section("Jailed Processes") {
-                    ForEach(flattenedJailedTree, id: \.node.id) { item in
-                        JailedProcessRow(node: item.node, depth: item.depth)
+                    ForEach(jailedTree) { node in
+                        JailedProcessRow(node: node)
                     }
                 }
             }
@@ -125,12 +118,11 @@ private struct JailedProcessNode: Identifiable {
 
 private struct JailedProcessRow: View {
     let node: JailedProcessNode
-    let depth: Int
     @State private var isExpanded = false
 
     var body: some View {
         if node.deniedAccesses.isEmpty {
-            rowHeader
+            processTree
                 .padding(.vertical, 3)
                 .padding(.horizontal, 2)
         } else {
@@ -139,28 +131,51 @@ private struct JailedProcessRow: View {
                     DeniedJailAccessRow(access: access)
                 }
             } label: {
-                rowHeader
+                processTree
             }
             .padding(.vertical, 3)
             .padding(.horizontal, 2)
         }
     }
 
-    private var rowHeader: some View {
+    private var processTree: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(flattened, id: \.node.id) { item in
+                processLine(node: item.node, depth: item.depth)
+            }
+        }
+    }
+
+    private var flattened: [(node: JailedProcessNode, depth: Int)] {
+        func flatten(_ nodes: [JailedProcessNode], depth: Int) -> [(node: JailedProcessNode, depth: Int)] {
+            nodes.flatMap { n in [(node: n, depth: depth)] + flatten(n.children ?? [], depth: depth + 1) }
+        }
+        return flatten([node], depth: 0)
+    }
+
+    private func processLine(node: JailedProcessNode, depth: Int) -> some View {
         HStack(alignment: .top, spacing: 4) {
             if depth > 0 {
                 Text(String(repeating: "  ", count: depth - 1) + "↳")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 HStack {
                     Circle()
                         .fill(node.isActive ? Color.green : Color.secondary)
                         .frame(width: 6, height: 6)
                     Text(node.name)
-                        .fontWeight(.medium)
-                    ruleBadge
+                        .fontWeight(depth == 0 ? .medium : .regular)
+                    if let rule = node.matchedRule {
+                        Text(rule.name)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
                     Spacer()
                     Text("PID \(node.process.pid)")
                         .font(.caption)
@@ -171,26 +186,6 @@ private struct JailedProcessRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-        }
-    }
-
-    @ViewBuilder private var ruleBadge: some View {
-        if let rule = node.matchedRule {
-            Text(rule.name)
-                .font(.caption2)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.orange.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-        } else if let rule = node.effectiveRule {
-            Text("↑ \(rule.name)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
         }
     }
 }
