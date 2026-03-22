@@ -373,11 +373,11 @@ struct EventRow: View {
                         .foregroundColor(.secondary)
                 }
                 if let url = suggestBaselineIssueURL {
-                    Link(destination: url) {
-                        Image(systemName: "ladybug")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    Button { NSWorkspace.shared.open(url) } label: {
+                        Label("Suggest for baseline", systemImage: "ladybug")
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
                 }
             }
         }

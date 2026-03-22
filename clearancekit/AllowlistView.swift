@@ -58,7 +58,7 @@ struct AllowlistView: View {
             if !allowlistStore.baselineEntries.isEmpty {
                 Section("Baseline Entries") {
                     ForEach(allowlistStore.baselineEntries) { entry in
-                        AllowlistEntryRow(entry: entry, isEditable: false) { }
+                        AllowlistEntryRow(entry: entry, source: .baseline, isEditable: false) { }
                             .padding(.vertical, 4)
                     }
                 }
@@ -66,7 +66,7 @@ struct AllowlistView: View {
             if !allowlistStore.managedEntries.isEmpty {
                 Section("Managed Profile Entries") {
                     ForEach(allowlistStore.managedEntries) { entry in
-                        AllowlistEntryRow(entry: entry, isEditable: false) { }
+                        AllowlistEntryRow(entry: entry, source: .managed, isEditable: false) { }
                             .padding(.vertical, 4)
                     }
                 }
@@ -74,7 +74,7 @@ struct AllowlistView: View {
             if !allowlistStore.userEntries.isEmpty {
                 Section("User Entries") {
                     ForEach(allowlistStore.userEntries) { entry in
-                        AllowlistEntryRow(entry: entry, isEditable: true) {
+                        AllowlistEntryRow(entry: entry, source: .user, isEditable: true) {
                             Task { try? await allowlistStore.remove(entry) }
                         }
                         .padding(.vertical, 4)
@@ -118,10 +118,22 @@ private func suggestBaselineIssueURL(signingID: String) -> URL? {
     return components?.url
 }
 
+private enum AllowlistEntrySource { case baseline, managed, user }
+
 private struct AllowlistEntryRow: View {
     let entry: AllowlistEntry
+    let source: AllowlistEntrySource
     let isEditable: Bool
     let onDelete: () -> Void
+
+    private var issueURL: URL? {
+        guard entry.platformBinary else { return nil }
+        return suggestBaselineIssueURL(signingID: entry.signingID)
+    }
+
+    private var issueButtonLabel: String {
+        source == .baseline ? "Report an issue" : "Suggest for baseline"
+    }
 
     var body: some View {
         HStack(alignment: .top) {
@@ -133,7 +145,7 @@ private struct AllowlistEntryRow: View {
                     } else if !entry.teamID.isEmpty {
                         badge(entry.teamID)
                     }
-                    if !isEditable {
+                    if source == .baseline {
                         badge("baseline")
                     }
                 }
@@ -145,12 +157,12 @@ private struct AllowlistEntryRow: View {
                 }
             }
             Spacer()
-            if entry.platformBinary, let url = suggestBaselineIssueURL(signingID: entry.signingID) {
-                Link(destination: url) {
-                    Image(systemName: "ladybug")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            if let url = issueURL {
+                Button { NSWorkspace.shared.open(url) } label: {
+                    Label(issueButtonLabel, systemImage: "ladybug")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
             }
             if isEditable {
                 Button { onDelete() } label: {
