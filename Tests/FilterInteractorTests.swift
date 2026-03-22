@@ -79,7 +79,7 @@ struct FilterInteractorTests {
             gid: 20,
             ttyPath: nil,
             deadline: deadline,
-            respond: respond
+            respond: { allowed, _ in respond(allowed) }
         )
     }
 

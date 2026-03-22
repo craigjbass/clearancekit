@@ -38,7 +38,7 @@ struct FileAuthEvent: Sendable {
     let gid: gid_t
     let ttyPath: String?
     let deadline: UInt64
-    let respond: @Sendable (Bool) -> Void
+    let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
 }
 
 // MARK: - MachTime
@@ -134,7 +134,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, false)
             return
         }
 
@@ -142,7 +142,7 @@ final class FilterInteractor: @unchecked Sendable {
         guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
             // Stale mute: the jail rule was removed while this process was still muted.
             logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, false)
             return
         }
 
@@ -150,7 +150,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         let allowed = decision.isAllowed
         logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public)")
-        fileEvent.respond(allowed)
+        fileEvent.respond(allowed, false)
 
         Task { [weak self] in
             guard let self else { return }
@@ -208,7 +208,7 @@ final class FilterInteractor: @unchecked Sendable {
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true)
+            fileEvent.respond(true, false)
             return
         }
 
@@ -265,7 +265,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         // Respond immediately — the ES deadline is strict and all work after
         // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
-        fileEvent.respond(allowed)
+        fileEvent.respond(allowed, false)
 
         // Best-efforts ancestry for logging — the tree may have been populated
         // since the decision was made, so re-query unconditionally.
