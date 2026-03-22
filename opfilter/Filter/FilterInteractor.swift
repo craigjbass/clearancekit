@@ -186,16 +186,22 @@ final class FilterInteractor: @unchecked Sendable {
             logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
             processTree.remove(identity: identity)
         case .fileAuth(let fileEvent):
+            let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
+            logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
             Task { await self.handleFileAuth(fileEvent) }
         }
     }
 
     private func handleFileAuth(_ fileEvent: FileAuthEvent) async {
+        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
+        logger.debug("FILEAUTH-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+
         let allowlist = allowlistStorage.withLock { $0 }
         let ancestorAllowlist = ancestorAllowlistStorage.withLock { $0 }
 
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
+            logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
             fileEvent.respond(true)
             return
         }
@@ -205,16 +211,20 @@ final class FilterInteractor: @unchecked Sendable {
         // global allowlist (globally allowlisted processes escape jail) but before
         // FAA rule evaluation.
         let jailRules = jailRulesStorage.withLock { $0 }
+        logger.debug("FILEAUTH-JAIL-CHECK pid=\(fileEvent.processID) process=\(name, privacy: .public) jailRuleCount=\(jailRules.count)")
         var jailDecision = checkJailPolicy(jailRules: jailRules, path: fileEvent.path, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
 
         if jailDecision.jailedRuleID == nil, !jailRules.isEmpty {
+            logger.debug("FILEAUTH-JAIL-ANCESTOR-CHECK pid=\(fileEvent.processID) process=\(name, privacy: .public)")
             let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
+            logger.debug("FILEAUTH-JAIL-ANCESTOR-FOUND pid=\(fileEvent.processID) process=\(name, privacy: .public) ancestorCount=\(ancestors.count)")
             if let ancestorDecision = checkAncestorJailPolicy(jailRules: jailRules, path: fileEvent.path, ancestors: ancestors) {
                 jailDecision = ancestorDecision
             }
         }
 
         if jailDecision.jailedRuleID != nil {
+            logger.debug("FILEAUTH-JAIL-MATCH pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(jailDecision.isAllowed)")
             let allowed = jailDecision.isAllowed
             fileEvent.respond(allowed)
 
@@ -248,6 +258,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         let rules = rulesStorage.withLock { $0 }
         let classification = classifyPath(fileEvent.path, rules: rules)
+        logger.debug("FILEAUTH-FAA pid=\(fileEvent.processID) process=\(name, privacy: .public) classification=\(String(describing: classification), privacy: .public)")
 
         let decision: PolicyDecision
         var dwellNanoseconds: UInt64 = 0
@@ -284,8 +295,10 @@ final class FilterInteractor: @unchecked Sendable {
                 signingID: fileEvent.signingID,
                 ancestryProvider: { [weak self, dwellStorage] in
                     guard let self else { return [] }
+                    logger.debug("FILEAUTH-WAIT-START pid=\(fileEvent.processID) process=\(name, privacy: .public)")
                     let dwell = await self.waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
                     dwellStorage.withLock { $0 = dwell }
+                    logger.debug("FILEAUTH-WAIT-DONE pid=\(fileEvent.processID) process=\(name, privacy: .public) dwellMs=\(dwell / 1_000_000)")
                     return self.processTree.ancestors(of: fileEvent.processIdentity)
                 }
             )
