@@ -55,6 +55,8 @@ On first launch you will be prompted to activate the system extension and grant 
 
 ClearanceKit has no auto-update mechanism. This is a deliberate decision: an app that monitors what other processes do on your machine should not itself be making network calls you did not initiate. Check the [Releases](https://github.com/craigjbass/clearancekit/releases/latest) page manually for updates.
 
+ClearanceKit has zero third-party dependencies. Every capability — Endpoint Security enforcement, XPC communication, SQLite persistence, SwiftUI interface, and MDM profile reading — is provided entirely by Apple's own frameworks and SDKs. There is no package manager, no vendored library, and no supply chain to audit beyond Apple's own toolchain.
+
 ## Related projects
 
 ClearanceKit occupies a specific part of the macOS endpoint security space. Two well-known projects address adjacent but distinct problems:
