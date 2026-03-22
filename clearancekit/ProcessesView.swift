@@ -146,34 +146,61 @@ private struct DenyGroup: Identifiable {
 private struct DenyGroupRow: View {
     let group: DenyGroup
     @State private var isExpanded = false
+    @State private var isAllowing = false
+    @StateObject private var allowlistStore = AllowlistStore.shared
+
+    private var displayTeamID: String {
+        if group.teamID.isEmpty && group.signingID.isEmpty { return invalidSignature }
+        return group.teamID.isEmpty ? "apple" : group.teamID
+    }
+
+    private var allowlistEntry: AllowlistEntry {
+        AllowlistEntry(
+            signingID: group.signingID,
+            processPath: group.signingID.isEmpty ? group.processPath : "",
+            platformBinary: group.teamID.isEmpty && !group.signingID.isEmpty,
+            teamID: group.teamID
+        )
+    }
+
+    private var isAlreadyAllowlisted: Bool {
+        let all = allowlistStore.baselineEntries + allowlistStore.managedEntries + allowlistStore.userEntries
+        return isGloballyAllowed(allowlist: all, processPath: group.processPath, signingID: group.signingID, teamID: group.teamID)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
             } label: {
-                HStack {
-                    Image(systemName: "xmark.shield.fill")
-                        .foregroundStyle(.red)
-                    Text(group.name)
-                        .fontWeight(.medium)
-                    if !group.signingID.isEmpty {
-                        Text(group.signingID)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Image(systemName: "xmark.shield.fill")
+                            .foregroundStyle(.red)
+                        Text(group.name)
+                            .fontWeight(.medium)
+                        Spacer()
+                        allowButton
+                        Text("\(group.events.count)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Text("\(group.events.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text("Team: \(displayTeamID)")
+                        if !group.signingID.isEmpty {
+                            Text(group.signingID)
+                                .lineLimit(1)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .buttonStyle(.plain)
@@ -190,6 +217,29 @@ private struct DenyGroupRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder
+    private var allowButton: some View {
+        if isAlreadyAllowlisted {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption)
+        } else {
+            Button {
+                Task {
+                    isAllowing = true
+                    try? await AllowlistStore.shared.add(allowlistEntry)
+                    isAllowing = false
+                }
+            } label: {
+                Image(systemName: isAllowing ? "ellipsis.circle" : "plus.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .disabled(isAllowing)
+        }
     }
 }
 
