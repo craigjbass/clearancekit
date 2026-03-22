@@ -266,6 +266,9 @@ public protocol ServiceProtocol {
     // Returns a snapshot of all running processes with code-signing information.
     func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
 
+    // Returns the subset of running processes currently tracked as jailed by the extension.
+    func fetchActiveJailedProcesses(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
+
     // Discovery mode: temporarily monitor /Users so opfilter delivers events
     // for apps that have no policy rules yet. Call endDiscovery when done.
     func beginDiscovery(withReply reply: @escaping () -> Void)

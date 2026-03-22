@@ -253,4 +253,8 @@ final class ESJailAdapter {
         rulesLock.withLock { $0 = rules }
         logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s)")
     }
+
+    func activeJailedPIDs() -> Set<pid_t> {
+        jailedProcessesLock.withLock { Set($0.keys.map(\.pid)) }
+    }
 }

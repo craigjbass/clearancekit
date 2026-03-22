@@ -183,6 +183,13 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
     }
 
+    // MARK: - Jailed process query
+
+    fileprivate func activeJailedProcesses() -> [RunningProcessInfo] {
+        let jailedPIDs = jailAdapter.activeJailedPIDs()
+        return ProcessEnumerator.enumerateAll().filter { jailedPIDs.contains(pid_t($0.pid)) }
+    }
+
     // MARK: - Discovery mode
 
     fileprivate func beginDiscovery() {
@@ -259,6 +266,12 @@ extension XPCServer: NSXPCListenerDelegate {
         exportedInterface.setClasses(
             processInfoClasses,
             for: #selector(ServiceProtocol.fetchProcessList(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
+        exportedInterface.setClasses(
+            processInfoClasses,
+            for: #selector(ServiceProtocol.fetchActiveJailedProcesses(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
@@ -435,6 +448,12 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             reply(ProcessEnumerator.enumerateAll())
+        }
+    }
+
+    func fetchActiveJailedProcesses(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            reply(self?.server?.activeJailedProcesses() ?? [])
         }
     }
 
