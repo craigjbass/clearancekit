@@ -371,15 +371,15 @@ private func buildJailedTree(
 ) -> [JailedProcessNode] {
     guard !processes.isEmpty else { return [] }
 
-    var deniedByPID: [Int32: [String: (count: Int, ruleID: UUID?)]] = [:]
-    for event in events where !event.accessAllowed && event.jailedRuleID != nil {
-        var pathMap = deniedByPID[event.processID] ?? [:]
-        if let existing = pathMap[event.path] {
-            pathMap[event.path] = (count: existing.count + 1, ruleID: event.jailedRuleID)
-        } else {
-            pathMap[event.path] = (count: 1, ruleID: event.jailedRuleID)
-        }
-        deniedByPID[event.processID] = pathMap
+    // Group denied jail events by ruleID rather than by PID. A jail rule may jail
+    // multiple process instances over time; the user needs to see all denied paths
+    // for a rule regardless of which specific process instance triggered them.
+    var deniedByRuleID: [UUID: [String: Int]] = [:]
+    for event in events where !event.accessAllowed {
+        guard let ruleID = event.jailedRuleID else { continue }
+        var pathMap = deniedByRuleID[ruleID] ?? [:]
+        pathMap[event.path, default: 0] += 1
+        deniedByRuleID[ruleID] = pathMap
     }
 
     let jailedPIDs = Set(processes.map { pid_t($0.pid) })
@@ -403,9 +403,9 @@ private func buildJailedTree(
         }
         let effectiveRule = matchedRule ?? inheritedRule
 
-        let pathMap = deniedByPID[process.pid] ?? [:]
+        let pathMap = effectiveRule.flatMap { deniedByRuleID[$0.id] } ?? [:]
         let deniedAccesses = pathMap
-            .map { path, info in DeniedJailAccess(path: path, ruleID: info.ruleID, count: info.count) }
+            .map { path, count in DeniedJailAccess(path: path, ruleID: effectiveRule?.id, count: count) }
             .sorted { $0.path < $1.path }
 
         let children = (childPIDs[pid] ?? [])
