@@ -197,6 +197,38 @@ Ancestor entries use the same matching fields as `GlobalAllowlist`:
 
 Ancestor entries are managed via the **Add Ancestor Entry** button in the allowlist view and are displayed inline alongside immediate-process entries, distinguished by an ancestry icon and an **ancestor** badge. Managed-profile ancestor entries appear in a separate **Managed Profile Ancestor Entries** section.
 
+### JailRules — process jail rules
+
+Delivered as an array under the `JailRules` preference key. Each entry confines a specific process to only access a specified set of path prefixes. Any file-system access outside the allowed set is denied. Managed jail rules appear read-only in the GUI under **Jail → Managed Jail Rules**.
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `ID` | string | No | Stable UUID. Omit to auto-derive from `JailedSignature`. Always generate with `uuidgen`. |
+| `Name` | string | **Yes** | Display name shown in the clearancekit GUI. |
+| `JailedSignature` | string | **Yes** | The process to jail in `teamID:signingID` format. Wildcards are not supported — exact signing ID only. Use `apple` for Apple platform binaries. |
+| `AllowedPathPrefixes` | array of strings | No | Paths the jailed process may access. Omit or leave empty to deny all file access. Supports `*` (one path component), `**` (everything at or below), and `***` (character wildcard within a component). |
+
+#### Example
+
+```xml
+<key>JailRules</key>
+<array>
+    <dict>
+        <key>ID</key>
+        <string><!-- uuidgen --></string>
+        <key>Name</key>
+        <string>Example Jailed Tool</string>
+        <key>JailedSignature</key>
+        <string>ABCDE12345:com.example.tool</string>
+        <key>AllowedPathPrefixes</key>
+        <array>
+            <string>/tmp/**</string>
+            <string>/var/log/example/**</string>
+        </array>
+    </dict>
+</array>
+```
+
 ### AppProtections — named rule groupings
 
 Delivered as an array under the `AppProtections` preference key. Each entry groups one or more `FAAPolicy` rules under a named app protection, which appears read-only in the GUI under **App Protections → Managed**.

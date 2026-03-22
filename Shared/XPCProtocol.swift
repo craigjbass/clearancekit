@@ -294,6 +294,7 @@ public protocol ClientProtocol {
     func userAllowlistUpdated(_ allowlistData: NSData)
     func managedAncestorAllowlistUpdated(_ allowlistData: NSData)
     func userAncestorAllowlistUpdated(_ allowlistData: NSData)
+    func managedJailRulesUpdated(_ rulesData: NSData)
     func userJailRulesUpdated(_ rulesData: NSData)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.

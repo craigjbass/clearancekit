@@ -42,6 +42,7 @@ final class PolicyRepository: @unchecked Sendable {
         var userAllowlist: [AllowlistEntry] = []
         var managedAncestorAllowlist: [AncestorAllowlistEntry] = []
         var userAncestorAllowlist: [AncestorAllowlistEntry] = []
+        var managedJailRules: [JailRule] = []
         var userJailRules: [JailRule] = []
         var pendingSuspectUserRules: [FAARule]?
         var pendingSuspectUserAllowlist: [AllowlistEntry]?
@@ -54,11 +55,13 @@ final class PolicyRepository: @unchecked Sendable {
         database: PolicyDatabaseProtocol,
         managedRules: [FAARule] = [],
         managedAllowlist: [AllowlistEntry] = [],
+        managedJailRules: [JailRule] = [],
         xprotectEntries: [AllowlistEntry] = []
     ) {
         var initialState = State()
         initialState.managedRules = managedRules
         initialState.managedAllowlist = managedAllowlist
+        initialState.managedJailRules = managedJailRules
         initialState.xprotectEntries = xprotectEntries
 
         switch database.loadUserRulesResult() {
@@ -103,11 +106,13 @@ final class PolicyRepository: @unchecked Sendable {
     func resync(
         managedRules: [FAARule],
         managedAllowlist: [AllowlistEntry],
+        managedJailRules: [JailRule],
         xprotectEntries: [AllowlistEntry]
     ) {
         storage.withLock {
             $0.managedRules = managedRules
             $0.managedAllowlist = managedAllowlist
+            $0.managedJailRules = managedJailRules
             $0.xprotectEntries = xprotectEntries
         }
     }
@@ -138,7 +143,7 @@ final class PolicyRepository: @unchecked Sendable {
     }
 
     func mergedJailRules() -> [JailRule] {
-        storage.withLock { $0.userJailRules }
+        storage.withLock { $0.managedJailRules + $0.userJailRules }
     }
 
     // MARK: - Rule mutations
@@ -320,6 +325,14 @@ final class PolicyRepository: @unchecked Sendable {
         let entries = storage.withLock { $0.userAncestorAllowlist }
         guard let data = try? JSONEncoder().encode(entries) else {
             fatalError("PolicyRepository: Failed to encode user ancestor allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    func encodedManagedJailRules() -> NSData {
+        let rules = storage.withLock { $0.managedJailRules }
+        guard let data = try? JSONEncoder().encode(rules) else {
+            fatalError("PolicyRepository: Failed to encode managed jail rules — this is a bug")
         }
         return data as NSData
     }

@@ -552,6 +552,17 @@ extension XPCClient: ClientProtocol {
         }
     }
 
+    nonisolated func managedJailRulesUpdated(_ rulesData: NSData) {
+        guard let rules = try? JSONDecoder().decode([JailRule].self, from: rulesData as Data) else {
+            logger.fault("XPCClient: Failed to decode managed jail rules — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            JailStore.shared.receivedManagedRules(rules)
+        }
+    }
+
     nonisolated func userJailRulesUpdated(_ rulesData: NSData) {
         guard let rules = try? JSONDecoder().decode([JailRule].self, from: rulesData as Data) else {
             logger.fault("XPCClient: Failed to decode user jail rules — version mismatch, invalidating connection")

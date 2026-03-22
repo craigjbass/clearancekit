@@ -25,6 +25,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         let database = Database(directory: dataDirectory)
         let managedRules = ManagedPolicyLoader.load()
         let managedAllowlist = ManagedAllowlistLoader.load()
+        let managedJailRules = ManagedJailRuleLoader.load()
         let xprotectEntries = enumerateXProtectEntries()
         let xprotectCount = xprotectEntries.count
 
@@ -32,6 +33,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
             database: database,
             managedRules: managedRules,
             managedAllowlist: managedAllowlist,
+            managedJailRules: managedJailRules,
             xprotectEntries: xprotectEntries
         )
         self.broadcaster = EventBroadcaster()
@@ -219,11 +221,13 @@ final class XPCServer: NSObject, @unchecked Sendable {
         Task {
             let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
+            let reloadedJailRules = ManagedJailRuleLoader.loadWithSync()
             let reloadedXProtect = enumerateXProtectEntries()
 
             policyRepository.resync(
                 managedRules: reloadedRules,
                 managedAllowlist: reloadedAllowlist,
+                managedJailRules: reloadedJailRules,
                 xprotectEntries: reloadedXProtect
             )
 
@@ -245,6 +249,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy?.userAllowlistUpdated(policyRepository.encodedUserAllowlist())
         proxy?.managedAncestorAllowlistUpdated(policyRepository.encodedManagedAncestorAllowlist())
         proxy?.userAncestorAllowlistUpdated(policyRepository.encodedUserAncestorAllowlist())
+        proxy?.managedJailRulesUpdated(policyRepository.encodedManagedJailRules())
         proxy?.userJailRulesUpdated(policyRepository.encodedUserJailRules())
     }
 }

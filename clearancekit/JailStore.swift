@@ -13,6 +13,7 @@ final class JailStore: ObservableObject {
         authenticate: { try await BiometricAuth.authenticate(reason: $0) }
     )
 
+    @Published private(set) var managedRules: [JailRule] = []
     @Published private(set) var userRules: [JailRule] = []
 
     private let service: PolicyServiceProtocol
@@ -24,6 +25,10 @@ final class JailStore: ObservableObject {
     }
 
     // MARK: - Service push
+
+    func receivedManagedRules(_ rules: [JailRule]) {
+        managedRules = rules
+    }
 
     func receivedUserRules(_ rules: [JailRule]) {
         userRules = rules

@@ -150,6 +150,52 @@
                                         </array>
                                     </dict>
                                 </array>
+
+                                <!--
+                                    JailRules — process jail rules delivered by MDM.
+
+                                    Each entry confines a specific process to only
+                                    access a specified set of paths. Any file-system
+                                    access outside the allowed prefixes is denied.
+
+                                    ID (optional): stable UUID for this rule.
+                                        Omit to auto-derive from JailedSignature.
+                                        When specified, generate with: uuidgen
+
+                                    Name (required): display name shown in the GUI
+                                        under "Jail → Managed Jail Rules".
+
+                                    JailedSignature (required): the process to jail
+                                        in "teamID:signingID" format. Wildcards are
+                                        not supported — specify an exact signing ID.
+                                        Use "apple" as the teamID for Apple platform
+                                        binaries.
+
+                                    AllowedPathPrefixes (optional): array of path
+                                        patterns the jailed process may access.
+                                        Supports * (one component), ** (everything
+                                        at or below), and *** (within a component).
+                                        Omit or leave empty to deny all file access.
+                                -->
+                                <key>JailRules</key>
+                                <array>
+                                    <dict>
+                                        <!--
+                                            Generate with: uuidgen
+                                        -->
+                                        <key>ID</key>
+                                        <string>C3D4E5F6-A7B8-9012-CDEF-012345678901</string>
+                                        <key>Name</key>
+                                        <string>Example Jailed Tool</string>
+                                        <key>JailedSignature</key>
+                                        <string>ABCDE12345:com.example.tool</string>
+                                        <key>AllowedPathPrefixes</key>
+                                        <array>
+                                            <string>/tmp/**</string>
+                                            <string>/var/log/example/**</string>
+                                        </array>
+                                    </dict>
+                                </array>
                             </dict>
                         </dict>
                     </array>

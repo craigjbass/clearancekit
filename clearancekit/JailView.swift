@@ -14,9 +14,13 @@ struct JailView: View {
     @State private var showAddSheet = false
     @State private var showImportExport = false
 
+    private var isEmpty: Bool {
+        store.userRules.isEmpty && store.managedRules.isEmpty
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if store.userRules.isEmpty {
+            if isEmpty {
                 ContentUnavailableView(
                     "No Jail Rules",
                     systemImage: "lock.rectangle.on.rectangle",
@@ -24,11 +28,20 @@ struct JailView: View {
                 )
             } else {
                 List {
-                    Section("User Jail Rules") {
-                        ForEach(store.userRules) { rule in
-                            JailRuleRow(rule: rule, onEdit: { editingRule = rule }, onDelete: {
-                                Task { try? await store.remove(rule) }
-                            })
+                    if !store.managedRules.isEmpty {
+                        Section("Managed Jail Rules") {
+                            ForEach(store.managedRules) { rule in
+                                ManagedJailRuleRow(rule: rule)
+                            }
+                        }
+                    }
+                    if !store.userRules.isEmpty {
+                        Section("User Jail Rules") {
+                            ForEach(store.userRules) { rule in
+                                JailRuleRow(rule: rule, onEdit: { editingRule = rule }, onDelete: {
+                                    Task { try? await store.remove(rule) }
+                                })
+                            }
                         }
                     }
                 }
@@ -83,6 +96,34 @@ private struct JailRuleRow: View {
                 Button("Edit", action: onEdit)
                 Button("Delete", role: .destructive, action: onDelete)
             }
+            Text("Jailed: \(rule.jailedSignature.description)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if rule.allowedPathPrefixes.isEmpty {
+                Text("No allowed paths — all file access denied")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else {
+                ForEach(rule.allowedPathPrefixes, id: \.self) { prefix in
+                    Text(prefix)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - ManagedJailRuleRow
+
+private struct ManagedJailRuleRow: View {
+    let rule: JailRule
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(rule.name)
+                .font(.headline)
             Text("Jailed: \(rule.jailedSignature.description)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
