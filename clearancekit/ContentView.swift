@@ -146,9 +146,9 @@ struct SetupView: View {
         VStack(spacing: 0) {
             setupStepsHeader
             Divider()
-            fullDiskAccessRow
-            Divider()
             extensionStatusRow
+            Divider()
+            fullDiskAccessRow
             Divider()
             connectionStatusRow
             Spacer()
@@ -177,8 +177,8 @@ struct SetupView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
-                Text("1. Grant Full Disk Access to 'opfilter', which is part of clearancekit")
-                Text("2. Activate the system extension")
+                Text("1. Activate the system extension")
+                Text("2. Grant Full Disk Access to 'opfilter', which is part of clearancekit")
             }
             .font(.callout)
         }
