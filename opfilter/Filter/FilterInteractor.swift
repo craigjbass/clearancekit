@@ -129,17 +129,22 @@ final class FilterInteractor: @unchecked Sendable {
     // (child of a jailed process). Providing the rule ID explicitly means this
     // path never needs to match by signing ID.
     func handleJailEventSync(_ fileEvent: FileAuthEvent, jailRuleID: UUID) {
+        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
+        logger.debug("JAIL-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+
         let allowlist = allowlistStorage.withLock { $0 }
         let jailRules = jailRulesStorage.withLock { $0 }
         let cache = jailCacheProcessor.decide(jailsConfigured: !jailRules.isEmpty).shouldCache
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
+            logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
             fileEvent.respond(true, cache)
             return
         }
 
         guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
             // Stale mute: the jail rule was removed while this process was still muted.
+            logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID)")
             fileEvent.respond(true, cache)
             return
         }
@@ -147,6 +152,7 @@ final class FilterInteractor: @unchecked Sendable {
         let decision = checkJailPath(rule: rule, path: fileEvent.path)
 
         let allowed = decision.isAllowed
+        logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public)")
         fileEvent.respond(allowed, cache)
 
         Task { [weak self] in
