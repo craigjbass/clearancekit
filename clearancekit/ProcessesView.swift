@@ -110,27 +110,21 @@ private struct JailedProcessRow: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                guard !node.deniedAccesses.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+        if node.deniedAccesses.isEmpty {
+            rowHeader
+                .padding(.vertical, 3)
+                .padding(.horizontal, 2)
+        } else {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                ForEach(node.deniedAccesses) { access in
+                    DeniedJailAccessRow(access: access)
+                }
             } label: {
                 rowHeader
             }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(spacing: 0) {
-                    ForEach(node.deniedAccesses) { access in
-                        Divider()
-                        DeniedJailAccessRow(access: access)
-                            .padding(.leading, 16)
-                    }
-                }
-            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 2)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 2)
     }
 
     private var rowHeader: some View {
@@ -140,11 +134,6 @@ private struct JailedProcessRow: View {
                     .fontWeight(.medium)
                 ruleBadge
                 Spacer()
-                if !node.deniedAccesses.isEmpty {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
                 Text("PID \(node.process.pid)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -288,50 +277,36 @@ private struct DenyGroupRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Image(systemName: "xmark.shield.fill")
-                            .foregroundStyle(.red)
-                        Text(group.name)
-                            .fontWeight(.medium)
-                        Spacer()
-                        allowButton
-                        Text("\(group.events.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 8) {
-                        Text("Team: \(displayTeamID)")
-                        if !group.signingID.isEmpty {
-                            Text(group.signingID)
-                                .lineLimit(1)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+        DisclosureGroup(isExpanded: $isExpanded) {
+            ForEach(group.events, id: \.eventID) { event in
+                EventRow(event: event, isHighlighted: false)
             }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(spacing: 0) {
-                    ForEach(group.events, id: \.eventID) { event in
-                        Divider()
-                        EventRow(event: event, isHighlighted: false)
-                            .padding(.leading, 12)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Image(systemName: "xmark.shield.fill")
+                        .foregroundStyle(.red)
+                    Text(group.name)
+                        .fontWeight(.medium)
+                    Spacer()
+                    allowButton
+                    Text("\(group.events.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                HStack(spacing: 8) {
+                    Text("Team: \(displayTeamID)")
+                    if !group.signingID.isEmpty {
+                        Text(group.signingID)
+                            .lineLimit(1)
                     }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)
