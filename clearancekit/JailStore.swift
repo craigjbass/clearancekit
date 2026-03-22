@@ -51,6 +51,27 @@ final class JailStore: ObservableObject {
         service.removeJailRule(ruleID: rule.id)
     }
 
+    @discardableResult
+    func importRules(_ rules: [JailRule]) async throws -> Int {
+        guard !rules.isEmpty else { return 0 }
+        try await authenticate("Import \(rules.count) jail rule(s)")
+        let existingIDs = Set(userRules.map(\.id))
+        var importedCount = 0
+        for rule in rules where !existingIDs.contains(rule.id) {
+            let imported = JailRule(
+                id: rule.id,
+                name: rule.name,
+                source: .user,
+                jailedSignature: rule.jailedSignature,
+                allowedPathPrefixes: rule.allowedPathPrefixes
+            )
+            userRules.append(imported)
+            service.addJailRule(imported)
+            importedCount += 1
+        }
+        return importedCount
+    }
+
     func allowPath(_ path: String, inRule ruleID: UUID) async throws {
         guard let index = userRules.firstIndex(where: { $0.id == ruleID }) else { return }
         try await authenticate("Allow this path in jail rule")

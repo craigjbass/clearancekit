@@ -4,12 +4,15 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct JailView: View {
     @StateObject private var store = JailStore.shared
 
     @State private var editingRule: JailRule?
     @State private var showAddSheet = false
+    @State private var showImportExport = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +36,16 @@ struct JailView: View {
         }
         .navigationTitle("Jail")
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showImportExport = true
+                } label: {
+                    Label("Import / Export", systemImage: "arrow.up.arrow.down")
+                }
+                .popover(isPresented: $showImportExport) {
+                    JailImportExportPopover()
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showAddSheet = true
@@ -201,6 +214,117 @@ private struct JailRuleEditView: View {
                 showProcessPicker = false
             } onCancel: {
                 showProcessPicker = false
+            }
+        }
+    }
+}
+
+// MARK: - JailImportExportPopover
+
+private struct JailImportExportPopover: View {
+    @StateObject private var store = JailStore.shared
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var importStatusMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            exportSection
+            Divider()
+            importSection
+        }
+        .frame(width: 380)
+        .onAppear {
+            selectedIDs = Set(store.userRules.map(\.id))
+        }
+    }
+
+    private var exportSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Export").font(.headline)
+            if store.userRules.isEmpty {
+                Text("No user jail rules to export.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                List(store.userRules) { rule in
+                    Toggle(isOn: Binding(
+                        get: { selectedIDs.contains(rule.id) },
+                        set: { if $0 { selectedIDs.insert(rule.id) } else { selectedIDs.remove(rule.id) } }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.name)
+                            Text(rule.jailedSignature.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .frame(minHeight: 60, maxHeight: 220)
+
+                HStack {
+                    Button("Select All") { selectedIDs = Set(store.userRules.map(\.id)) }
+                        .buttonStyle(.borderless)
+                    Button("Deselect All") { selectedIDs = [] }
+                        .buttonStyle(.borderless)
+                    Spacer()
+                    Button("Export Selected") { exportSelected() }
+                        .disabled(selectedIDs.isEmpty)
+                }
+            }
+        }
+        .padding()
+    }
+
+    private var importSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Import").font(.headline)
+            HStack {
+                Button("Import from File…") { importFromFile() }
+                if let msg = importStatusMessage {
+                    Text(msg)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding()
+    }
+
+    private func exportSelected() {
+        let rulesToExport = store.userRules.filter { selectedIDs.contains($0.id) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(rulesToExport) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "jail-rules.json"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? data.write(to: url)
+        }
+    }
+
+    private func importFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            guard let data = try? Data(contentsOf: url),
+                  let rules = try? JSONDecoder().decode([JailRule].self, from: data) else {
+                importStatusMessage = "Invalid file"
+                return
+            }
+            Task { @MainActor in
+                do {
+                    let count = try await store.importRules(rules)
+                    importStatusMessage = count == 0
+                        ? "No new rules (all already present)"
+                        : "\(count) rule(s) imported"
+                } catch {
+                    importStatusMessage = "Import cancelled"
+                }
             }
         }
     }
