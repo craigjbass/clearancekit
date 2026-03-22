@@ -179,8 +179,20 @@ private struct JailRuleEditView: View {
                 } header: {
                     Text("Allowed Paths")
                 } footer: {
-                    Text("Use * for one level of nesting or ** for any depth. Example: /var/log/** allows /var/log and everything below it. /var/log/* allows only direct children. /var/log matches only that exact path.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        """
+                        * — matches exactly one path component.
+                        ** — once reached, matches everything (including the path up to that point).
+                        *** — character wildcard within a single component.
+
+                        /var/log          exact path only, no children
+                        /var/log/*        direct children only, not /var/log itself
+                        /var/log/**       /var/log and all descendants at any depth
+                        /dev/ttys***      /dev/ttys001, /dev/ttysA, …
+                        """
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
