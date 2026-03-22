@@ -34,11 +34,7 @@ jobs:
       - name: Convert app icon for site
         run: |
           pip install Pillow -q
-          python3 -c "
-from PIL import Image
-img = Image.open('clearancekit/clearancekit.icon/Assets/ChatGPT Image Jan 26, 2026 at 11_46_59 PM.png')
-img.resize((512, 512), Image.LANCZOS).save('docs/logo.png', 'PNG', optimize=True)
-"
+          python3 -c "from PIL import Image; img = Image.open('clearancekit/clearancekit.icon/Assets/ChatGPT Image Jan 26, 2026 at 11_46_59 PM.png'); img.resize((512, 512), Image.LANCZOS).save('docs/logo.png', 'PNG', optimize=True)"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
