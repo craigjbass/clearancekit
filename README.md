@@ -59,11 +59,19 @@ ClearanceKit has zero third-party dependencies. Every capability — Endpoint Se
 
 ## Related projects
 
-ClearanceKit occupies a specific part of the macOS endpoint security space. Two well-known projects address adjacent but distinct problems:
+ClearanceKit occupies a specific part of the macOS endpoint security space. Several well-known projects address adjacent but distinct problems:
 
 **[BlockBlock](https://github.com/objective-see/BlockBlock)** (Objective-See) monitors for process persistence — launch agents, launch daemons, login items, cron jobs, and other mechanisms a malicious process might use to survive a reboot. Where ClearanceKit asks "which processes may access which files?", BlockBlock asks "is something trying to establish a permanent foothold?". The two tools are complementary: a supply chain payload that exfiltrates credentials immediately would be caught by ClearanceKit; one that installs a backdoor for later use would be caught by BlockBlock.
 
 **[Santa](https://github.com/northpolesec/santa)** (North Pole Security) combines binary execution control with file access policies, and is designed for MDM-managed enterprise fleets with policy distributed via a central management server. Santa can operate in lockdown mode to block unapproved binaries from running at all — ClearanceKit has no equivalent; it does not restrict execution events. Both tools use the Endpoint Security framework to authorise file access by process identity, so their file access policies are conceptually similar. The key difference is process ancestry: ClearanceKit can express rules like "allow this path only when the accessing process was launched by a trusted parent" — for example, permitting a build tool to read source files only when invoked from a trusted CI runner. Santa's file access policies evaluate the immediate process only and have no concept of ancestry. Process ancestry can make it easier to deploy in environments with other security products.
+
+**[Secretive](https://github.com/maxgoedjen/secretive)** (Max Goedjen) stores SSH keys in the Secure Enclave and acts as an SSH agent, requiring biometric authentication for every signing operation. ClearanceKit incorporates SSH agent protocol types and Secure Enclave key store abstractions derived from Secretive's MIT-licensed source code, and extends the concept with process-bound sessions that allow a verified process (identified by PID and pidVersion) to hold an authenticated session for a configurable duration, reducing repeated Touch ID prompts.
+
+## Acknowledgements
+
+ClearanceKit includes code derived from the following open-source projects:
+
+- **[Secretive](https://github.com/maxgoedjen/secretive)** by Max Goedjen — SSH agent wire protocol types and Secure Enclave key store abstractions. Used under the [MIT License](https://github.com/maxgoedjen/secretive/blob/main/LICENSE). Copyright (c) 2020 Max Goedjen.
 
 ## Architecture
 
