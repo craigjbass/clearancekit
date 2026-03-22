@@ -10,12 +10,18 @@ import SwiftUI
 struct ProcessesView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var jailStore = JailStore.shared
-    @State private var jailedProcesses: [RunningProcessInfo] = []
+    @State private var knownProcesses: [pid_t: RunningProcessInfo] = [:]
+    @State private var activeProcessPIDs: Set<pid_t> = []
 
     private var allRules: [JailRule] { jailStore.managedRules + jailStore.userRules }
 
     private var jailedTree: [JailedProcessNode] {
-        buildJailedTree(from: jailedProcesses, rules: allRules, events: xpcClient.events)
+        buildJailedTree(
+            from: Array(knownProcesses.values),
+            activePIDs: activeProcessPIDs,
+            rules: allRules,
+            events: xpcClient.events
+        )
     }
 
     private var denyGroups: [DenyGroup] {
@@ -73,7 +79,11 @@ struct ProcessesView: View {
 
     private func pollJailedProcesses() async {
         while !Task.isCancelled {
-            jailedProcesses = await xpcClient.fetchActiveJailedProcesses()
+            let active = await xpcClient.fetchActiveJailedProcesses()
+            for process in active {
+                knownProcesses[pid_t(process.pid)] = process
+            }
+            activeProcessPIDs = Set(active.map { pid_t($0.pid) })
             try? await Task.sleep(for: .seconds(2))
         }
     }
@@ -98,6 +108,7 @@ private struct JailedProcessNode: Identifiable {
     /// The rule in effect — either matchedRule or an ancestor's rule.
     let effectiveRule: JailRule?
     let deniedAccesses: [DeniedJailAccess]
+    let isActive: Bool
     var children: [JailedProcessNode]?
 
     var name: String { URL(fileURLWithPath: process.path).lastPathComponent }
@@ -130,6 +141,9 @@ private struct JailedProcessRow: View {
     private var rowHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
+                Circle()
+                    .fill(node.isActive ? Color.green : Color.secondary)
+                    .frame(width: 6, height: 6)
                 Text(node.name)
                     .fontWeight(.medium)
                 ruleBadge
@@ -341,6 +355,7 @@ private struct DenyGroupRow: View {
 
 private func buildJailedTree(
     from processes: [RunningProcessInfo],
+    activePIDs: Set<pid_t>,
     rules: [JailRule],
     events: [FolderOpenEvent]
 ) -> [JailedProcessNode] {
@@ -387,12 +402,18 @@ private func buildJailedTree(
             .compactMap { buildNode(pid: $0, inheritedRule: effectiveRule) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
+        let isActive = activePIDs.contains(pid)
+
+        // Prune inactive processes with no deny accesses and no children worth showing.
+        guard isActive || !deniedAccesses.isEmpty || !children.isEmpty else { return nil }
+
         return JailedProcessNode(
             id: pid,
             process: process,
             matchedRule: matchedRule,
             effectiveRule: effectiveRule,
             deniedAccesses: deniedAccesses,
+            isActive: isActive,
             children: children.isEmpty ? nil : children
         )
     }
