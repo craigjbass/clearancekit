@@ -40,9 +40,23 @@ final class XPCClient: NSObject, ObservableObject {
     private let reconnectInterval: TimeInterval = 5.0
     private var lastDenyNotificationDate: Date?
     private let denyNotificationDebounce: TimeInterval = 30.0
+    /// Events buffered since the last flush. Not published — only `events` triggers SwiftUI repaints.
+    private var pendingEvents: [FolderOpenEvent] = []
 
     private override init() {
         super.init()
+        Task { @MainActor in
+            while true {
+                try? await Task.sleep(for: .milliseconds(150))
+                self.flushPendingEvents()
+            }
+        }
+    }
+
+    private func flushPendingEvents() {
+        guard !pendingEvents.isEmpty else { return }
+        events.insert(contentsOf: pendingEvents.reversed(), at: 0)
+        pendingEvents.removeAll(keepingCapacity: true)
     }
 
     func connect() {
@@ -397,6 +411,7 @@ final class XPCClient: NSObject, ObservableObject {
     }
 
     func clearEvents() {
+        pendingEvents.removeAll(keepingCapacity: true)
         events.removeAll()
     }
 
@@ -410,7 +425,7 @@ final class XPCClient: NSObject, ObservableObject {
         service.fetchRecentEvents { [weak self] historicEvents in
             Task { @MainActor in
                 guard let self = self else { return }
-                let existingIDs = Set(self.events.map(\.eventID))
+                let existingIDs = Set((self.events + self.pendingEvents).map(\.eventID))
                 let newEvents = historicEvents.filter { !existingIDs.contains($0.eventID) }
                 self.events.append(contentsOf: newEvents)
                 self.events.sort { $0.timestamp > $1.timestamp }
@@ -429,7 +444,7 @@ extension XPCClient: ClientProtocol {
     nonisolated func folderOpened(_ event: FolderOpenEvent) {
         logger.debug("XPCClient: Received folder open event: \(event.path, privacy: .public)")
         Task { @MainActor in
-            self.events.insert(event, at: 0)
+            self.pendingEvents.append(event)
             if !event.accessAllowed {
                 self.sendDenyNotificationIfNeeded(for: event)
             }
