@@ -7,6 +7,32 @@ import Foundation
 import Security
 
 enum ProcessEnumerator {
+    static func enumerate(pids: Set<pid_t>) -> [RunningProcessInfo] {
+        var result: [RunningProcessInfo] = []
+        result.reserveCapacity(pids.count)
+        for pid in pids where pid > 0 {
+            var bsdInfo = proc_bsdinfo()
+            guard proc_pidinfo(
+                pid, PROC_PIDTBSDINFO, 0,
+                &bsdInfo, Int32(MemoryLayout<proc_bsdinfo>.size)
+            ) > 0 else { continue }
+            var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+            guard proc_pidpath(pid, &pathBuffer, UInt32(MAXPATHLEN)) > 0 else { continue }
+            let path = String(cString: pathBuffer)
+            guard !path.isEmpty else { continue }
+            let (teamID, signingID) = codeSigningIDs(forPID: pid)
+            result.append(RunningProcessInfo(
+                pid: pid,
+                parentPID: Int32(bsdInfo.pbi_ppid),
+                path: path,
+                teamID: teamID,
+                signingID: signingID,
+                uid: bsdInfo.pbi_uid
+            ))
+        }
+        return result
+    }
+
     static func enumerateAll() -> [RunningProcessInfo] {
         let estimated = proc_listallpids(nil, 0)
         guard estimated > 0 else { return [] }

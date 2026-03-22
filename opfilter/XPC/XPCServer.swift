@@ -186,8 +186,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Jailed process query
 
     fileprivate func activeJailedProcesses() -> [RunningProcessInfo] {
-        let jailedPIDs = jailAdapter.activeJailedPIDs()
-        return ProcessEnumerator.enumerateAll().filter { jailedPIDs.contains(pid_t($0.pid)) }
+        ProcessEnumerator.enumerate(pids: jailAdapter.activeJailedPIDs())
     }
 
     // MARK: - Discovery mode
