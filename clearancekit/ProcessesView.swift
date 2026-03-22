@@ -46,7 +46,15 @@ struct ProcessesView: View {
                 }
             }
         }
-        .task { await pollJailedProcesses() }
+        .task {
+            for await _ in Timer.publish(every: 1, on: .main, in: .common).autoconnect().values {
+                let active = await xpcClient.fetchActiveJailedProcesses()
+                for process in active {
+                    knownProcesses[pid_t(process.pid)] = process
+                }
+                activeProcessPIDs = Set(active.map { pid_t($0.pid) })
+            }
+        }
     }
 
     private var activityList: some View {
@@ -86,16 +94,6 @@ struct ProcessesView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func pollJailedProcesses() async {
-        while !Task.isCancelled {
-            let active = await xpcClient.fetchActiveJailedProcesses()
-            for process in active {
-                knownProcesses[pid_t(process.pid)] = process
-            }
-            activeProcessPIDs = Set(active.map { pid_t($0.pid) })
-            try? await Task.sleep(for: .seconds(2))
-        }
-    }
 }
 
 // MARK: - DeniedJailAccess
