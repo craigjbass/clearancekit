@@ -151,6 +151,9 @@ public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 19, signingID: "com.apple.iconservicesagent"),
     signingEntry(n: 20, signingID: "com.apple.siriknowledged"),
     signingEntry(n: 21, signingID: "com.apple.PerfPowerServices"),
+    signingEntry(n: 22, signingID: "com.apple.spotlightknowledged"),
+    signingEntry(n: 23, signingID: "com.apple.BiomeAgent"),
+    signingEntry(n: 24, signingID: "com.apple.duetexpertd"),
 ]
 
 // MARK: - XProtect enumeration
