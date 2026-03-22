@@ -96,6 +96,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         let rules = policyRepository.mergedJailRules()
         interactor.updateJailRules(rules)
         jailAdapter.updateJailRules(rules)
+        adapter.clearCache()
     }
 
     // MARK: - Client registration

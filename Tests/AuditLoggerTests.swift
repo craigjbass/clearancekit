@@ -35,7 +35,7 @@ struct AuditLoggerTests {
             gid: gid,
             ttyPath: nil,
             deadline: 0,
-            respond: { _ in }
+            respond: { _, _ in }
         )
     }
 

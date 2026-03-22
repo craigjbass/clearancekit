@@ -64,7 +64,7 @@ struct FilterInteractorTests {
         signingID: String = "",
         processIdentity: ProcessIdentity? = nil,
         deadline: UInt64 = 0,
-        respond: @escaping @Sendable (Bool) -> Void
+        respond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
     ) -> FileAuthEvent {
         FileAuthEvent(
             operation: .open,
@@ -123,7 +123,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/tmp/file.txt") { result in
+        let event = openFileEvent(path: "/tmp/file.txt") { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -152,7 +152,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "TEAM1",
             signingID: "com.example.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -179,7 +179,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -204,7 +204,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result in
+        let event = openFileEvent(path: "/protected/file.txt") { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -229,7 +229,7 @@ struct FilterInteractorTests {
         var allowed: Bool?
 
         // deadline = 0 ensures waitForProcess exits immediately without spinning
-        let event = openFileEvent(path: "/protected/file.txt", deadline: 0) { result in
+        let event = openFileEvent(path: "/protected/file.txt", deadline: 0) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -254,7 +254,7 @@ struct FilterInteractorTests {
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result in
+        let event = openFileEvent(path: "/protected/file.txt") { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -282,7 +282,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "ALLOWLISTED",
             signingID: "com.example.allowlisted"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -317,7 +317,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "UNRELATED",
             signingID: "com.unrelated.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -352,7 +352,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "UNRELATED",
             signingID: "com.unrelated.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -384,7 +384,7 @@ struct FilterInteractorTests {
             path: "/protected/file.txt",
             processPath: "/usr/bin/safe",
             deadline: 0  // immediate deadline — any wait would expire instantly
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -413,7 +413,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -440,7 +440,7 @@ struct FilterInteractorTests {
             path: "/allowed/data.db",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -473,7 +473,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -500,7 +500,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -538,7 +538,7 @@ struct FilterInteractorTests {
             path: "/protected/data.db",
             teamID: "TEAM1",
             signingID: "com.example.jailed"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -561,7 +561,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == true)
@@ -577,7 +577,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == false)
@@ -588,7 +588,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [], processTree: FakeProcessTree())
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
         interactor.handleJailEventSync(event, jailRuleID: UUID())
 
         #expect(allowed == true)
@@ -610,7 +610,7 @@ struct FilterInteractorTests {
         )
         var allowed: Bool?
 
-        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
+        let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { result, _ in allowed = result }
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == true)
@@ -641,7 +641,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "OTHER",
             signingID: "com.child.process"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -675,7 +675,7 @@ struct FilterInteractorTests {
             path: "/allowed/data.db",
             teamID: "OTHER",
             signingID: "com.child.process"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -710,7 +710,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file",
             teamID: "OTHER",
             signingID: "com.child.process"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
@@ -744,7 +744,7 @@ struct FilterInteractorTests {
             path: "/forbidden/file.txt",
             teamID: "OTHER",
             signingID: "com.other.app"
-        ) { result in
+        ) { result, _ in
             allowed = result
             semaphore.signal()
         }
