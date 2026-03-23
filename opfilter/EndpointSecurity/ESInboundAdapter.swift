@@ -35,20 +35,20 @@ final class ESInboundAdapter {
                 onXProtectChanged()
             case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
                 guard !Self.isXProtectEvent(message) else {
-                    logger.debug("ES-XPROTECT-MODIFY pid=\(pid) process=\(processName, privacy: .public) type=\(message.pointee.event_type.rawValue)")
+                    logger.debug("ES-XPROTECT-MODIFY pid=\(pid) process=\(processName, privacy: .public) type=\(message.pointee.event_type.rawValue) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                     es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
                     onXProtectChanged()
                     return
                 }
                 Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
-                logger.debug("ES-OPEN-NIL-PATH pid=\(pid) process=\(processName, privacy: .public)")
+                logger.debug("ES-OPEN-NIL-PATH pid=\(pid) process=\(processName, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
             case ES_EVENT_TYPE_AUTH_EXEC:
                 let target = message.pointee.event.exec.target
                 let targetPath = Self.string(from: target.pointee.executable.pointee.path)
-                logger.debug("ES-EXEC pid=\(pid) process=\(processName, privacy: .public) target=\(targetPath, privacy: .public)")
+                logger.debug("ES-EXEC pid=\(pid) process=\(processName, privacy: .public) target=\(targetPath, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 interactor.handleExec(newImage: processRecord(from: target))
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_FORK:
@@ -178,47 +178,48 @@ final class ESInboundAdapter {
     private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor) {
         let processName = processName(from: message)
         let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
+        let ttdMs = millisecondsToDeadline(message.pointee.deadline)
 
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_AUTH_OPEN:
             let path = string(from: message.pointee.event.open.file.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=open path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=open path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient))
         case ES_EVENT_TYPE_AUTH_RENAME:
             let path = string(from: message.pointee.event.rename.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=rename path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=rename path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
         case ES_EVENT_TYPE_AUTH_UNLINK:
             let path = string(from: message.pointee.event.unlink.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=unlink path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=unlink path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
         case ES_EVENT_TYPE_AUTH_LINK:
             let path = string(from: message.pointee.event.link.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=link path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=link path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
         case ES_EVENT_TYPE_AUTH_CREATE:
             let path = createEventPath(from: message.pointee.event.create)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=create path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=create path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
         case ES_EVENT_TYPE_AUTH_TRUNCATE:
             let path = string(from: message.pointee.event.truncate.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=truncate path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=truncate path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
         case ES_EVENT_TYPE_AUTH_COPYFILE:
             let path = string(from: message.pointee.event.copyfile.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=copyfile path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=copyfile path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
         case ES_EVENT_TYPE_AUTH_READDIR:
             let path = string(from: message.pointee.event.readdir.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=readdir path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=readdir path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
         case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
             let path = string(from: message.pointee.event.exchangedata.file1.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=exchangedata path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=exchangedata path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
         case ES_EVENT_TYPE_AUTH_CLONE:
             let path = string(from: message.pointee.event.clone.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=clone path=\(path, privacy: .public)")
+            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=clone path=\(path, privacy: .public) ttdMs=\(ttdMs)")
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
@@ -228,6 +229,20 @@ final class ESInboundAdapter {
     private static func processName(from message: UnsafePointer<es_message_t>) -> String {
         let fullPath = string(from: message.pointee.process.pointee.executable.pointee.path)
         return URL(fileURLWithPath: fullPath).lastPathComponent
+    }
+
+    private static let machTimebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    private static func millisecondsToDeadline(_ deadline: UInt64) -> Int64 {
+        let now = mach_absolute_time()
+        guard deadline > now else { return 0 }
+        let ticks = deadline - now
+        let nanos = ticks * UInt64(machTimebase.numer) / UInt64(machTimebase.denom)
+        return Int64(nanos / 1_000_000)
     }
 
     static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
