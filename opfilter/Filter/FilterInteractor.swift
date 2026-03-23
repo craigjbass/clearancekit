@@ -68,6 +68,14 @@ private enum MachTime {
         guard end >= start else { return 0 }
         return (end - start) * UInt64(timebase.numer) / UInt64(timebase.denom)
     }
+
+    static func millisecondsToDeadline(_ deadline: UInt64) -> Int64 {
+        let now = mach_absolute_time()
+        guard deadline > now else { return 0 }
+        let ticks = deadline - now
+        let nanos = ticks * UInt64(timebase.numer) / UInt64(timebase.denom)
+        return Int64(nanos / 1_000_000)
+    }
 }
 
 // MARK: - FilterInteractor
@@ -119,12 +127,12 @@ final class FilterInteractor: @unchecked Sendable {
     // path never needs to match by signing ID.
     func handleJailEventSync(_ fileEvent: FileAuthEvent, jailRuleID: UUID) {
         let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("JAIL-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+        logger.debug("JAIL-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
 
         let allowlist = allowlistStorage.withLock { $0 }
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
-            logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
+            logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
             fileEvent.respond(true, true)
             return
         }
@@ -132,7 +140,7 @@ final class FilterInteractor: @unchecked Sendable {
         let jailRules = jailRulesStorage.withLock { $0 }
         guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
             // Stale mute: the jail rule was removed while this process was still muted.
-            logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID)")
+            logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
             fileEvent.respond(true, false)
             return
         }
@@ -140,7 +148,7 @@ final class FilterInteractor: @unchecked Sendable {
         let decision = checkJailPath(rule: rule, path: fileEvent.path)
 
         let allowed = decision.isAllowed
-        logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public)")
+        logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
         fileEvent.respond(allowed, false)
 
         Task { [weak self] in
@@ -188,27 +196,27 @@ final class FilterInteractor: @unchecked Sendable {
 
     func handleFileAuth(_ fileEvent: FileAuthEvent) {
         let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+        logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
         Task { await self.evaluateFileAuth(fileEvent) }
     }
 
     private func evaluateFileAuth(_ fileEvent: FileAuthEvent) async {
         let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("FILEAUTH-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+        logger.debug("FILEAUTH-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
 
         let allowlist = allowlistStorage.withLock { $0 }
         let ancestorAllowlist = ancestorAllowlistStorage.withLock { $0 }
 
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
-            logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
+            logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
             fileEvent.respond(true, true)
             return
         }
 
         let rules = rulesStorage.withLock { $0 }
         let classification = classifyPath(fileEvent.path, rules: rules)
-        logger.debug("FILEAUTH-FAA pid=\(fileEvent.processID) process=\(name, privacy: .public) classification=\(String(describing: classification), privacy: .public)")
+        logger.debug("FILEAUTH-FAA pid=\(fileEvent.processID) process=\(name, privacy: .public) classification=\(String(describing: classification), privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
 
         let decision: PolicyDecision
         var dwellNanoseconds: UInt64 = 0
@@ -245,10 +253,10 @@ final class FilterInteractor: @unchecked Sendable {
                 signingID: fileEvent.signingID,
                 ancestryProvider: { [weak self, dwellStorage] in
                     guard let self else { return [] }
-                    logger.debug("FILEAUTH-WAIT-START pid=\(fileEvent.processID) process=\(name, privacy: .public)")
+                    logger.debug("FILEAUTH-WAIT-START pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
                     let dwell = await self.waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
                     dwellStorage.withLock { $0 = dwell }
-                    logger.debug("FILEAUTH-WAIT-DONE pid=\(fileEvent.processID) process=\(name, privacy: .public) dwellMs=\(dwell / 1_000_000)")
+                    logger.debug("FILEAUTH-WAIT-DONE pid=\(fileEvent.processID) process=\(name, privacy: .public) dwellMs=\(dwell / 1_000_000) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
                     return self.processTree.ancestors(of: fileEvent.processIdentity)
                 }
             )
