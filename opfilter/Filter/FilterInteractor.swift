@@ -125,7 +125,7 @@ final class FilterInteractor: @unchecked Sendable {
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true, false)
+            fileEvent.respond(true, true)
             return
         }
 
@@ -202,7 +202,7 @@ final class FilterInteractor: @unchecked Sendable {
         // Fast path: globally allowlisted processes bypass all rule evaluation.
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
             logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public)")
-            fileEvent.respond(true, false)
+            fileEvent.respond(true, true)
             return
         }
 
