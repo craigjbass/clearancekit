@@ -36,6 +36,7 @@ final class ESInboundAdapter {
             case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
                 guard !Self.isXProtectEvent(message) else {
                     logger.debug("ES-XPROTECT-MODIFY pid=\(pid) process=\(processName, privacy: .public) type=\(message.pointee.event_type.rawValue) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
+                    logger.debug("ES-RESPOND pid=\(pid) allowed=true cache=false op=xprotect ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                     es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
                     onXProtectChanged()
                     return
@@ -43,6 +44,7 @@ final class ESInboundAdapter {
                 Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
                 logger.debug("ES-OPEN-NIL-PATH pid=\(pid) process=\(processName, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
+                logger.debug("ES-RESPOND pid=\(pid) allowed=false cache=false op=open-nil-path ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
             case ES_EVENT_TYPE_AUTH_EXEC:
@@ -50,6 +52,7 @@ final class ESInboundAdapter {
                 let targetPath = Self.string(from: target.pointee.executable.pointee.path)
                 logger.debug("ES-EXEC pid=\(pid) process=\(processName, privacy: .public) target=\(targetPath, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 interactor.handleExec(newImage: processRecord(from: target))
+                logger.debug("ES-RESPOND pid=\(pid) allowed=true cache=false op=exec target=\(targetPath, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_FORK:
                 let child = message.pointee.event.fork.child.pointee
@@ -247,7 +250,9 @@ final class ESInboundAdapter {
 
     static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
         let path = string(from: message.pointee.event.open.file.pointee.path)
+        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
+            logger.debug("ES-RESPOND pid=\(pid) allowed=\(allowed) cache=\(cache) op=open path=\(path, privacy: .public) ttdMs=\(millisecondsToDeadline(message.pointee.deadline))")
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, cache)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, respond: respond)
@@ -259,7 +264,9 @@ final class ESInboundAdapter {
         operation: FileOperation,
         path: String
     ) -> FileAuthEvent {
+        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
+            logger.debug("ES-RESPOND pid=\(pid) allowed=\(allowed) cache=\(cache) op=\(operation.rawValue, privacy: .public) path=\(path, privacy: .public) ttdMs=\(millisecondsToDeadline(message.pointee.deadline))")
             es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, respond: respond)
