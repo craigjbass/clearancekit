@@ -100,7 +100,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func setJailEnabled(_ enabled: Bool) {
         if enabled {
-            FileManager.default.createFile(atPath: jailEnabledFile.path, contents: nil)
+            if !FileManager.default.createFile(atPath: jailEnabledFile.path, contents: nil) {
+                logger.error("XPCServer: Failed to create jail-enabled flag file")
+            }
             let rules = policyRepository.mergedJailRules()
             jailAdapter.start(initialRules: rules)
         } else {
