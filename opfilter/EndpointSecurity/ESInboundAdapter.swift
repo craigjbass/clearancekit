@@ -35,15 +35,18 @@ final class ESInboundAdapter {
                     onXProtectChanged()
                     return
                 }
-                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
-                // If path data is unavailable for an open event, deny at the adapter boundary
-                // before constructing a domain event.
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
             case ES_EVENT_TYPE_AUTH_EXEC:
-                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+                interactor.handleExec(newImage: processRecord(from: message.pointee.event.exec.target))
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+            case ES_EVENT_TYPE_NOTIFY_FORK:
+                interactor.handleFork(child: processRecord(from: message.pointee.event.fork.child))
+            case ES_EVENT_TYPE_NOTIFY_EXIT:
+                let token = message.pointee.process.pointee.audit_token
+                interactor.handleExit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
             case ES_EVENT_TYPE_AUTH_OPEN,
                  ES_EVENT_TYPE_AUTH_LINK,
                  ES_EVENT_TYPE_AUTH_CREATE,
@@ -51,10 +54,8 @@ final class ESInboundAdapter {
                  ES_EVENT_TYPE_AUTH_COPYFILE,
                  ES_EVENT_TYPE_AUTH_READDIR,
                  ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
-                 ES_EVENT_TYPE_AUTH_CLONE,
-                 ES_EVENT_TYPE_NOTIFY_FORK,
-                 ES_EVENT_TYPE_NOTIFY_EXIT:
-                interactor.handle(Self.filterEvent(from: message, esClient: esClient))
+                 ES_EVENT_TYPE_AUTH_CLONE:
+                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
             default:
                 fatalError("ESInboundAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
             }
@@ -160,44 +161,37 @@ final class ESInboundAdapter {
         return string(from: token).hasPrefix(xprotectPath)
     }
 
-    private static func filterEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FilterEvent {
+    private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor) {
         switch message.pointee.event_type {
-        case ES_EVENT_TYPE_NOTIFY_FORK:
-            return .fork(child: processRecord(from: message.pointee.event.fork.child))
-        case ES_EVENT_TYPE_AUTH_EXEC:
-            return .exec(newImage: processRecord(from: message.pointee.event.exec.target))
-        case ES_EVENT_TYPE_NOTIFY_EXIT:
-            let token = message.pointee.process.pointee.audit_token
-            return .exit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
         case ES_EVENT_TYPE_AUTH_OPEN:
-            return .fileAuth(openFileEvent(from: message, esClient: esClient))
+            interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient))
         case ES_EVENT_TYPE_AUTH_RENAME:
             let path = string(from: message.pointee.event.rename.source.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
         case ES_EVENT_TYPE_AUTH_UNLINK:
             let path = string(from: message.pointee.event.unlink.target.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
         case ES_EVENT_TYPE_AUTH_LINK:
             let path = string(from: message.pointee.event.link.source.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
         case ES_EVENT_TYPE_AUTH_CREATE:
             let path = createEventPath(from: message.pointee.event.create)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
         case ES_EVENT_TYPE_AUTH_TRUNCATE:
             let path = string(from: message.pointee.event.truncate.target.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
         case ES_EVENT_TYPE_AUTH_COPYFILE:
             let path = string(from: message.pointee.event.copyfile.source.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
         case ES_EVENT_TYPE_AUTH_READDIR:
             let path = string(from: message.pointee.event.readdir.target.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
         case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
             let path = string(from: message.pointee.event.exchangedata.file1.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
         case ES_EVENT_TYPE_AUTH_CLONE:
             let path = string(from: message.pointee.event.clone.source.pointee.path)
-            return .fileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
         }

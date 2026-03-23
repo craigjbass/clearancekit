@@ -70,15 +70,6 @@ private enum MachTime {
     }
 }
 
-// MARK: - FilterEvent
-
-enum FilterEvent {
-    case fork(child: ProcessRecord)
-    case exec(newImage: ProcessRecord)
-    case exit(identity: ProcessIdentity)
-    case fileAuth(FileAuthEvent)
-}
-
 // MARK: - FilterInteractor
 
 final class FilterInteractor: @unchecked Sendable {
@@ -178,27 +169,30 @@ final class FilterInteractor: @unchecked Sendable {
         }
     }
 
-    func handle(_ event: FilterEvent) {
-        switch event {
-        case .fork(let child):
-            let name = URL(fileURLWithPath: child.path).lastPathComponent
-            logger.debug("FORK pid=\(child.identity.pid) pidversion=\(child.identity.pidVersion) process=\(name, privacy: .public)")
-            processTree.insert(child)
-        case .exec(let newImage):
-            let name = URL(fileURLWithPath: newImage.path).lastPathComponent
-            logger.debug("EXEC pid=\(newImage.identity.pid) pidversion=\(newImage.identity.pidVersion) process=\(name, privacy: .public)")
-            processTree.insert(newImage)
-        case .exit(let identity):
-            logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
-            processTree.remove(identity: identity)
-        case .fileAuth(let fileEvent):
-            let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-            logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
-            Task { await self.handleFileAuth(fileEvent) }
-        }
+    func handleFork(child: ProcessRecord) {
+        let name = URL(fileURLWithPath: child.path).lastPathComponent
+        logger.debug("FORK pid=\(child.identity.pid) pidversion=\(child.identity.pidVersion) process=\(name, privacy: .public)")
+        processTree.insert(child)
     }
 
-    private func handleFileAuth(_ fileEvent: FileAuthEvent) async {
+    func handleExec(newImage: ProcessRecord) {
+        let name = URL(fileURLWithPath: newImage.path).lastPathComponent
+        logger.debug("EXEC pid=\(newImage.identity.pid) pidversion=\(newImage.identity.pidVersion) process=\(name, privacy: .public)")
+        processTree.insert(newImage)
+    }
+
+    func handleExit(identity: ProcessIdentity) {
+        logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
+        processTree.remove(identity: identity)
+    }
+
+    func handleFileAuth(_ fileEvent: FileAuthEvent) {
+        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
+        logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
+        Task { await self.evaluateFileAuth(fileEvent) }
+    }
+
+    private func evaluateFileAuth(_ fileEvent: FileAuthEvent) async {
         let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
         logger.debug("FILEAUTH-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public)")
 

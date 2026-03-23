@@ -89,7 +89,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
         let child = record(pid: 200, parentPID: 100, path: "/usr/bin/child")
 
-        interactor.handle(.fork(child: child))
+        interactor.handleFork(child: child)
 
         #expect(tree.insertedIdentities == [child.identity])
     }
@@ -100,7 +100,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
         let newImage = record(pid: 200, parentPID: 100, path: "/usr/bin/shell")
 
-        interactor.handle(.exec(newImage: newImage))
+        interactor.handleExec(newImage: newImage)
 
         #expect(tree.insertedIdentities == [newImage.identity])
     }
@@ -111,7 +111,7 @@ struct FilterInteractorTests {
         let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
         let processIdentity = identity(pid: 200)
 
-        interactor.handle(.exit(identity: processIdentity))
+        interactor.handleExit(identity: processIdentity)
 
         #expect(tree.removedIdentities == [processIdentity])
     }
@@ -128,7 +128,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -157,7 +157,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -184,7 +184,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == false)
@@ -209,7 +209,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -234,7 +234,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == false)
@@ -259,7 +259,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == false)
@@ -287,7 +287,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -322,7 +322,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -357,7 +357,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == false)
@@ -389,7 +389,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -418,7 +418,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -451,7 +451,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -478,7 +478,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -581,7 +581,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -616,7 +616,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
@@ -650,7 +650,7 @@ struct FilterInteractorTests {
             semaphore.signal()
         }
 
-        interactor.handle(.fileAuth(event))
+        interactor.handleFileAuth(event)
         semaphore.wait()
 
         #expect(allowed == true)
