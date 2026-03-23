@@ -83,6 +83,32 @@ struct FilterInteractorTests {
         )
     }
 
+    private func openFileEventCapturingCache(
+        path: String,
+        processPath: String = "/usr/bin/test",
+        teamID: String = "",
+        signingID: String = "",
+        processIdentity: ProcessIdentity? = nil,
+        deadline: UInt64 = 0,
+        respond: @escaping @Sendable (Bool, Bool) -> Void
+    ) -> FileAuthEvent {
+        FileAuthEvent(
+            operation: .open,
+            path: path,
+            processIdentity: processIdentity ?? identity(pid: 100),
+            processID: 100,
+            parentPID: 1,
+            processPath: processPath,
+            teamID: teamID,
+            signingID: signingID,
+            uid: 501,
+            gid: 20,
+            ttyPath: nil,
+            deadline: deadline,
+            respond: respond
+        )
+    }
+
     @Test("fork event inserts child into process tree")
     func forkInsertsChild() {
         let tree = FakeProcessTree()
@@ -291,6 +317,29 @@ struct FilterInteractorTests {
         semaphore.wait()
 
         #expect(allowed == true)
+    }
+
+    @Test("globally allowlisted process responds with cache enabled")
+    func globallyAllowlistedProcessCaches() {
+        let allowlistEntry = AllowlistEntry(signingID: "com.example.allowlisted", teamID: "ALLOWLISTED")
+        let tree = FakeProcessTree()
+        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [allowlistEntry], processTree: tree)
+        let semaphore = DispatchSemaphore(value: 0)
+        var cached: Bool?
+
+        let event = openFileEventCapturingCache(
+            path: "/any/path",
+            teamID: "ALLOWLISTED",
+            signingID: "com.example.allowlisted"
+        ) { _, cache in
+            cached = cache
+            semaphore.signal()
+        }
+
+        interactor.handleFileAuth(event)
+        semaphore.wait()
+
+        #expect(cached == true)
     }
 
     @Test("process allowed when ancestor matches ancestor allowlist entry")
@@ -549,6 +598,28 @@ struct FilterInteractorTests {
         interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
 
         #expect(allowed == true)
+    }
+
+    @Test("handleJailEventSync: globally allowlisted process responds with cache enabled")
+    func jailEventGloballyAllowlistedProcessCaches() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: []
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.child.process", teamID: "OTHER")
+        let interactor = FilterInteractor(
+            initialRules: [],
+            initialAllowlist: [allowlistEntry],
+            initialJailRules: [jailRule],
+            processTree: FakeProcessTree()
+        )
+        var cached: Bool?
+
+        let event = openFileEventCapturingCache(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { _, cache in cached = cache }
+        interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
+
+        #expect(cached == true)
     }
 
     // MARK: - Ancestor jail propagation via handleFileAuth
