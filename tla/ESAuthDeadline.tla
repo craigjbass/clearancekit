@@ -59,13 +59,13 @@ ASSUME FastTicks \in Nat /\ FastTicks >= 1
 Events == 1..NumEvents
 
 \* Sentinel: event has not been started / responded to yet.
-NONE == -1
+PENDING == -1
 
 (* Every event is either "fast" (globally allowed, no ancestry) or "slow"
    (waitForProcess path). We model all possible mixes via the initial state. *)
 VARIABLE eventKind,      \* eventKind[e] \in {"fast", "slow"}
-         startedAt,      \* startedAt[e]    -- tick a thread began (NONE = pending)
-         respondedAt,    \* respondedAt[e]  -- tick respond() called (NONE = pending)
+         startedAt,      \* startedAt[e]    -- tick a thread began (PENDING = pending)
+         respondedAt,    \* respondedAt[e]  -- tick respond() called (PENDING = pending)
          busyUntil,      \* busyUntil[t]    -- tick thread t becomes free (0 = idle)
          tick,           \* global discrete clock
          pendingQueue    \* FIFO of events awaiting a thread
@@ -78,7 +78,7 @@ Duration(e) == IF eventKind[e] = "slow" THEN SlowTicks ELSE FastTicks
 
 FreeThreads == { t \in 1..PoolSize : busyUntil[t] <= tick }
 
-AllDone == \A e \in Events : respondedAt[e] /= NONE
+AllDone == \A e \in Events : respondedAt[e] /= PENDING
 
 \* ---- Initial state ----
 (* All events arrive at tick 0 (worst-case burst).  Each event is
@@ -86,8 +86,8 @@ AllDone == \A e \in Events : respondedAt[e] /= NONE
 
 Init ==
     /\ eventKind    \in [Events -> {"fast", "slow"}]
-    /\ startedAt    = [e \in Events |-> NONE]
-    /\ respondedAt  = [e \in Events |-> NONE]
+    /\ startedAt    = [e \in Events |-> PENDING]
+    /\ respondedAt  = [e \in Events |-> PENDING]
     /\ busyUntil    = [t \in 1..PoolSize |-> 0]
     /\ tick         = 0
     /\ pendingQueue = [i \in 1..NumEvents |-> i]
@@ -140,8 +140,8 @@ Spec == Init /\ [][Next]_vars /\ WF_vars(Dispatch) /\ WF_vars(Tick)
    Violation of either means the ES client would be killed. *)
 NoDeadlineMiss ==
     \A e \in Events :
-        \/ respondedAt[e] /= NONE /\ respondedAt[e] <= Deadline
-        \/ respondedAt[e] = NONE  /\ tick <= Deadline
+        \/ respondedAt[e] /= PENDING /\ respondedAt[e] <= Deadline
+        \/ respondedAt[e] = PENDING  /\ tick <= Deadline
 
 \* ---- Derived: capacity formula ----
 (*
