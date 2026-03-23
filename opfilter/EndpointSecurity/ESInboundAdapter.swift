@@ -26,7 +26,7 @@ final class ESInboundAdapter {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
             let processName = Self.processName(from: message)
-            let pid = audit_token_to_pid(message.pointee.process.pointee.audit_token)
+            let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
 
             switch message.pointee.event_type {
             case ES_EVENT_TYPE_NOTIFY_WRITE:
@@ -53,7 +53,7 @@ final class ESInboundAdapter {
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_FORK:
                 let child = message.pointee.event.fork.child.pointee
-                let childPID = audit_token_to_pid(child.audit_token)
+                let childPID = pid_t(bitPattern: child.audit_token.val.5)
                 let childPath = Self.string(from: child.executable.pointee.path)
                 logger.debug("ES-FORK pid=\(pid) process=\(processName, privacy: .public) childPID=\(childPID) childProcess=\(childPath, privacy: .public)")
                 interactor.handleFork(child: processRecord(from: message.pointee.event.fork.child))
@@ -177,7 +177,7 @@ final class ESInboundAdapter {
 
     private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor) {
         let processName = processName(from: message)
-        let pid = audit_token_to_pid(message.pointee.process.pointee.audit_token)
+        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
 
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_AUTH_OPEN:
