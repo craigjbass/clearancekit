@@ -15,6 +15,7 @@ final class JailStore: ObservableObject {
 
     @Published private(set) var managedRules: [JailRule] = []
     @Published private(set) var userRules: [JailRule] = []
+    @Published private(set) var isEnabled: Bool = false
 
     private let service: PolicyServiceProtocol
     private let authenticate: Authenticate
@@ -32,6 +33,17 @@ final class JailStore: ObservableObject {
 
     func receivedUserRules(_ rules: [JailRule]) {
         userRules = rules
+    }
+
+    func receivedJailEnabled(_ enabled: Bool) {
+        isEnabled = enabled
+    }
+
+    // MARK: - Jail toggle
+
+    func setEnabled(_ enabled: Bool) {
+        isEnabled = enabled
+        service.setJailEnabled(enabled)
     }
 
     // MARK: - Mutations

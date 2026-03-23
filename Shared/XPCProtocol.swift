@@ -279,6 +279,10 @@ public protocol ServiceProtocol {
     // opfilter re-signs the suspect data and loads it. If false, opfilter clears
     // all user rules and allowlist entries.
     func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void)
+
+    // Jail feature toggle. When enabled, opfilter creates the jail ES client;
+    // when disabled, it tears it down. Default is disabled.
+    func setJailEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
 }
 
 // MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
@@ -296,6 +300,9 @@ public protocol ClientProtocol {
     func userAncestorAllowlistUpdated(_ allowlistData: NSData)
     func managedJailRulesUpdated(_ rulesData: NSData)
     func userJailRulesUpdated(_ rulesData: NSData)
+    // Opfilter pushes the current jail-enabled state on connect and whenever it
+    // changes. The GUI uses this to show/hide jail UI accordingly.
+    func jailEnabledUpdated(_ enabled: Bool)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)

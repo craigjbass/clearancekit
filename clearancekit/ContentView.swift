@@ -151,6 +151,8 @@ struct SetupView: View {
             fullDiskAccessRow
             Divider()
             connectionStatusRow
+            Divider()
+            jailToggleRow
             Spacer()
             Divider()
             versionRow
@@ -242,6 +244,26 @@ struct SetupView: View {
             Button("Resync") { xpcClient.requestResync() }
                 .disabled(!xpcClient.isConnected)
             Button("Quit GUI") { NSApplication.shared.terminate(nil) }
+        }
+        .padding()
+    }
+
+    private var jailToggleRow: some View {
+        HStack {
+            Toggle(isOn: Binding(
+                get: { jailStore.isEnabled },
+                set: { jailStore.setEnabled($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("App Jail:")
+                        .font(.headline)
+                    Text("Experimental — system performance may be degraded")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.checkbox)
+            .disabled(!xpcClient.isConnected)
         }
         .padding()
     }

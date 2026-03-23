@@ -12,6 +12,7 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "xpc-server")
 
 private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
+private let jailEnabledFile = URL(fileURLWithPath: "/Library/Application Support/clearancekit/jail-enabled")
 
 final class XPCServer: NSObject, @unchecked Sendable {
     private var listener: NSXPCListener?
@@ -79,6 +80,37 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     func mergedJailRules() -> [JailRule] {
         policyRepository.mergedJailRules()
+    }
+
+    // MARK: - Jail adapter lifecycle
+
+    var isJailEnabled: Bool {
+        FileManager.default.fileExists(atPath: jailEnabledFile.path)
+    }
+
+    func startJailAdapterIfEnabled() {
+        guard isJailEnabled else {
+            logger.info("XPCServer: Jail adapter disabled — skipping ES subscription")
+            return
+        }
+        let rules = policyRepository.mergedJailRules()
+        jailAdapter.start(initialRules: rules)
+        logger.info("XPCServer: Jail adapter enabled — started with \(rules.count) rule(s)")
+    }
+
+    fileprivate func setJailEnabled(_ enabled: Bool) {
+        if enabled {
+            if !FileManager.default.createFile(atPath: jailEnabledFile.path, contents: nil) {
+                logger.error("XPCServer: Failed to create jail-enabled flag file")
+            }
+            let rules = policyRepository.mergedJailRules()
+            jailAdapter.start(initialRules: rules)
+        } else {
+            try? FileManager.default.removeItem(at: jailEnabledFile)
+            jailAdapter.stop()
+        }
+        broadcaster.broadcastToAllClients { $0.jailEnabledUpdated(enabled) }
+        logger.info("XPCServer: Jail \(enabled ? "enabled" : "disabled", privacy: .public)")
     }
 
     // MARK: - Filter application
@@ -252,6 +284,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy?.userAncestorAllowlistUpdated(policyRepository.encodedUserAncestorAllowlist())
         proxy?.managedJailRulesUpdated(policyRepository.encodedManagedJailRules())
         proxy?.userJailRulesUpdated(policyRepository.encodedUserJailRules())
+        proxy?.jailEnabledUpdated(isJailEnabled)
     }
 }
 
@@ -465,6 +498,12 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void) {
         server?.resolveSignatureIssue(approved: approved)
         reply()
+    }
+
+    func setJailEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.setJailEnabled(enabled)
+        reply(true)
     }
 }
 
