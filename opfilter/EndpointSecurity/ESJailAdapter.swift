@@ -73,6 +73,12 @@ final class ESJailAdapter {
     // MARK: - Startup
 
     func start(initialRules: [JailRule]) {
+        guard client == nil else {
+            logger.warning("ESJailAdapter: already started — updating rules only")
+            rulesLock.withLock { $0 = initialRules }
+            return
+        }
+
         let interactor = self.interactor
         let jailedProcessesLock = self.jailedProcessesLock
         let rulesLock = self.rulesLock
@@ -250,6 +256,16 @@ final class ESJailAdapter {
 
         rulesLock.withLock { $0 = initialRules }
         logger.info("ESJailAdapter: started with \(initialRules.count) initial jail rule(s)")
+    }
+
+    // MARK: - Lifecycle
+
+    func stop() {
+        guard let client else { return }
+        es_delete_client(client)
+        self.client = nil
+        jailedProcessesLock.withLock { $0.removeAll() }
+        logger.info("ESJailAdapter: stopped — ES client deleted, tracking state cleared")
     }
 
     // MARK: - Rule updates

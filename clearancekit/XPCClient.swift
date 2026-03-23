@@ -328,6 +328,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setJailEnabled(_ enabled: Bool) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setJailEnabled error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setJailEnabled(enabled) { success in
+            if !success { logger.error("XPCClient: setJailEnabled rejected by service") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -571,6 +580,12 @@ extension XPCClient: ClientProtocol {
         }
         Task { @MainActor in
             JailStore.shared.receivedUserRules(rules)
+        }
+    }
+
+    nonisolated func jailEnabledUpdated(_ enabled: Bool) {
+        Task { @MainActor in
+            JailStore.shared.receivedJailEnabled(enabled)
         }
     }
 }
