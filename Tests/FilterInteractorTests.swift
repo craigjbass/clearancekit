@@ -43,7 +43,8 @@ private func makeInteractor(
     allowlist: [AllowlistEntry] = [],
     ancestorAllowlist: [AncestorAllowlistEntry] = [],
     jailRules: [JailRule] = [],
-    processTree: ProcessTreeProtocol
+    processTree: ProcessTreeProtocol,
+    processTreeQueue: DispatchQueue = DispatchQueue(label: "test.process-tree")
 ) -> FilterInteractor {
     let ref = WeakBox<FilterInteractor>()
     let pipeline = FileAuthPipeline(
@@ -59,7 +60,8 @@ private func makeInteractor(
         initialAncestorAllowlist: ancestorAllowlist,
         initialJailRules: jailRules,
         processTree: processTree,
-        pipeline: pipeline
+        pipeline: pipeline,
+        processTreeQueue: processTreeQueue
     )
     ref.value = interactor
     pipeline.start()
@@ -142,10 +144,12 @@ struct FilterInteractorTests {
     @Test("fork event inserts child into process tree")
     func forkInsertsChild() {
         let tree = FakeProcessTree()
-        let interactor = makeInteractor(processTree: tree)
+        let queue = DispatchQueue(label: "test.process-tree")
+        let interactor = makeInteractor(processTree: tree, processTreeQueue: queue)
         let child = record(pid: 200, parentPID: 100, path: "/usr/bin/child")
 
         interactor.handleFork(child: child)
+        queue.sync {}
 
         #expect(tree.insertedIdentities == [child.identity])
     }
@@ -153,10 +157,12 @@ struct FilterInteractorTests {
     @Test("exec event inserts new image into process tree")
     func execInsertsNewImage() {
         let tree = FakeProcessTree()
-        let interactor = makeInteractor(processTree: tree)
+        let queue = DispatchQueue(label: "test.process-tree")
+        let interactor = makeInteractor(processTree: tree, processTreeQueue: queue)
         let newImage = record(pid: 200, parentPID: 100, path: "/usr/bin/shell")
 
         interactor.handleExec(newImage: newImage)
+        queue.sync {}
 
         #expect(tree.insertedIdentities == [newImage.identity])
     }
@@ -164,10 +170,12 @@ struct FilterInteractorTests {
     @Test("exit event removes identity from process tree")
     func exitRemovesIdentity() {
         let tree = FakeProcessTree()
-        let interactor = makeInteractor(processTree: tree)
+        let queue = DispatchQueue(label: "test.process-tree")
+        let interactor = makeInteractor(processTree: tree, processTreeQueue: queue)
         let processIdentity = identity(pid: 200)
 
         interactor.handleExit(identity: processIdentity)
+        queue.sync {}
 
         #expect(tree.removedIdentities == [processIdentity])
     }

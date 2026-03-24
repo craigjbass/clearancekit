@@ -93,6 +93,7 @@ final class FilterInteractor: @unchecked Sendable {
     private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
     private let jailRulesStorage: OSAllocatedUnfairLock<[JailRule]>
     private let processTree: ProcessTreeProtocol
+    private let processTreeQueue: DispatchQueue
     private let postRespondQueue: DispatchQueue
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
@@ -105,6 +106,7 @@ final class FilterInteractor: @unchecked Sendable {
         initialJailRules: [JailRule] = [],
         processTree: ProcessTreeProtocol,
         pipeline: FileAuthPipeline,
+        processTreeQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree", qos: .userInitiated),
         postRespondQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
     ) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
@@ -113,6 +115,7 @@ final class FilterInteractor: @unchecked Sendable {
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
         self.pipeline = pipeline
+        self.processTreeQueue = processTreeQueue
         self.postRespondQueue = postRespondQueue
     }
 
@@ -176,15 +179,15 @@ final class FilterInteractor: @unchecked Sendable {
     }
 
     func handleFork(child: ProcessRecord) {
-        processTree.insert(child)
+        processTreeQueue.async { [self] in processTree.insert(child) }
     }
 
     func handleExec(newImage: ProcessRecord) {
-        processTree.insert(newImage)
+        processTreeQueue.async { [self] in processTree.insert(newImage) }
     }
 
     func handleExit(identity: ProcessIdentity) {
-        processTree.remove(identity: identity)
+        processTreeQueue.async { [self] in processTree.remove(identity: identity) }
     }
 
     func handleFileAuth(_ fileEvent: FileAuthEvent) {

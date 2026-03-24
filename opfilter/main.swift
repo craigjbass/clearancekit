@@ -14,6 +14,7 @@ let slowWorkerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.s
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
 let eventSignal = DispatchSemaphore(value: 0)
 let slowSignal = DispatchSemaphore(value: 0)
+let processTreeQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree", qos: .userInitiated)
 let postRespondQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
 let xpcServerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
 
@@ -55,6 +56,7 @@ let interactor = FilterInteractor(
     initialRules: faaPolicy,
     processTree: processTree,
     pipeline: pipeline,
+    processTreeQueue: processTreeQueue,
     postRespondQueue: postRespondQueue
 )
 interactorRef.value = interactor
