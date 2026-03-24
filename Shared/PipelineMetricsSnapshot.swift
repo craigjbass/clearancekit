@@ -15,6 +15,8 @@ public final class PipelineMetricsSnapshot: NSObject, NSSecureCoding {
     public let slowQueueEnqueueCount: UInt64
     public let slowQueueDropCount: UInt64
     public let slowPathProcessedCount: UInt64
+    public let jailEvaluatedCount: UInt64
+    public let jailDenyCount: UInt64
     public let timestamp: Date
 
     public init(
@@ -25,6 +27,8 @@ public final class PipelineMetricsSnapshot: NSObject, NSSecureCoding {
         slowQueueEnqueueCount: UInt64,
         slowQueueDropCount: UInt64,
         slowPathProcessedCount: UInt64,
+        jailEvaluatedCount: UInt64,
+        jailDenyCount: UInt64,
         timestamp: Date = Date()
     ) {
         self.eventBufferEnqueueCount = eventBufferEnqueueCount
@@ -34,6 +38,8 @@ public final class PipelineMetricsSnapshot: NSObject, NSSecureCoding {
         self.slowQueueEnqueueCount   = slowQueueEnqueueCount
         self.slowQueueDropCount      = slowQueueDropCount
         self.slowPathProcessedCount  = slowPathProcessedCount
+        self.jailEvaluatedCount      = jailEvaluatedCount
+        self.jailDenyCount           = jailDenyCount
         self.timestamp               = timestamp
     }
 
@@ -45,6 +51,8 @@ public final class PipelineMetricsSnapshot: NSObject, NSSecureCoding {
         slowQueueEnqueueCount   = UInt64(bitPattern: coder.decodeInt64(forKey: "slowQueueEnqueueCount"))
         slowQueueDropCount      = UInt64(bitPattern: coder.decodeInt64(forKey: "slowQueueDropCount"))
         slowPathProcessedCount  = UInt64(bitPattern: coder.decodeInt64(forKey: "slowPathProcessedCount"))
+        jailEvaluatedCount      = UInt64(bitPattern: coder.decodeInt64(forKey: "jailEvaluatedCount"))
+        jailDenyCount           = UInt64(bitPattern: coder.decodeInt64(forKey: "jailDenyCount"))
         timestamp = (coder.decodeObject(of: NSDate.self, forKey: "timestamp") as Date?) ?? Date()
     }
 
@@ -56,6 +64,8 @@ public final class PipelineMetricsSnapshot: NSObject, NSSecureCoding {
         coder.encode(Int64(bitPattern: slowQueueEnqueueCount),   forKey: "slowQueueEnqueueCount")
         coder.encode(Int64(bitPattern: slowQueueDropCount),      forKey: "slowQueueDropCount")
         coder.encode(Int64(bitPattern: slowPathProcessedCount),  forKey: "slowPathProcessedCount")
+        coder.encode(Int64(bitPattern: jailEvaluatedCount),      forKey: "jailEvaluatedCount")
+        coder.encode(Int64(bitPattern: jailDenyCount),           forKey: "jailDenyCount")
         coder.encode(timestamp as NSDate,                         forKey: "timestamp")
     }
 }

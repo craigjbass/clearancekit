@@ -12,3 +12,8 @@ struct PipelineMetrics: Sendable {
     var slowQueueDropCount: UInt64 = 0
     var slowPathProcessedCount: UInt64 = 0
 }
+
+struct JailMetrics: Sendable {
+    var jailEvaluatedCount: UInt64 = 0
+    var jailDenyCount: UInt64 = 0
+}

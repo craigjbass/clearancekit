@@ -11,7 +11,7 @@ struct MetricsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Pipeline throughput — events per second over the last 60 seconds")
+            Text("Pipeline throughput — events per second over the last 60 seconds (simple, ancestry, jail)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding()
@@ -85,10 +85,16 @@ struct MetricsView: View {
             let currDrop = curr.eventBufferDropCount + curr.slowQueueDropCount
             let prevDrop = prev.eventBufferDropCount + prev.slowQueueDropCount
             let drop = currDrop >= prevDrop ? Double(currDrop - prevDrop) : 0
+            let jail = curr.jailEvaluatedCount >= prev.jailEvaluatedCount
+                     ? Double(curr.jailEvaluatedCount - prev.jailEvaluatedCount) : 0
+            let jailDeny = curr.jailDenyCount >= prev.jailDenyCount
+                         ? Double(curr.jailDenyCount - prev.jailDenyCount) : 0
 
-            points.append(ChartPoint(id: "\(key)-hot",  timestamp: t, rate: hot,  series: "Hot path"))
-            points.append(ChartPoint(id: "\(key)-slow", timestamp: t, rate: slow, series: "Slow path"))
-            points.append(ChartPoint(id: "\(key)-drop", timestamp: t, rate: drop, series: "Drops"))
+            points.append(ChartPoint(id: "\(key)-hot",       timestamp: t, rate: hot,      series: "Simple events"))
+            points.append(ChartPoint(id: "\(key)-slow",      timestamp: t, rate: slow,     series: "Ancestry events"))
+            points.append(ChartPoint(id: "\(key)-drop",      timestamp: t, rate: drop,     series: "Drops"))
+            points.append(ChartPoint(id: "\(key)-jail",      timestamp: t, rate: jail,     series: "Jail events"))
+            points.append(ChartPoint(id: "\(key)-jail-deny", timestamp: t, rate: jailDeny, series: "Jail denies"))
         }
         return points
     }

@@ -92,6 +92,7 @@ final class FilterInteractor: @unchecked Sendable {
     private let allowlistStorage: OSAllocatedUnfairLock<[AllowlistEntry]>
     private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
     private let jailRulesStorage: OSAllocatedUnfairLock<[JailRule]>
+    private let jailMetricsStorage: OSAllocatedUnfairLock<JailMetrics>
     private let processTree: ProcessTreeProtocol
     private let processTreeQueue: DispatchQueue
     private let postRespondQueue: DispatchQueue
@@ -113,6 +114,7 @@ final class FilterInteractor: @unchecked Sendable {
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
         self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
+        self.jailMetricsStorage = OSAllocatedUnfairLock(initialState: JailMetrics())
         self.processTree = processTree
         self.pipeline = pipeline
         self.processTreeQueue = processTreeQueue
@@ -129,6 +131,10 @@ final class FilterInteractor: @unchecked Sendable {
 
     func currentAncestorAllowlist() -> [AncestorAllowlistEntry] {
         ancestorAllowlistStorage.withLock { $0 }
+    }
+
+    func jailMetrics() -> JailMetrics {
+        jailMetricsStorage.withLock { $0 }
     }
 
     func updatePolicy(_ rules: [FAARule]) {
@@ -173,6 +179,10 @@ final class FilterInteractor: @unchecked Sendable {
 
         let decision = checkJailPath(rule: rule, path: fileEvent.path)
         fileEvent.respond(decision.isAllowed, false)
+        jailMetricsStorage.withLock {
+            $0.jailEvaluatedCount += 1
+            if !decision.isAllowed { $0.jailDenyCount += 1 }
+        }
 
         let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
         postRespond(fileEvent: fileEvent, decision: decision, ancestors: ancestors, dwellNanoseconds: 0)

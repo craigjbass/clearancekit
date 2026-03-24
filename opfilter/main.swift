@@ -96,7 +96,8 @@ let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
 metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
 metricsTimer.setEventHandler {
     let m = pipeline.metrics()
-    server.pushMetrics(m)
+    let jm = interactor.jailMetrics()
+    server.pushMetrics(m, jail: jm)
     metricsLogger.info("""
     pipeline_metrics \
     eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
@@ -105,7 +106,9 @@ metricsTimer.setEventHandler {
     hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
     slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
     slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
-    slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public)
+    slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public) \
+    jailEvaluatedCount=\(jm.jailEvaluatedCount, privacy: .public) \
+    jailDenyCount=\(jm.jailDenyCount, privacy: .public)
     """)
 }
 metricsTimer.resume()
