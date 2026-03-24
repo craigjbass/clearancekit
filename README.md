@@ -69,7 +69,7 @@ ClearanceKit occupies a specific part of the macOS endpoint security space. Two 
 
 Two components work together:
 
-- **clearancekit.app** — SwiftUI menu bar app. Manages policies, displays live events, and communicates with the system extension over XPC.
+- **clearancekit.app** — SwiftUI sidebar app. Manages policies, displays live events, renders a real-time pipeline throughput graph, and communicates with the system extension over XPC.
 - **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Runs two Endpoint Security clients: one for path-based policy enforcement that intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`, `AUTH_EXCHANGEDATA`, `AUTH_CLONE`), and a second dedicated jail client that tracks jailed processes by audit token and denies file access outside their allowed path prefixes. Both clients evaluate policies and serve the GUI over XPC.
 
 ## Development
