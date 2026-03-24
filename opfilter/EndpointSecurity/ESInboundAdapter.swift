@@ -14,42 +14,60 @@ final class ESInboundAdapter {
     static let xprotectPath = "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS"
 
     private let interactor: FilterInteractor
+    private let esAdapterQueue: DispatchQueue
     private var client: OpaquePointer?
     private var policyPrefixes: Set<String> = []
     private var discoveryPrefixes: Set<String> = []
 
-    init(interactor: FilterInteractor) {
+    init(
+        interactor: FilterInteractor,
+        esAdapterQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter", qos: .userInteractive, autoreleaseFrequency: .never)
+    ) {
         self.interactor = interactor
+        self.esAdapterQueue = esAdapterQueue
     }
 
     func start(initialRules: [FAARule], onXProtectChanged: @escaping () -> Void) {
         let interactor = self.interactor
+        let esAdapterQueue = self.esAdapterQueue
         let res = es_new_client(&client) { (esClient, message) in
             let correlationID = UUID()
 
             switch message.pointee.event_type {
             case ES_EVENT_TYPE_NOTIFY_WRITE:
-                guard Self.isXProtectEvent(message) else { return }
-                onXProtectChanged()
-            case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
-                guard !Self.isXProtectEvent(message) else {
-                    es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                let isXProtect = Self.isXProtectEvent(message)
+                esAdapterQueue.async {
+                    guard isXProtect else { return }
                     onXProtectChanged()
-                    return
                 }
-                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
-            case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
-                logger.error("Path invariant not met. Got nil path.")
-                es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
-                return
             case ES_EVENT_TYPE_NOTIFY_EXEC:
-                let target = message.pointee.event.exec.target
-                interactor.handleExec(newImage: processRecord(from: target))
+                let record = processRecord(from: message.pointee.event.exec.target)
+                esAdapterQueue.async { interactor.handleExec(newImage: record) }
             case ES_EVENT_TYPE_NOTIFY_FORK:
-                interactor.handleFork(child: processRecord(from: message.pointee.event.fork.child))
+                let child = processRecord(from: message.pointee.event.fork.child)
+                esAdapterQueue.async { interactor.handleFork(child: child) }
             case ES_EVENT_TYPE_NOTIFY_EXIT:
                 let token = message.pointee.process.pointee.audit_token
-                interactor.handleExit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
+                let identity = ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7)
+                esAdapterQueue.async { interactor.handleExit(identity: identity) }
+            case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
+                es_retain_message(message)
+                esAdapterQueue.async {
+                    guard !Self.isXProtectEvent(message) else {
+                        es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
+                        es_release_message(message)
+                        onXProtectChanged()
+                        return
+                    }
+                    Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
+                }
+            case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
+                es_retain_message(message)
+                esAdapterQueue.async {
+                    logger.error("Path invariant not met. Got nil path.")
+                    es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
+                    es_release_message(message)
+                }
             case ES_EVENT_TYPE_AUTH_OPEN,
                  ES_EVENT_TYPE_AUTH_LINK,
                  ES_EVENT_TYPE_AUTH_CREATE,
@@ -58,7 +76,10 @@ final class ESInboundAdapter {
                  ES_EVENT_TYPE_AUTH_READDIR,
                  ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
                  ES_EVENT_TYPE_AUTH_CLONE:
-                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
+                es_retain_message(message)
+                esAdapterQueue.async {
+                    Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
+                }
             default:
                 fatalError("ESInboundAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
             }
@@ -199,6 +220,7 @@ final class ESInboundAdapter {
         let path = string(from: message.pointee.event.open.file.pointee.path)
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, cache)
+            es_release_message(message)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, correlationID: correlationID, respond: respond)
     }
@@ -212,6 +234,7 @@ final class ESInboundAdapter {
     ) -> FileAuthEvent {
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
             es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
+            es_release_message(message)
         }
         return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, correlationID: correlationID, respond: respond)
     }
