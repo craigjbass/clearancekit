@@ -8,15 +8,18 @@
 import Foundation
 import OSLog
 
-let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background)
-let hotPathQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive)
-let slowWorkerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent)
+let evictionQueue    = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background,      autoreleaseFrequency: .never)
+let hotPathQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot",          qos: .userInteractive,  autoreleaseFrequency: .never)
+let slowWorkerQueue  = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow",         qos: .userInitiated,    attributes: .concurrent, autoreleaseFrequency: .never)
+let processTreeQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree",          qos: .userInitiated,    autoreleaseFrequency: .never)
+let postRespondQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond",          qos: .background,       autoreleaseFrequency: .never)
+let xpcServerQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server",            qos: .userInitiated,    autoreleaseFrequency: .never)
+let metricsQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.metrics",               qos: .utility,          autoreleaseFrequency: .never)
+let cleanupQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.cleanup",               qos: .background,       autoreleaseFrequency: .never)
+
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
 let eventSignal = DispatchSemaphore(value: 0)
 let slowSignal = DispatchSemaphore(value: 0)
-let processTreeQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree", qos: .userInitiated)
-let postRespondQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
-let xpcServerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
 
 let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
@@ -88,26 +91,28 @@ server.startJailAdapterIfEnabled()
 adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXProtectChange() })
 
 let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
-let metricsQueue = DispatchQueue(label: "uk.craigbass.clearancekit.metrics", qos: .utility)
-let timer = DispatchSource.makeTimerSource(queue: metricsQueue)
-
-timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
-
-timer.setEventHandler {
+let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
+metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
+metricsTimer.setEventHandler {
     let m = pipeline.metrics()
-
-        metricsLogger.info("""
-        pipeline_metrics \
-        eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
-        eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
-        hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
-        hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
-        slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
-        slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
-        slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public)
-        """)
+    metricsLogger.info("""
+    pipeline_metrics \
+    eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
+    eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
+    hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
+    hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
+    slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
+    slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
+    slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public)
+    """)
 }
+metricsTimer.resume()
 
-timer.resume()
+let cleanupTimer = DispatchSource.makeTimerSource(queue: cleanupQueue)
+cleanupTimer.schedule(deadline: .now() + .seconds(60), repeating: .seconds(60))
+cleanupTimer.setEventHandler {
+    autoreleasepool {}
+}
+cleanupTimer.resume()
 
 dispatchMain()
