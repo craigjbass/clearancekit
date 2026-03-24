@@ -72,6 +72,7 @@ final class ESInboundAdapter {
         // Invert target-path muting so only muted prefixes generate events.
         // We then mute exactly the protected path prefixes from the active policy,
         // so the kernel delivers events only for files we actually care about.
+        es_unmute_all_target_paths(client!)
         es_invert_muting(client!, ES_MUTE_INVERSION_TYPE_TARGET_PATH)
         applyMutedPrefixes(from: initialRules)
 
