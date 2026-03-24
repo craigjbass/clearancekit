@@ -43,7 +43,7 @@ struct FileAuthEvent: Sendable {
 
 // MARK: - MachTime
 
-private enum MachTime {
+enum MachTime {
     /// How far before the ES deadline we stop waiting, in nanoseconds.
     static let safetyMarginNanoseconds: UInt64 = 100_000_000 // 100 ms
 
@@ -90,6 +90,7 @@ final class FilterInteractor: @unchecked Sendable {
     private let processTree: ProcessTreeProtocol
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
+    let pipeline: FileAuthPipeline
 
     init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], initialJailRules: [JailRule] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
@@ -97,6 +98,23 @@ final class FilterInteractor: @unchecked Sendable {
         self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
+
+        let postRespondRef = OSAllocatedUnfairLock<(@Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void)?>(initialState: nil)
+        self.pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [rulesStorage] in rulesStorage.withLock { $0 } },
+            allowlistProvider: { [allowlistStorage] in allowlistStorage.withLock { $0 } },
+            ancestorAllowlistProvider: { [ancestorAllowlistStorage] in ancestorAllowlistStorage.withLock { $0 } },
+            postRespond: { event, decision, ancestors, dwell in
+                postRespondRef.withLock { $0?(event, decision, ancestors, dwell) }
+            }
+        )
+        postRespondRef.withLock { [weak self] in
+            $0 = { event, decision, ancestors, dwell in
+                self?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+            }
+        }
+        pipeline.start()
     }
 
     func updatePolicy(_ rules: [FAARule]) {
@@ -154,26 +172,7 @@ final class FilterInteractor: @unchecked Sendable {
         Task { [weak self] in
             guard let self else { return }
             let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
-            auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: 0)
-            if !allowed {
-                ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
-            }
-            let folderEvent = FolderOpenEvent(
-                operation: fileEvent.operation.rawValue,
-                path: fileEvent.path,
-                timestamp: Date(),
-                processID: fileEvent.processID,
-                processPath: fileEvent.processPath,
-                teamID: fileEvent.teamID,
-                signingID: fileEvent.signingID,
-                accessAllowed: allowed,
-                decisionReason: decision.reason,
-                ancestors: ancestors,
-                matchedRuleID: decision.matchedRuleID,
-                jailedRuleID: decision.jailedRuleID
-            )
-            let callback = onEvent
-            DispatchQueue.main.async { callback?(folderEvent) }
+            postRespond(fileEvent: fileEvent, decision: decision, ancestors: ancestors, dwellNanoseconds: 0)
         }
     }
 
@@ -197,83 +196,13 @@ final class FilterInteractor: @unchecked Sendable {
     func handleFileAuth(_ fileEvent: FileAuthEvent) {
         let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
         logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-        Task { await self.evaluateFileAuth(fileEvent) }
+        pipeline.submit(fileEvent)
     }
 
-    private func evaluateFileAuth(_ fileEvent: FileAuthEvent) async {
-        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("FILEAUTH-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-
-        let allowlist = allowlistStorage.withLock { $0 }
-        let ancestorAllowlist = ancestorAllowlistStorage.withLock { $0 }
-
-        // Fast path: globally allowlisted processes bypass all rule evaluation.
-        if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
-            logger.debug("FILEAUTH-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-            fileEvent.respond(true, true)
-            return
-        }
-
-        let rules = rulesStorage.withLock { $0 }
-        let classification = classifyPath(fileEvent.path, rules: rules)
-        logger.debug("FILEAUTH-FAA pid=\(fileEvent.processID) process=\(name, privacy: .public) classification=\(String(describing: classification), privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-
-        let decision: PolicyDecision
-        var dwellNanoseconds: UInt64 = 0
-
-        switch classification {
-        case .noRuleApplies:
-            // No rule covers this path — default allow. The ancestor allowlist only
-            // needs to be checked when a policy rule could deny access; for paths
-            // with no rules the access is allowed regardless of ancestry.
-            decision = .noRuleApplies
-
-        case .processLevelOnly where ancestorAllowlist.isEmpty:
-            // Matching rule has only process-level criteria and the ancestor
-            // allowlist is empty — evaluate immediately with no ancestry fetch.
-            decision = await evaluateAccess(
-                rules: rules, allowlist: allowlist, ancestorAllowlist: [],
-                path: fileEvent.path,
-                processPath: fileEvent.processPath,
-                teamID: fileEvent.teamID,
-                signingID: fileEvent.signingID
-            )
-
-        case .processLevelOnly, .ancestryRequired:
-            // Either the ancestor allowlist is non-empty (so we must check ancestors
-            // even for process-level rules) or the rule itself requires ancestry.
-            // Pass a lazy provider so the potentially expensive process-tree wait is
-            // deferred until a criterion actually requires it.
-            let dwellStorage = OSAllocatedUnfairLock<UInt64>(initialState: 0)
-            decision = await evaluateAccess(
-                rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist,
-                path: fileEvent.path,
-                processPath: fileEvent.processPath,
-                teamID: fileEvent.teamID,
-                signingID: fileEvent.signingID,
-                ancestryProvider: { [weak self, dwellStorage] in
-                    guard let self else { return [] }
-                    logger.debug("FILEAUTH-WAIT-START pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-                    let dwell = await self.waitForProcess(fileEvent.processIdentity, deadline: fileEvent.deadline)
-                    dwellStorage.withLock { $0 = dwell }
-                    logger.debug("FILEAUTH-WAIT-DONE pid=\(fileEvent.processID) process=\(name, privacy: .public) dwellMs=\(dwell / 1_000_000) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-                    return self.processTree.ancestors(of: fileEvent.processIdentity)
-                }
-            )
-            dwellNanoseconds = dwellStorage.withLock { $0 }
-        }
-
+    func postRespond(fileEvent: FileAuthEvent, decision: PolicyDecision, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
         let allowed = decision.isAllowed
 
-        // Respond immediately — the ES deadline is strict and all work after
-        // this point (logging, TTY output, XPC broadcast) is non-critical I/O.
-        fileEvent.respond(allowed, false)
-
-        // Best-efforts ancestry for logging — the tree may have been populated
-        // since the decision was made, so re-query unconditionally.
-        let logAncestors = processTree.ancestors(of: fileEvent.processIdentity)
-
-        auditLogger.log(decision, for: fileEvent, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds)
+        auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds)
 
         if !allowed {
             ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
@@ -289,8 +218,9 @@ final class FilterInteractor: @unchecked Sendable {
             signingID: fileEvent.signingID,
             accessAllowed: allowed,
             decisionReason: decision.reason,
-            ancestors: logAncestors,
-            matchedRuleID: decision.matchedRuleID
+            ancestors: ancestors,
+            matchedRuleID: decision.matchedRuleID,
+            jailedRuleID: decision.jailedRuleID
         )
         let callback = onEvent
         DispatchQueue.main.async {
@@ -298,13 +228,4 @@ final class FilterInteractor: @unchecked Sendable {
         }
     }
 
-    private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) async -> UInt64 {
-        let start = mach_absolute_time()
-        let cutoff = MachTime.cutoff(for: deadline)
-        while mach_absolute_time() < cutoff {
-            guard !processTree.contains(identity: identity) else { break }
-            try? await Task.sleep(nanoseconds: 1_000_000) // 1 ms; frees the thread while waiting
-        }
-        return MachTime.nanoseconds(from: start, to: mach_absolute_time())
-    }
 }
