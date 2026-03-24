@@ -84,13 +84,15 @@ struct ProcessTreeAncestorsTests {
         #expect(tree.ancestors(of: identity(pid: 200)).isEmpty)
     }
 
-    @Test("detects cycle and returns partial chain without looping")
-    func cycleDetection() {
+    @Test("cycle is naturally bounded by insertion order — earlier insert has no parent yet")
+    func cycleIsBoundedByInsertionOrder() {
         let tree = makeTree(
             record(pid: 100, parentPID: 200, path: "/a"),
             record(pid: 200, parentPID: 100, path: "/b")
         )
-        let ancestors = tree.ancestors(of: identity(pid: 100))
-        #expect(ancestors.map(\.path) == ["/b"])
+        // pid 100 was inserted first, when pid 200 didn't exist yet — chain is empty.
+        #expect(tree.ancestors(of: identity(pid: 100)).isEmpty)
+        // pid 200 was inserted second, when pid 100 existed with an empty chain.
+        #expect(tree.ancestors(of: identity(pid: 200)).map(\.path) == ["/a"])
     }
 }

@@ -78,6 +78,12 @@ enum MachTime {
     }
 }
 
+// MARK: - WeakBox
+
+final class WeakBox<T: AnyObject>: @unchecked Sendable {
+    weak var value: T?
+}
+
 // MARK: - FilterInteractor
 
 final class FilterInteractor: @unchecked Sendable {
@@ -99,21 +105,17 @@ final class FilterInteractor: @unchecked Sendable {
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
 
-        let postRespondRef = OSAllocatedUnfairLock<(@Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void)?>(initialState: nil)
+        let weakSelf = WeakBox<FilterInteractor>()
         self.pipeline = FileAuthPipeline(
             processTree: processTree,
             rulesProvider: { [rulesStorage] in rulesStorage.withLock { $0 } },
             allowlistProvider: { [allowlistStorage] in allowlistStorage.withLock { $0 } },
             ancestorAllowlistProvider: { [ancestorAllowlistStorage] in ancestorAllowlistStorage.withLock { $0 } },
             postRespond: { event, decision, ancestors, dwell in
-                postRespondRef.withLock { $0?(event, decision, ancestors, dwell) }
+                weakSelf.value?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
             }
         )
-        postRespondRef.withLock { [weak self] in
-            $0 = { event, decision, ancestors, dwell in
-                self?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
-            }
-        }
+        weakSelf.value = self
         pipeline.start()
     }
 
