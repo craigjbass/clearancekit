@@ -25,6 +25,9 @@
 //
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "managed-config")
 
 enum ManagedPolicyLoader {
     private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
@@ -35,11 +38,11 @@ enum ManagedPolicyLoader {
     /// (e.g. on a user-triggered resync).
     static func load() -> [FAARule] {
         guard let raw = CFPreferencesCopyAppValue(policyKey, preferencesDomain) as? [[String: Any]] else {
-            NSLog("ManagedPolicyLoader: No managed FAAPolicy found — running without managed tier")
+            logger.info("ManagedPolicyLoader: No managed FAAPolicy found — running without managed tier")
             return []
         }
         let rules = raw.compactMap(parseManagedPolicyRule)
-        NSLog("ManagedPolicyLoader: Loaded %d managed rule(s)", rules.count)
+        logger.info("ManagedPolicyLoader: Loaded \(rules.count, privacy: .public) managed rule(s)")
         return rules
     }
 
