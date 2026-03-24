@@ -103,35 +103,26 @@ final class FilterInteractor: @unchecked Sendable {
         initialAncestorAllowlist: [AncestorAllowlistEntry] = [],
         initialJailRules: [JailRule] = [],
         processTree: ProcessTreeProtocol,
-        hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
-        slowWorkerQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent),
-        slowWorkerSemaphore: DispatchSemaphore = DispatchSemaphore(value: 2),
-        eventSignal: DispatchSemaphore = DispatchSemaphore(value: 0),
-        slowSignal: DispatchSemaphore = DispatchSemaphore(value: 0)
+        pipeline: FileAuthPipeline
     ) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
         self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
+        self.pipeline = pipeline
+    }
 
-        let weakSelf = WeakBox<FilterInteractor>()
-        self.pipeline = FileAuthPipeline(
-            processTree: processTree,
-            rulesProvider: { [rulesStorage] in rulesStorage.withLock { $0 } },
-            allowlistProvider: { [allowlistStorage] in allowlistStorage.withLock { $0 } },
-            ancestorAllowlistProvider: { [ancestorAllowlistStorage] in ancestorAllowlistStorage.withLock { $0 } },
-            postRespond: { event, decision, ancestors, dwell in
-                weakSelf.value?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
-            },
-            hotPathQueue: hotPathQueue,
-            slowWorkerQueue: slowWorkerQueue,
-            slowWorkerSemaphore: slowWorkerSemaphore,
-            eventSignal: eventSignal,
-            slowSignal: slowSignal
-        )
-        weakSelf.value = self
-        pipeline.start()
+    func currentRules() -> [FAARule] {
+        rulesStorage.withLock { $0 }
+    }
+
+    func currentAllowlist() -> [AllowlistEntry] {
+        allowlistStorage.withLock { $0 }
+    }
+
+    func currentAncestorAllowlist() -> [AncestorAllowlistEntry] {
+        ancestorAllowlistStorage.withLock { $0 }
     }
 
     func updatePolicy(_ rules: [FAARule]) {

@@ -11,7 +11,6 @@ import os
 
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "xpc-server")
 
-private let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 private let jailEnabledFile = URL(fileURLWithPath: "/Library/Application Support/clearancekit/jail-enabled")
 
 final class XPCServer: NSObject, @unchecked Sendable {
@@ -23,31 +22,21 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private let jailAdapter: ESJailAdapter
     fileprivate let serverQueue: DispatchQueue
 
-    init(interactor: FilterInteractor, adapter: ESInboundAdapter, jailAdapter: ESJailAdapter, serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)) {
-        let database = Database(directory: dataDirectory)
-        let managedRules = ManagedPolicyLoader.load()
-        let managedAllowlist = ManagedAllowlistLoader.load()
-        let managedJailRules = ManagedJailRuleLoader.load()
-        let xprotectEntries = enumerateXProtectEntries()
-
-        self.policyRepository = PolicyRepository(
-            database: database,
-            managedRules: managedRules,
-            managedAllowlist: managedAllowlist,
-            managedJailRules: managedJailRules,
-            xprotectEntries: xprotectEntries
-        )
-        self.broadcaster = EventBroadcaster()
+    init(
+        policyRepository: PolicyRepository,
+        broadcaster: EventBroadcaster,
+        interactor: FilterInteractor,
+        adapter: ESInboundAdapter,
+        jailAdapter: ESJailAdapter,
+        serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
+    ) {
+        self.policyRepository = policyRepository
+        self.broadcaster = broadcaster
         self.interactor = interactor
         self.adapter = adapter
         self.jailAdapter = jailAdapter
         self.serverQueue = serverQueue
-
         super.init()
-
-        applyPolicyToFilter()
-        applyAllowlistToFilter()
-        applyJailRulesToFilter()
     }
 
     func start() {
@@ -110,16 +99,16 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     // MARK: - Filter application
 
-    private func applyPolicyToFilter() {
+    func applyPolicyToFilter() {
         adapter.updatePolicy(policyRepository.mergedRules())
     }
 
-    private func applyAllowlistToFilter() {
+    func applyAllowlistToFilter() {
         interactor.updateAllowlist(policyRepository.mergedAllowlist())
         interactor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
     }
 
-    private func applyJailRulesToFilter() {
+    func applyJailRulesToFilter() {
         let rules = policyRepository.mergedJailRules()
         interactor.updateJailRules(rules)
         jailAdapter.updateJailRules(rules)

@@ -7,7 +7,7 @@
 
 import Foundation
 
-let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction")
+let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background)
 let hotPathQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive)
 let slowWorkerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent)
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
@@ -15,21 +15,62 @@ let eventSignal = DispatchSemaphore(value: 0)
 let slowSignal = DispatchSemaphore(value: 0)
 let xpcServerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
 
+let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
+
 let processTree = ProcessTree(evictionQueue: evictionQueue)
 processTree.buildInitialTree()
 
-let interactor = FilterInteractor(
-    initialRules: faaPolicy,
+let database = Database(directory: dataDirectory)
+let managedRules = ManagedPolicyLoader.load()
+let managedAllowlist = ManagedAllowlistLoader.load()
+let managedJailRules = ManagedJailRuleLoader.load()
+let xprotectEntries = enumerateXProtectEntries()
+let policyRepository = PolicyRepository(
+    database: database,
+    managedRules: managedRules,
+    managedAllowlist: managedAllowlist,
+    managedJailRules: managedJailRules,
+    xprotectEntries: xprotectEntries
+)
+let broadcaster = EventBroadcaster()
+
+let interactorRef = WeakBox<FilterInteractor>()
+let pipeline = FileAuthPipeline(
     processTree: processTree,
+    rulesProvider: { interactorRef.value?.currentRules() ?? [] },
+    allowlistProvider: { interactorRef.value?.currentAllowlist() ?? [] },
+    ancestorAllowlistProvider: { interactorRef.value?.currentAncestorAllowlist() ?? [] },
+    postRespond: { event, decision, ancestors, dwell in
+        interactorRef.value?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+    },
     hotPathQueue: hotPathQueue,
     slowWorkerQueue: slowWorkerQueue,
     slowWorkerSemaphore: slowWorkerSemaphore,
     eventSignal: eventSignal,
     slowSignal: slowSignal
 )
+let interactor = FilterInteractor(
+    initialRules: faaPolicy,
+    processTree: processTree,
+    pipeline: pipeline
+)
+interactorRef.value = interactor
+pipeline.start()
+
 let adapter = ESInboundAdapter(interactor: interactor)
 let jailAdapter = ESJailAdapter(interactor: interactor)
-let server = XPCServer(interactor: interactor, adapter: adapter, jailAdapter: jailAdapter, serverQueue: xpcServerQueue)
+let server = XPCServer(
+    policyRepository: policyRepository,
+    broadcaster: broadcaster,
+    interactor: interactor,
+    adapter: adapter,
+    jailAdapter: jailAdapter,
+    serverQueue: xpcServerQueue
+)
+
+server.applyPolicyToFilter()
+server.applyAllowlistToFilter()
+server.applyJailRulesToFilter()
 
 interactor.onEvent = { event in
     server.handleEvent(event)

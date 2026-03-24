@@ -38,6 +38,34 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
 // for a Task spawned by FilterInteractor.handle(.fileAuth) to call respond(). With
 // concurrent execution, all pool threads can be blocked simultaneously, deadlocking
 /// the spawned Tasks. See: https://github.com/craigjbass/clearancekit/issues/66
+private func makeInteractor(
+    rules: [FAARule] = [],
+    allowlist: [AllowlistEntry] = [],
+    ancestorAllowlist: [AncestorAllowlistEntry] = [],
+    jailRules: [JailRule] = [],
+    processTree: ProcessTreeProtocol
+) -> FilterInteractor {
+    let ref = WeakBox<FilterInteractor>()
+    let pipeline = FileAuthPipeline(
+        processTree: processTree,
+        rulesProvider: { ref.value?.currentRules() ?? [] },
+        allowlistProvider: { ref.value?.currentAllowlist() ?? [] },
+        ancestorAllowlistProvider: { ref.value?.currentAncestorAllowlist() ?? [] },
+        postRespond: { _, _, _, _ in }
+    )
+    let interactor = FilterInteractor(
+        initialRules: rules,
+        initialAllowlist: allowlist,
+        initialAncestorAllowlist: ancestorAllowlist,
+        initialJailRules: jailRules,
+        processTree: processTree,
+        pipeline: pipeline
+    )
+    ref.value = interactor
+    pipeline.start()
+    return interactor
+}
+
 @Suite("FilterInteractor", .serialized)
 struct FilterInteractorTests {
 
@@ -114,7 +142,7 @@ struct FilterInteractorTests {
     @Test("fork event inserts child into process tree")
     func forkInsertsChild() {
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(processTree: tree)
         let child = record(pid: 200, parentPID: 100, path: "/usr/bin/child")
 
         interactor.handleFork(child: child)
@@ -125,7 +153,7 @@ struct FilterInteractorTests {
     @Test("exec event inserts new image into process tree")
     func execInsertsNewImage() {
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(processTree: tree)
         let newImage = record(pid: 200, parentPID: 100, path: "/usr/bin/shell")
 
         interactor.handleExec(newImage: newImage)
@@ -136,7 +164,7 @@ struct FilterInteractorTests {
     @Test("exit event removes identity from process tree")
     func exitRemovesIdentity() {
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(processTree: tree)
         let processIdentity = identity(pid: 200)
 
         interactor.handleExit(identity: processIdentity)
@@ -147,7 +175,7 @@ struct FilterInteractorTests {
     @Test("openFile with no matching rule allows access without consulting tree")
     func openFileNoRuleAllows() {
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -172,7 +200,7 @@ struct FilterInteractorTests {
             allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
         )
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -199,7 +227,7 @@ struct FilterInteractorTests {
             allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
         )
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -228,7 +256,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/terminal", teamID: "", signingID: "")]
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -252,7 +280,7 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         tree.containsResult = false
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -278,7 +306,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/other", teamID: "", signingID: "")]
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -302,7 +330,7 @@ struct FilterInteractorTests {
         )
         let allowlistEntry = AllowlistEntry(signingID: "com.example.allowlisted", teamID: "ALLOWLISTED")
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [allowlistEntry], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], allowlist: [allowlistEntry], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -325,7 +353,7 @@ struct FilterInteractorTests {
     func globallyAllowlistedProcessCaches() {
         let allowlistEntry = AllowlistEntry(signingID: "com.example.allowlisted", teamID: "ALLOWLISTED")
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [allowlistEntry], processTree: tree)
+        let interactor = makeInteractor(allowlist: [allowlistEntry], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var cached: Bool?
 
@@ -355,12 +383,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/trusted-shell", teamID: "", signingID: "")]
-        let interactor = FilterInteractor(
-            initialRules: [rule],
-            initialAllowlist: [],
-            initialAncestorAllowlist: [ancestorEntry],
-            processTree: tree
-        )
+        let interactor = makeInteractor(rules: [rule], ancestorAllowlist: [ancestorEntry], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -390,12 +413,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/evil-shell", teamID: "", signingID: "")]
-        let interactor = FilterInteractor(
-            initialRules: [rule],
-            initialAllowlist: [],
-            initialAncestorAllowlist: [ancestorEntry],
-            processTree: tree
-        )
+        let interactor = makeInteractor(rules: [rule], ancestorAllowlist: [ancestorEntry], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -427,7 +445,7 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         tree.containsResult = false  // process not in tree; would trigger deny in old code
-        let interactor = FilterInteractor(initialRules: [rule], initialAllowlist: [], processTree: tree)
+        let interactor = makeInteractor(rules: [rule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -456,7 +474,7 @@ struct FilterInteractorTests {
             allowedPathPrefixes: ["/allowed/**"]
         )
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -484,12 +502,7 @@ struct FilterInteractorTests {
         )
         let allowlistEntry = AllowlistEntry(signingID: "com.example.jailed", teamID: "TEAM1")
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [allowlistEntry],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
+        let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -516,7 +529,7 @@ struct FilterInteractorTests {
             allowedPathPrefixes: ["/allowed"]
         )
         let tree = FakeProcessTree()
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: tree)
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -544,7 +557,7 @@ struct FilterInteractorTests {
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
             allowedPathPrefixes: ["/allowed/**"]
         )
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
         let event = openFileEvent(path: "/allowed/data.db", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
@@ -560,7 +573,7 @@ struct FilterInteractorTests {
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
             allowedPathPrefixes: ["/allowed/**"]
         )
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [jailRule], processTree: FakeProcessTree())
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
         let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
@@ -571,7 +584,7 @@ struct FilterInteractorTests {
 
     @Test("handleJailEventSync allows when rule ID no longer exists (stale mute)")
     func inheritedJailStaleRuleAllows() {
-        let interactor = FilterInteractor(initialRules: [], initialAllowlist: [], initialJailRules: [], processTree: FakeProcessTree())
+        let interactor = makeInteractor(processTree: FakeProcessTree())
         var allowed: Bool?
 
         let event = openFileEvent(path: "/any/path", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
@@ -588,12 +601,7 @@ struct FilterInteractorTests {
             allowedPathPrefixes: []
         )
         let allowlistEntry = AllowlistEntry(signingID: "com.child.process", teamID: "OTHER")
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [allowlistEntry],
-            initialJailRules: [jailRule],
-            processTree: FakeProcessTree()
-        )
+        let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: FakeProcessTree())
         var allowed: Bool?
 
         let event = openFileEvent(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { allowed = $0 }
@@ -610,12 +618,7 @@ struct FilterInteractorTests {
             allowedPathPrefixes: []
         )
         let allowlistEntry = AllowlistEntry(signingID: "com.child.process", teamID: "OTHER")
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [allowlistEntry],
-            initialJailRules: [jailRule],
-            processTree: FakeProcessTree()
-        )
+        let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: FakeProcessTree())
         var cached: Bool?
 
         let event = openFileEventCapturingCache(path: "/forbidden/file", teamID: "OTHER", signingID: "com.child.process") { _, cache in cached = cache }
@@ -636,12 +639,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -671,12 +669,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [allowlistEntry],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
+        let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
@@ -705,12 +698,7 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/other", teamID: "OTHER", signingID: "com.other.app")]
-        let interactor = FilterInteractor(
-            initialRules: [],
-            initialAllowlist: [],
-            initialJailRules: [jailRule],
-            processTree: tree
-        )
+        let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
         let semaphore = DispatchSemaphore(value: 0)
         var allowed: Bool?
 
