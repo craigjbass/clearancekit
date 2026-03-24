@@ -9,7 +9,8 @@ import Foundation
 import OSLog
 
 let evictionQueue    = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background,       autoreleaseFrequency: .never)
-let esAdapterQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter",            qos: .userInteractive,  autoreleaseFrequency: .never)
+let esAdapterQueue      = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter",       qos: .userInteractive,  autoreleaseFrequency: .never)
+let esJailAdapterQueue  = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter", qos: .userInteractive,  autoreleaseFrequency: .never)
 let hotPathQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot",          qos: .userInteractive,  autoreleaseFrequency: .never)
 let slowWorkerQueue  = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow",         qos: .userInitiated,    attributes: .concurrent, autoreleaseFrequency: .never)
 let processTreeQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree",          qos: .userInitiated,    autoreleaseFrequency: .never)
@@ -67,7 +68,7 @@ interactorRef.value = interactor
 pipeline.start()
 
 let adapter = ESInboundAdapter(interactor: interactor, esAdapterQueue: esAdapterQueue)
-let jailAdapter = ESJailAdapter(interactor: interactor)
+let jailAdapter = ESJailAdapter(interactor: interactor, esJailAdapterQueue: esJailAdapterQueue)
 let server = XPCServer(
     policyRepository: policyRepository,
     broadcaster: broadcaster,
