@@ -264,7 +264,7 @@ struct FileAuthPipelineTests {
             ancestorAllowlistProvider: { [] },
             postRespond: { _, _, _, _ in },
             slowQueueCapacity: 1,
-            slowWorkerCount: 0
+            slowWorkerSemaphore: DispatchSemaphore(value: 0)
         )
         pipeline.start()
 

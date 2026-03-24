@@ -38,8 +38,6 @@ protocol ProcessTreeProtocol: AnyObject {
 // MARK: - ProcessTree
 
 final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
-    static let shared = ProcessTree()
-
     private struct State {
         var records: [ProcessIdentity: ProcessRecord] = [:]
         var pidIndex: [pid_t: ProcessIdentity] = [:]
@@ -49,7 +47,11 @@ final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     private let storage = OSAllocatedUnfairLock(initialState: State())
 
     private static let postExitRetention: TimeInterval = 60
-    private let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction")
+    private let evictionQueue: DispatchQueue
+
+    init(evictionQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction")) {
+        self.evictionQueue = evictionQueue
+    }
 
     func insert(_ record: ProcessRecord) {
         storage.withLock { state in

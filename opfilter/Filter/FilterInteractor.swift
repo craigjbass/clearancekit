@@ -97,7 +97,18 @@ final class FilterInteractor: @unchecked Sendable {
     private let ttyNotifier = TTYNotifier()
     let pipeline: FileAuthPipeline
 
-    init(initialRules: [FAARule] = faaPolicy, initialAllowlist: [AllowlistEntry] = baselineAllowlist, initialAncestorAllowlist: [AncestorAllowlistEntry] = [], initialJailRules: [JailRule] = [], processTree: ProcessTreeProtocol = ProcessTree.shared) {
+    init(
+        initialRules: [FAARule] = faaPolicy,
+        initialAllowlist: [AllowlistEntry] = baselineAllowlist,
+        initialAncestorAllowlist: [AncestorAllowlistEntry] = [],
+        initialJailRules: [JailRule] = [],
+        processTree: ProcessTreeProtocol,
+        hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
+        slowWorkerQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent),
+        slowWorkerSemaphore: DispatchSemaphore = DispatchSemaphore(value: 2),
+        eventSignal: DispatchSemaphore = DispatchSemaphore(value: 0),
+        slowSignal: DispatchSemaphore = DispatchSemaphore(value: 0)
+    ) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
         self.ancestorAllowlistStorage = OSAllocatedUnfairLock(initialState: initialAncestorAllowlist)
@@ -112,7 +123,12 @@ final class FilterInteractor: @unchecked Sendable {
             ancestorAllowlistProvider: { [ancestorAllowlistStorage] in ancestorAllowlistStorage.withLock { $0 } },
             postRespond: { event, decision, ancestors, dwell in
                 weakSelf.value?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
-            }
+            },
+            hotPathQueue: hotPathQueue,
+            slowWorkerQueue: slowWorkerQueue,
+            slowWorkerSemaphore: slowWorkerSemaphore,
+            eventSignal: eventSignal,
+            slowSignal: slowSignal
         )
         weakSelf.value = self
         pipeline.start()

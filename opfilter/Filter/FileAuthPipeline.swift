@@ -46,7 +46,11 @@ final class FileAuthPipeline: @unchecked Sendable {
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void,
         eventBufferCapacity: Int = 1024,
         slowQueueCapacity: Int = 256,
-        slowWorkerCount: Int = 2
+        hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
+        slowWorkerQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent),
+        slowWorkerSemaphore: DispatchSemaphore = DispatchSemaphore(value: 2),
+        eventSignal: DispatchSemaphore = DispatchSemaphore(value: 0),
+        slowSignal: DispatchSemaphore = DispatchSemaphore(value: 0)
     ) {
         self.eventBuffer = BoundedQueue(capacity: eventBufferCapacity)
         self.slowQueue = BoundedQueue(capacity: slowQueueCapacity)
@@ -55,11 +59,11 @@ final class FileAuthPipeline: @unchecked Sendable {
         self.allowlistProvider = allowlistProvider
         self.ancestorAllowlistProvider = ancestorAllowlistProvider
         self.postRespondHandler = postRespond
-        self.hotPathQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive)
-        self.slowWorkerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent)
-        self.slowWorkerSemaphore = DispatchSemaphore(value: slowWorkerCount)
-        self.eventSignal = DispatchSemaphore(value: 0)
-        self.slowSignal = DispatchSemaphore(value: 0)
+        self.hotPathQueue = hotPathQueue
+        self.slowWorkerQueue = slowWorkerQueue
+        self.slowWorkerSemaphore = slowWorkerSemaphore
+        self.eventSignal = eventSignal
+        self.slowSignal = slowSignal
         self.metricsStorage = OSAllocatedUnfairLock(initialState: PipelineMetrics())
     }
 

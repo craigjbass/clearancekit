@@ -21,9 +21,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
     private let jailAdapter: ESJailAdapter
-    fileprivate let serverQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
+    fileprivate let serverQueue: DispatchQueue
 
-    init(interactor: FilterInteractor, adapter: ESInboundAdapter, jailAdapter: ESJailAdapter) {
+    init(interactor: FilterInteractor, adapter: ESInboundAdapter, jailAdapter: ESJailAdapter, serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)) {
         let database = Database(directory: dataDirectory)
         let managedRules = ManagedPolicyLoader.load()
         let managedAllowlist = ManagedAllowlistLoader.load()
@@ -41,6 +41,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         self.interactor = interactor
         self.adapter = adapter
         self.jailAdapter = jailAdapter
+        self.serverQueue = serverQueue
 
         super.init()
 
