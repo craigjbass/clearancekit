@@ -131,7 +131,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
         let rules = policyRepository.mergedJailRules()
         interactor.updateJailRules(rules)
         jailAdapter.updateJailRules(rules)
-        adapter.clearCache()
     }
 
     // MARK: - Client registration
@@ -206,18 +205,21 @@ final class XPCServer: NSObject, @unchecked Sendable {
     fileprivate func applyAddJailRule(_ rule: JailRule) {
         policyRepository.addJailRule(rule)
         applyJailRulesToFilter()
+        adapter.clearCache()
         broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
     }
 
     fileprivate func applyUpdateJailRule(_ rule: JailRule) {
         policyRepository.updateJailRule(rule)
         applyJailRulesToFilter()
+        adapter.clearCache()
         broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
     }
 
     fileprivate func applyRemoveJailRule(ruleID: UUID) {
         policyRepository.removeJailRule(ruleID: ruleID)
         applyJailRulesToFilter()
+        adapter.clearCache()
         broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
     }
 

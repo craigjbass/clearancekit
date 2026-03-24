@@ -274,8 +274,10 @@ final class ESJailAdapter {
         rulesLock.withLock { $0 = rules }
         if let client {
             es_clear_cache(client)
+            logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s), cache cleared")
+        } else {
+            logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s)")
         }
-        logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s), cache cleared")
     }
 
     func activeJailedPIDs() -> Set<pid_t> {
