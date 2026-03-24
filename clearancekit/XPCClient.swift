@@ -34,6 +34,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
     @Published private(set) var pendingSignatureIssue: PendingSignatureIssue? = nil
+    @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
 
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
@@ -101,6 +102,12 @@ final class XPCClient: NSObject, ObservableObject {
         conn.exportedInterface?.setClasses(
             NSSet(array: [SignatureIssueNotification.self]) as! Set<AnyHashable>,
             for: #selector(ClientProtocol.signatureIssueDetected(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        conn.exportedInterface?.setClasses(
+            NSSet(array: [PipelineMetricsSnapshot.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.metricsUpdated(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -586,6 +593,15 @@ extension XPCClient: ClientProtocol {
     nonisolated func jailEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             JailStore.shared.receivedJailEnabled(enabled)
+        }
+    }
+
+    nonisolated func metricsUpdated(_ snapshot: PipelineMetricsSnapshot) {
+        Task { @MainActor in
+            metricsHistory.append(snapshot)
+            if metricsHistory.count > 61 {
+                metricsHistory.removeFirst(metricsHistory.count - 61)
+            }
         }
     }
 }

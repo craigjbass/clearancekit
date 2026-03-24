@@ -306,4 +306,7 @@ public protocol ClientProtocol {
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)
+    // Opfilter pushes a cumulative metrics snapshot once per second so the GUI
+    // can compute per-second rates and render a live throughput graph.
+    func metricsUpdated(_ snapshot: PipelineMetricsSnapshot)
 }

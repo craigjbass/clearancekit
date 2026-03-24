@@ -61,6 +61,21 @@ final class XPCServer: NSObject, @unchecked Sendable {
         }
     }
 
+    func pushMetrics(_ metrics: PipelineMetrics) {
+        let snapshot = PipelineMetricsSnapshot(
+            eventBufferEnqueueCount: metrics.eventBufferEnqueueCount,
+            eventBufferDropCount:    metrics.eventBufferDropCount,
+            hotPathProcessedCount:   metrics.hotPathProcessedCount,
+            hotPathRespondedCount:   metrics.hotPathRespondedCount,
+            slowQueueEnqueueCount:   metrics.slowQueueEnqueueCount,
+            slowQueueDropCount:      metrics.slowQueueDropCount,
+            slowPathProcessedCount:  metrics.slowPathProcessedCount
+        )
+        serverQueue.async { [self] in
+            broadcaster.broadcastToAllClients { $0.metricsUpdated(snapshot) }
+        }
+    }
+
     // MARK: - Policy / allowlist assembly
 
     func mergedRules() -> [FAARule] {
@@ -306,6 +321,12 @@ extension XPCServer: NSXPCListenerDelegate {
         remoteInterface.setClasses(
             NSSet(array: [SignatureIssueNotification.self]) as! Set<AnyHashable>,
             for: #selector(ClientProtocol.signatureIssueDetected(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        remoteInterface.setClasses(
+            NSSet(array: [PipelineMetricsSnapshot.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.metricsUpdated(_:)),
             argumentIndex: 0,
             ofReply: false
         )

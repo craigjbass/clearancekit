@@ -15,6 +15,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case jail       = "Jail"
     case allowlist  = "Allowlist"
     case processes  = "Processes"
+    case metrics    = "Metrics"
     case setup      = "Setup"
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .jail:      return "lock.rectangle.on.rectangle"
         case .allowlist: return "checkmark.shield"
         case .processes: return "cpu"
+        case .metrics:   return "chart.xyaxis.line"
         case .setup:     return "gearshape"
         }
     }
@@ -53,6 +55,8 @@ struct ContentView: View {
                             .tag(SidebarItem.events)
                         Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
                             .tag(SidebarItem.processes)
+                        Label(SidebarItem.metrics.rawValue, systemImage: SidebarItem.metrics.icon)
+                            .tag(SidebarItem.metrics)
                     }
                     Section("Configure") {
                         Label(SidebarItem.policy.rawValue, systemImage: SidebarItem.policy.icon)
@@ -76,6 +80,7 @@ struct ContentView: View {
                 case .jail:      JailView()
                 case .allowlist: AllowlistView()
                 case .processes: ProcessesView()
+                case .metrics:   MetricsView()
                 case .setup:     SetupView()
                 }
             }

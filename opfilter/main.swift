@@ -96,6 +96,7 @@ let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
 metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
 metricsTimer.setEventHandler {
     let m = pipeline.metrics()
+    server.pushMetrics(m)
     metricsLogger.info("""
     pipeline_metrics \
     eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
