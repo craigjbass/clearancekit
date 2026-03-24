@@ -16,6 +16,9 @@
 //
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "managed-config")
 
 enum ManagedAllowlistLoader {
     private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
@@ -23,11 +26,11 @@ enum ManagedAllowlistLoader {
 
     static func load() -> [AllowlistEntry] {
         guard let raw = CFPreferencesCopyAppValue(allowlistKey, preferencesDomain) as? [[String: Any]] else {
-            NSLog("ManagedAllowlistLoader: No managed GlobalAllowlist found — running without managed allowlist tier")
+            logger.info("ManagedAllowlistLoader: No managed GlobalAllowlist found — running without managed allowlist tier")
             return []
         }
         let entries = raw.compactMap(parseManagedAllowlistEntry)
-        NSLog("ManagedAllowlistLoader: Loaded %d managed allowlist entry/entries", entries.count)
+        logger.info("ManagedAllowlistLoader: Loaded \(entries.count, privacy: .public) managed allowlist entry/entries")
         return entries
     }
 
