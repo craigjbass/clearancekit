@@ -25,44 +25,30 @@ final class ESInboundAdapter {
     func start(initialRules: [FAARule], onXProtectChanged: @escaping () -> Void) {
         let interactor = self.interactor
         let res = es_new_client(&client) { (esClient, message) in
-            let processName = Self.processName(from: message)
-            let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
+            let correlationID = UUID()
 
             switch message.pointee.event_type {
             case ES_EVENT_TYPE_NOTIFY_WRITE:
                 guard Self.isXProtectEvent(message) else { return }
-                logger.debug("ES-XPROTECT-WRITE pid=\(pid) process=\(processName, privacy: .public)")
                 onXProtectChanged()
             case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
                 guard !Self.isXProtectEvent(message) else {
-                    logger.debug("ES-XPROTECT-MODIFY pid=\(pid) process=\(processName, privacy: .public) type=\(message.pointee.event_type.rawValue) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
-                    logger.debug("ES-RESPOND pid=\(pid) allowed=true cache=false op=xprotect ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                     es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
                     onXProtectChanged()
                     return
                 }
-                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
+                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
-                logger.debug("ES-OPEN-NIL-PATH pid=\(pid) process=\(processName, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
-                logger.debug("ES-RESPOND pid=\(pid) allowed=false cache=false op=open-nil-path ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
             case ES_EVENT_TYPE_AUTH_EXEC:
                 let target = message.pointee.event.exec.target
-                let targetPath = Self.string(from: target.pointee.executable.pointee.path)
-                logger.debug("ES-EXEC pid=\(pid) process=\(processName, privacy: .public) target=\(targetPath, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 interactor.handleExec(newImage: processRecord(from: target))
-                logger.debug("ES-RESPOND pid=\(pid) allowed=true cache=false op=exec target=\(targetPath, privacy: .public) ttdMs=\(Self.millisecondsToDeadline(message.pointee.deadline))")
                 es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_FORK:
-                let child = message.pointee.event.fork.child.pointee
-                let childPID = pid_t(bitPattern: child.audit_token.val.5)
-                let childPath = Self.string(from: child.executable.pointee.path)
-                logger.debug("ES-FORK pid=\(pid) process=\(processName, privacy: .public) childPID=\(childPID) childProcess=\(childPath, privacy: .public)")
                 interactor.handleFork(child: processRecord(from: message.pointee.event.fork.child))
             case ES_EVENT_TYPE_NOTIFY_EXIT:
                 let token = message.pointee.process.pointee.audit_token
-                logger.debug("ES-EXIT pid=\(pid) process=\(processName, privacy: .public)")
                 interactor.handleExit(identity: ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7))
             case ES_EVENT_TYPE_AUTH_OPEN,
                  ES_EVENT_TYPE_AUTH_LINK,
@@ -72,7 +58,7 @@ final class ESInboundAdapter {
                  ES_EVENT_TYPE_AUTH_READDIR,
                  ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
                  ES_EVENT_TYPE_AUTH_CLONE:
-                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor)
+                Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
             default:
                 fatalError("ESInboundAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
             }
@@ -109,8 +95,6 @@ final class ESInboundAdapter {
             logger.fault("Failed to subscribe to ES events")
             exit(EXIT_FAILURE)
         }
-
-        logger.info("ESInboundAdapter started, monitoring \(initialRules.count) rule prefix(es)")
     }
 
     /// Applies an updated policy: diffs the effective muted prefix set (policy ∪ discovery),
@@ -122,7 +106,6 @@ final class ESInboundAdapter {
         applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
         interactor.updatePolicy(rules)
-        logger.info("ESInboundAdapter: policy updated — \(rules.count) rule(s), cache cleared")
     }
 
     /// Temporarily widens monitoring to deliver events for paths with no policy rules.
@@ -133,7 +116,6 @@ final class ESInboundAdapter {
         discoveryPrefixes = Set(paths)
         applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
         es_clear_cache(client)
-        logger.info("ESInboundAdapter: discovery paths updated — \(paths.count) path(s)")
     }
 
     func clearCache() {
@@ -144,11 +126,9 @@ final class ESInboundAdapter {
     private func applyPrefixDiff(from old: Set<String>, to new: Set<String>, client: OpaquePointer) {
         for prefix in old.subtracting(new) {
             es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.debug("ESInboundAdapter: removed mute for \(prefix, privacy: .public)")
         }
         for prefix in new.subtracting(old) {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
-            logger.debug("ESInboundAdapter: added mute for \(prefix, privacy: .public)")
         }
     }
 
@@ -178,98 +158,48 @@ final class ESInboundAdapter {
         return string(from: token).hasPrefix(xprotectPath)
     }
 
-    private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor) {
-        let processName = processName(from: message)
-        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
-        let ttdMs = millisecondsToDeadline(message.pointee.deadline)
-
+    private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor, correlationID: UUID) {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_AUTH_OPEN:
-            let path = string(from: message.pointee.event.open.file.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=open path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient))
+            interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_RENAME:
             let path = string(from: message.pointee.event.rename.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=rename path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_UNLINK:
             let path = string(from: message.pointee.event.unlink.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=unlink path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_LINK:
             let path = string(from: message.pointee.event.link.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=link path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_CREATE:
             let path = createEventPath(from: message.pointee.event.create)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=create path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_TRUNCATE:
             let path = string(from: message.pointee.event.truncate.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=truncate path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_COPYFILE:
             let path = string(from: message.pointee.event.copyfile.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=copyfile path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_READDIR:
             let path = string(from: message.pointee.event.readdir.target.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=readdir path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
             let path = string(from: message.pointee.event.exchangedata.file1.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=exchangedata path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_CLONE:
             let path = string(from: message.pointee.event.clone.source.pointee.path)
-            logger.debug("ES-FILE-AUTH pid=\(pid) process=\(processName, privacy: .public) op=clone path=\(path, privacy: .public) ttdMs=\(ttdMs)")
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path))
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path, correlationID: correlationID))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
         }
     }
 
-    private static func processName(from message: UnsafePointer<es_message_t>) -> String {
-        let fullPath = string(from: message.pointee.process.pointee.executable.pointee.path)
-        return URL(fileURLWithPath: fullPath).lastPathComponent
-    }
-
-    private static let machTimebase: mach_timebase_info_data_t = {
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        return info
-    }()
-
-    private static func millisecondsToDeadline(_ deadline: UInt64) -> Int64 {
-        let now = mach_absolute_time()
-        guard deadline > now else { return 0 }
-        let ticks = deadline - now
-        let nanos = ticks * UInt64(machTimebase.numer) / UInt64(machTimebase.denom)
-        return Int64(nanos / 1_000_000)
-    }
-
-    static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer) -> FileAuthEvent {
+    static func openFileEvent(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, correlationID: UUID = UUID()) -> FileAuthEvent {
         let path = string(from: message.pointee.event.open.file.pointee.path)
-        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
-            logger.debug("ES-RESPOND pid=\(pid) allowed=\(allowed) cache=\(cache) op=open path=\(path, privacy: .public) ttdMs=\(millisecondsToDeadline(message.pointee.deadline))")
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, cache)
         }
-        return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, respond: respond)
-    }
-
-    static func fileAuthEvent(
-        from message: UnsafePointer<es_message_t>,
-        esClient: OpaquePointer,
-        operation: FileOperation,
-        path: String
-    ) -> FileAuthEvent {
-        let pid = pid_t(bitPattern: message.pointee.process.pointee.audit_token.val.5)
-        let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
-            logger.debug("ES-RESPOND pid=\(pid) allowed=\(allowed) cache=\(cache) op=\(operation.rawValue, privacy: .public) path=\(path, privacy: .public) ttdMs=\(millisecondsToDeadline(message.pointee.deadline))")
-            es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
-        }
-        return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, respond: respond)
+        return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, correlationID: correlationID, respond: respond)
     }
 
     static func fileAuthEvent(
@@ -277,6 +207,20 @@ final class ESInboundAdapter {
         esClient: OpaquePointer,
         operation: FileOperation,
         path: String,
+        correlationID: UUID = UUID()
+    ) -> FileAuthEvent {
+        let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
+            es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
+        }
+        return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, correlationID: correlationID, respond: respond)
+    }
+
+    private static func fileAuthEvent(
+        from message: UnsafePointer<es_message_t>,
+        esClient: OpaquePointer,
+        operation: FileOperation,
+        path: String,
+        correlationID: UUID,
         respond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
     ) -> FileAuthEvent {
         let process = message.pointee.process.pointee
@@ -286,6 +230,7 @@ final class ESInboundAdapter {
             pidVersion: process.audit_token.val.7
         )
         return FileAuthEvent(
+            correlationID: correlationID,
             operation: operation,
             path: path,
             processIdentity: processIdentity,

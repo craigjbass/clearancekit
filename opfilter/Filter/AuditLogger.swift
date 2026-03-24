@@ -11,8 +11,8 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 // MARK: - AuditLogger
 
 struct AuditLogger {
-    func log(_ decision: PolicyDecision, for fileEvent: FileAuthEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
-        let line = formatEntry(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds)
+    func log(_ decision: PolicyDecision, for fileEvent: FileAuthEvent, ancestors: [AncestorInfo], dwellNanoseconds: UInt64, operationID: UUID = UUID()) {
+        let line = formatEntry(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: operationID)
         logger.log("\(line, privacy: .public)")
     }
 

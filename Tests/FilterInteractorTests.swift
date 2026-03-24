@@ -67,6 +67,7 @@ struct FilterInteractorTests {
         respond: @escaping @Sendable (Bool) -> Void
     ) -> FileAuthEvent {
         FileAuthEvent(
+            correlationID: UUID(),
             operation: .open,
             path: path,
             processIdentity: processIdentity ?? identity(pid: 100),
@@ -93,6 +94,7 @@ struct FilterInteractorTests {
         respond: @escaping @Sendable (Bool, Bool) -> Void
     ) -> FileAuthEvent {
         FileAuthEvent(
+            correlationID: UUID(),
             operation: .open,
             path: path,
             processIdentity: processIdentity ?? identity(pid: 100),

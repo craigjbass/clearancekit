@@ -23,6 +23,7 @@ struct AuditLoggerTests {
         gid: gid_t = 0
     ) -> FileAuthEvent {
         FileAuthEvent(
+            correlationID: UUID(),
             operation: operation,
             path: path,
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),

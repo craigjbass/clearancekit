@@ -29,7 +29,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
         let managedAllowlist = ManagedAllowlistLoader.load()
         let managedJailRules = ManagedJailRuleLoader.load()
         let xprotectEntries = enumerateXProtectEntries()
-        let xprotectCount = xprotectEntries.count
 
         self.policyRepository = PolicyRepository(
             database: database,
@@ -45,7 +44,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
         super.init()
 
-        logger.info("XPCServer: Discovered \(xprotectCount) XProtect allowlist entry/entries")
         applyPolicyToFilter()
         applyAllowlistToFilter()
         applyJailRulesToFilter()
@@ -55,7 +53,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
         listener = NSXPCListener(machServiceName: XPCConstants.serviceName)
         listener?.delegate = self
         listener?.resume()
-        logger.info("XPCServer: Listening on \(XPCConstants.serviceName, privacy: .public)")
     }
 
     func handleXProtectChange() {
@@ -63,7 +60,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
             let reloaded = enumerateXProtectEntries()
             guard policyRepository.updateXProtectEntries(reloaded) else { return }
             applyAllowlistToFilter()
-            logger.info("XPCServer: XProtect bundle changed — reloaded \(reloaded.count) entry/entries")
         }
     }
 
@@ -92,13 +88,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
     }
 
     func startJailAdapterIfEnabled() {
-        guard isJailEnabled else {
-            logger.info("XPCServer: Jail adapter disabled — skipping ES subscription")
-            return
-        }
+        guard isJailEnabled else { return }
         let rules = policyRepository.mergedJailRules()
         jailAdapter.start(initialRules: rules)
-        logger.info("XPCServer: Jail adapter enabled — started with \(rules.count) rule(s)")
     }
 
     fileprivate func setJailEnabled(_ enabled: Bool) {
@@ -113,7 +105,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
             jailAdapter.stop()
         }
         broadcaster.broadcastToAllClients { $0.jailEnabledUpdated(enabled) }
-        logger.info("XPCServer: Jail \(enabled ? "enabled" : "disabled", privacy: .public)")
     }
 
     // MARK: - Filter application
@@ -136,16 +127,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Client registration
 
     fileprivate func addGUIClient(_ connection: NSXPCConnection) {
-        let count = broadcaster.addClient(connection)
-        logger.debug("XPCServer: GUI client registered. Active clients: \(count)")
+        _ = broadcaster.addClient(connection)
         if let notification = policyRepository.pendingSignatureIssueNotification() {
             (connection.remoteObjectProxy as? ClientProtocol)?.signatureIssueDetected(notification)
         }
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
-        let count = broadcaster.removeClient(connection)
-        logger.debug("XPCServer: Client removed. GUI clients: \(count)")
+        _ = broadcaster.removeClient(connection)
     }
 
     fileprivate func recentEvents() -> [FolderOpenEvent] {
@@ -233,12 +222,10 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func beginDiscovery() {
         adapter.setDiscoveryPaths(["/Users"])
-        logger.info("XPCServer: Discovery mode activated")
     }
 
     fileprivate func endDiscovery() {
         adapter.setDiscoveryPaths([])
-        logger.info("XPCServer: Discovery mode deactivated")
     }
 
     // MARK: - Signature issue resolution
@@ -249,8 +236,6 @@ final class XPCServer: NSObject, @unchecked Sendable {
         applyAllowlistToFilter()
         broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
         broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
-        let action = approved ? "approved — re-signed" : "rejected — cleared"
-        logger.info("XPCServer: Signature issue \(action, privacy: .public) user rules and allowlist")
     }
 
     // MARK: - Resync
@@ -352,7 +337,6 @@ extension XPCServer: NSXPCListenerDelegate {
         }
 
         newConnection.resume()
-        logger.debug("XPCServer: Accepted connection (protocol v\(XPCConstants.protocolVersion, privacy: .public)")
         return true
     }
 }

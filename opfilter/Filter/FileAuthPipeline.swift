@@ -84,7 +84,7 @@ final class FileAuthPipeline: @unchecked Sendable {
             eventSignal.signal()
         case .full:
             metricsStorage.withLock { $0.eventBufferDropCount += 1 }
-            logger.warning("PIPELINE-DROP pid=\(event.processID) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
+            logger.warning("PIPELINE-DROP cid=\(event.correlationID) pid=\(event.processID) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
             event.respond(true, false)
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .noRuleApplies, ancestors, 0)
@@ -110,14 +110,10 @@ final class FileAuthPipeline: @unchecked Sendable {
     private func processHotPath(_ event: FileAuthEvent) {
         metricsStorage.withLock { $0.hotPathProcessedCount += 1 }
 
-        let name = URL(fileURLWithPath: event.processPath).lastPathComponent
-        logger.debug("HOT-START pid=\(event.processID) process=\(name, privacy: .public) op=\(event.operation.rawValue, privacy: .public) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
-
         let allowlist = allowlistProvider()
         let ancestorAllowlist = ancestorAllowlistProvider()
 
         if isGloballyAllowed(allowlist: allowlist, processPath: event.processPath, signingID: event.signingID, teamID: event.teamID) {
-            logger.debug("HOT-ALLOW-GLOBAL pid=\(event.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
             event.respond(true, true)
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
@@ -127,11 +123,10 @@ final class FileAuthPipeline: @unchecked Sendable {
 
         let rules = rulesProvider()
         let classification = classifyPath(event.path, rules: rules)
-        logger.debug("HOT-CLASSIFY pid=\(event.processID) process=\(name, privacy: .public) classification=\(String(describing: classification), privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
 
         switch classification {
         case .noRuleApplies:
-            event.respond(true, false)
+            event.respond(true, true)
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .noRuleApplies, ancestors, 0)
@@ -162,7 +157,7 @@ final class FileAuthPipeline: @unchecked Sendable {
                 slowSignal.signal()
             case .full:
                 metricsStorage.withLock { $0.slowQueueDropCount += 1 }
-                logger.warning("SLOW-DROP pid=\(event.processID) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
+                logger.warning("SLOW-DROP cid=\(event.correlationID) pid=\(event.processID) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
                 event.respond(true, false)
                 metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
                 let ancestors = processTree.ancestors(of: event.processIdentity)
@@ -192,13 +187,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         metricsStorage.withLock { $0.slowPathProcessedCount += 1 }
 
         let event = workItem.fileEvent
-        let name = URL(fileURLWithPath: event.processPath).lastPathComponent
-
-        logger.debug("SLOW-START pid=\(event.processID) process=\(name, privacy: .public) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
-
         let dwellNanoseconds = waitForProcess(event.processIdentity, deadline: event.deadline)
-
-        logger.debug("SLOW-WAIT-DONE pid=\(event.processID) process=\(name, privacy: .public) dwellMs=\(dwellNanoseconds / 1_000_000) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
 
         let ancestors = processTree.ancestors(of: event.processIdentity)
         let decision = evaluateAccess(

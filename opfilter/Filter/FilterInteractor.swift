@@ -6,8 +6,6 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "faa")
-
 // MARK: - FileOperation
 
 enum FileOperation: String {
@@ -26,6 +24,7 @@ enum FileOperation: String {
 // MARK: - FileAuthEvent
 
 struct FileAuthEvent: Sendable {
+    let correlationID: UUID
     let operation: FileOperation
     let path: String
     let processIdentity: ProcessIdentity
@@ -146,30 +145,21 @@ final class FilterInteractor: @unchecked Sendable {
     // (child of a jailed process). Providing the rule ID explicitly means this
     // path never needs to match by signing ID.
     func handleJailEventSync(_ fileEvent: FileAuthEvent, jailRuleID: UUID) {
-        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("JAIL-START pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-
         let allowlist = allowlistStorage.withLock { $0 }
 
         if isGloballyAllowed(allowlist: allowlist, processPath: fileEvent.processPath, signingID: fileEvent.signingID, teamID: fileEvent.teamID) {
-            logger.debug("JAIL-ALLOW-GLOBAL pid=\(fileEvent.processID) process=\(name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
             fileEvent.respond(true, true)
             return
         }
 
         let jailRules = jailRulesStorage.withLock { $0 }
         guard let rule = jailRules.first(where: { $0.id == jailRuleID }) else {
-            // Stale mute: the jail rule was removed while this process was still muted.
-            logger.debug("JAIL-STALE-RULE pid=\(fileEvent.processID) process=\(name, privacy: .public) ruleID=\(jailRuleID) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
             fileEvent.respond(true, false)
             return
         }
 
         let decision = checkJailPath(rule: rule, path: fileEvent.path)
-
-        let allowed = decision.isAllowed
-        logger.debug("JAIL-DECISION pid=\(fileEvent.processID) process=\(name, privacy: .public) allowed=\(allowed) rule=\(rule.name, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
-        fileEvent.respond(allowed, false)
+        fileEvent.respond(decision.isAllowed, false)
 
         Task { [weak self] in
             guard let self else { return }
@@ -179,32 +169,25 @@ final class FilterInteractor: @unchecked Sendable {
     }
 
     func handleFork(child: ProcessRecord) {
-        let name = URL(fileURLWithPath: child.path).lastPathComponent
-        logger.debug("FORK pid=\(child.identity.pid) pidversion=\(child.identity.pidVersion) process=\(name, privacy: .public)")
         processTree.insert(child)
     }
 
     func handleExec(newImage: ProcessRecord) {
-        let name = URL(fileURLWithPath: newImage.path).lastPathComponent
-        logger.debug("EXEC pid=\(newImage.identity.pid) pidversion=\(newImage.identity.pidVersion) process=\(name, privacy: .public)")
         processTree.insert(newImage)
     }
 
     func handleExit(identity: ProcessIdentity) {
-        logger.debug("EXIT pid=\(identity.pid) pidversion=\(identity.pidVersion)")
         processTree.remove(identity: identity)
     }
 
     func handleFileAuth(_ fileEvent: FileAuthEvent) {
-        let name = URL(fileURLWithPath: fileEvent.processPath).lastPathComponent
-        logger.debug("FILEAUTH pid=\(fileEvent.processID) process=\(name, privacy: .public) op=\(fileEvent.operation.rawValue, privacy: .public) path=\(fileEvent.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(fileEvent.deadline))")
         pipeline.submit(fileEvent)
     }
 
     func postRespond(fileEvent: FileAuthEvent, decision: PolicyDecision, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
         let allowed = decision.isAllowed
 
-        auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds)
+        auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: fileEvent.correlationID)
 
         if !allowed {
             ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
@@ -222,7 +205,8 @@ final class FilterInteractor: @unchecked Sendable {
             decisionReason: decision.reason,
             ancestors: ancestors,
             matchedRuleID: decision.matchedRuleID,
-            jailedRuleID: decision.jailedRuleID
+            jailedRuleID: decision.jailedRuleID,
+            eventID: fileEvent.correlationID
         )
         onEvent?(folderOpenEvent)
     }

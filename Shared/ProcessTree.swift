@@ -7,8 +7,6 @@ import Foundation
 import Security
 import os
 
-private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "process-tree")
-
 // MARK: - ProcessIdentity
 
 struct ProcessIdentity: Hashable {
@@ -58,13 +56,11 @@ final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
             if let existing = state.pidIndex[record.identity.pid], existing != record.identity {
                 state.records[existing] = nil
                 state.ancestorCache[existing] = nil
-                logger.debug("ProcessTree: replaced stale entry pid=\(existing.pid) pidversion=\(existing.pidVersion) with pidversion=\(record.identity.pidVersion)")
             }
             state.records[record.identity] = record
             state.pidIndex[record.identity.pid] = record.identity
             state.ancestorCache[record.identity] = Self.buildAncestorChain(for: record, state: state)
         }
-        logger.debug("ProcessTree: insert pid=\(record.identity.pid) pidversion=\(record.identity.pidVersion) parent_pid=\(record.parentIdentity.pid) parent_pidversion=\(record.parentIdentity.pidVersion) path=\(record.path, privacy: .public)")
     }
 
     func remove(identity: ProcessIdentity) {
@@ -174,7 +170,6 @@ final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
             state.pidIndex = pidIndexSnapshot
             state.ancestorCache = ancestorCache
         }
-        logger.info("ProcessTree: initial scan complete — \(records.count) processes")
     }
 
     /// Obtains the pidversion for a running process via its Mach task audit token.

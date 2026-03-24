@@ -85,6 +85,8 @@ final class ESJailAdapter {
         let jailCacheProcessor = self.jailCacheProcessor
 
         let result = es_new_client(&client) { esClient, message in
+            let correlationID = UUID()
+
             switch message.pointee.event_type {
 
             // --- Lifecycle events ---
@@ -97,7 +99,6 @@ final class ESJailAdapter {
                 if let parentRuleID = jailedProcessesLock.withLock({ $0[parentKey] }) {
                     let childKey = ProcessKey(child.audit_token)
                     jailedProcessesLock.withLock { $0[childKey] = parentRuleID }
-                    logger.debug("ESJailAdapter: jailed forked child pid=\(childKey.pid) pidVersion=\(childKey.pidVersion) signingID=\(signingID, privacy: .public) (inherited)")
                     return
                 }
 
@@ -108,7 +109,6 @@ final class ESJailAdapter {
                 guard let rule = rules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) else { return }
                 let childKey = ProcessKey(child.audit_token)
                 jailedProcessesLock.withLock { $0[childKey] = rule.id }
-                logger.debug("ESJailAdapter: jailed forked child pid=\(childKey.pid) pidVersion=\(childKey.pidVersion) signingID=\(signingID, privacy: .public) (direct match)")
 
             case ES_EVENT_TYPE_AUTH_EXEC:
                 let oldKey = ProcessKey(message.pointee.process.pointee.audit_token)
@@ -131,7 +131,6 @@ final class ESJailAdapter {
                 }
 
                 if inheritedRuleID != nil {
-                    logger.debug("ESJailAdapter: jailed exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public) (inherited)")
                     let cache = jailCacheProcessor.decide(jailsConfigured: !rulesLock.withLock({ $0 }).isEmpty).shouldCache
                     es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, cache)
                     return
@@ -143,7 +142,6 @@ final class ESJailAdapter {
                     let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
                     if let rule = rules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) {
                         jailedProcessesLock.withLock { $0[newKey] = rule.id }
-                        logger.debug("ESJailAdapter: jailed exec'd process pid=\(newKey.pid) pidVersion=\(newKey.pidVersion) signingID=\(signingID, privacy: .public) (direct match)")
                     }
                 }
 
@@ -192,34 +190,34 @@ final class ESJailAdapter {
                 case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
                     es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 case ES_EVENT_TYPE_AUTH_OPEN:
-                    interactor.handleJailEventSync(ESInboundAdapter.openFileEvent(from: message, esClient: esClient), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.openFileEvent(from: message, esClient: esClient, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_RENAME:
                     let path = ESInboundAdapter.string(from: message.pointee.event.rename.source.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_UNLINK:
                     let path = ESInboundAdapter.string(from: message.pointee.event.unlink.target.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_LINK:
                     let path = ESInboundAdapter.string(from: message.pointee.event.link.source.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_CREATE:
                     let path = ESInboundAdapter.createEventPath(from: message.pointee.event.create)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_TRUNCATE:
                     let path = ESInboundAdapter.string(from: message.pointee.event.truncate.target.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_COPYFILE:
                     let path = ESInboundAdapter.string(from: message.pointee.event.copyfile.source.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_READDIR:
                     let path = ESInboundAdapter.string(from: message.pointee.event.readdir.target.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
                     let path = ESInboundAdapter.string(from: message.pointee.event.exchangedata.file1.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 case ES_EVENT_TYPE_AUTH_CLONE:
                     let path = ESInboundAdapter.string(from: message.pointee.event.clone.source.pointee.path)
-                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path), jailRuleID: ruleID)
+                    interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path, correlationID: correlationID), jailRuleID: ruleID)
                 default:
                     fatalError("ESJailAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
                 }
@@ -255,7 +253,6 @@ final class ESJailAdapter {
         }
 
         rulesLock.withLock { $0 = initialRules }
-        logger.info("ESJailAdapter: started with \(initialRules.count) initial jail rule(s)")
     }
 
     // MARK: - Lifecycle
@@ -265,7 +262,6 @@ final class ESJailAdapter {
         es_delete_client(client)
         self.client = nil
         jailedProcessesLock.withLock { $0.removeAll() }
-        logger.info("ESJailAdapter: stopped — ES client deleted, tracking state cleared")
     }
 
     // MARK: - Rule updates
@@ -274,9 +270,6 @@ final class ESJailAdapter {
         rulesLock.withLock { $0 = rules }
         if let client {
             es_clear_cache(client)
-            logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s), cache cleared")
-        } else {
-            logger.info("ESJailAdapter: jail rules updated — \(rules.count) rule(s)")
         }
     }
 

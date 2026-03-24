@@ -39,6 +39,7 @@ private func fileAuthEvent(
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
+        correlationID: UUID(),
         operation: .open,
         path: path,
         processIdentity: identity(),
