@@ -222,10 +222,7 @@ final class FilterInteractor: @unchecked Sendable {
             matchedRuleID: decision.matchedRuleID,
             jailedRuleID: decision.jailedRuleID
         )
-        let callback = onEvent
-        DispatchQueue.main.async {
-            callback?(folderOpenEvent)
-        }
+        onEvent?(folderOpenEvent)
     }
 
 }

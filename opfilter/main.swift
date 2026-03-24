@@ -18,11 +18,10 @@ interactor.onEvent = { event in
     server.handleEvent(event)
 }
 
-let initialRules = server.mergedRules()
+server.start()
 
+let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()
 adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXProtectChange() })
-
-server.start()
 
 dispatchMain()

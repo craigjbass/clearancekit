@@ -21,6 +21,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private let interactor: FilterInteractor
     private let adapter: ESInboundAdapter
     private let jailAdapter: ESJailAdapter
+    fileprivate let serverQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
 
     init(interactor: FilterInteractor, adapter: ESInboundAdapter, jailAdapter: ESJailAdapter) {
         let database = Database(directory: dataDirectory)
@@ -58,7 +59,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     }
 
     func handleXProtectChange() {
-        Task {
+        serverQueue.async { [self] in
             let reloaded = enumerateXProtectEntries()
             guard policyRepository.updateXProtectEntries(reloaded) else { return }
             applyAllowlistToFilter()
@@ -69,7 +70,9 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Direct filter integration
 
     func handleEvent(_ event: FolderOpenEvent) {
-        broadcaster.broadcast(event)
+        serverQueue.async { [self] in
+            broadcaster.broadcast(event)
+        }
     }
 
     // MARK: - Policy / allowlist assembly
@@ -251,7 +254,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Resync
 
     fileprivate func requestResync(requestingConnection: NSXPCConnection, reply: @escaping () -> Void) {
-        Task {
+        serverQueue.async { [self] in
             let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
             let reloadedJailRules = ManagedJailRuleLoader.loadWithSync()
@@ -366,14 +369,18 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
 
     func registerClient(withReply reply: @escaping (Bool) -> Void) {
         guard let conn = connection, let server else { reply(false); return }
-        server.addGUIClient(conn)
-        reply(true)
+        server.serverQueue.async {
+            server.addGUIClient(conn)
+            reply(true)
+        }
     }
 
     func unregisterClient(withReply reply: @escaping (Bool) -> Void) {
         guard let conn = connection, let server else { reply(false); return }
-        server.removeClient(conn)
-        reply(true)
+        server.serverQueue.async {
+            server.removeClient(conn)
+            reply(true)
+        }
     }
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
@@ -390,8 +397,10 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyAddRule(rule)
-        reply(true)
+        server.serverQueue.async {
+            server.applyAddRule(rule)
+            reply(true)
+        }
     }
 
     func updateRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -400,14 +409,18 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyUpdateRule(rule)
-        reply(true)
+        server.serverQueue.async {
+            server.applyUpdateRule(rule)
+            reply(true)
+        }
     }
 
     func removeRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
-        server.applyRemoveRule(ruleID: ruleID as UUID)
-        reply(true)
+        server.serverQueue.async {
+            server.applyRemoveRule(ruleID: ruleID as UUID)
+            reply(true)
+        }
     }
 
     func addAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -416,14 +429,18 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyAddAllowlistEntry(entry)
-        reply(true)
+        server.serverQueue.async {
+            server.applyAddAllowlistEntry(entry)
+            reply(true)
+        }
     }
 
     func removeAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
-        server.applyRemoveAllowlistEntry(entryID: entryID as UUID)
-        reply(true)
+        server.serverQueue.async {
+            server.applyRemoveAllowlistEntry(entryID: entryID as UUID)
+            reply(true)
+        }
     }
 
     func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -432,14 +449,18 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyAddAncestorAllowlistEntry(entry)
-        reply(true)
+        server.serverQueue.async {
+            server.applyAddAncestorAllowlistEntry(entry)
+            reply(true)
+        }
     }
 
     func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
-        server.applyRemoveAncestorAllowlistEntry(entryID: entryID as UUID)
-        reply(true)
+        server.serverQueue.async {
+            server.applyRemoveAncestorAllowlistEntry(entryID: entryID as UUID)
+            reply(true)
+        }
     }
 
     func addJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -448,8 +469,10 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyAddJailRule(rule)
-        reply(true)
+        server.serverQueue.async {
+            server.applyAddJailRule(rule)
+            reply(true)
+        }
     }
 
     func updateJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void) {
@@ -458,14 +481,18 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
             reply(false)
             return
         }
-        server.applyUpdateJailRule(rule)
-        reply(true)
+        server.serverQueue.async {
+            server.applyUpdateJailRule(rule)
+            reply(true)
+        }
     }
 
     func removeJailRule(_ ruleID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
-        server.applyRemoveJailRule(ruleID: ruleID as UUID)
-        reply(true)
+        server.serverQueue.async {
+            server.applyRemoveJailRule(ruleID: ruleID as UUID)
+            reply(true)
+        }
     }
 
     func requestResync(withReply reply: @escaping () -> Void) {
@@ -474,13 +501,19 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func beginDiscovery(withReply reply: @escaping () -> Void) {
-        server?.beginDiscovery()
-        reply()
+        guard let server else { reply(); return }
+        server.serverQueue.async {
+            server.beginDiscovery()
+            reply()
+        }
     }
 
     func endDiscovery(withReply reply: @escaping () -> Void) {
-        server?.endDiscovery()
-        reply()
+        guard let server else { reply(); return }
+        server.serverQueue.async {
+            server.endDiscovery()
+            reply()
+        }
     }
 
     func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
@@ -496,14 +529,19 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void) {
-        server?.resolveSignatureIssue(approved: approved)
-        reply()
+        guard let server else { reply(); return }
+        server.serverQueue.async {
+            server.resolveSignatureIssue(approved: approved)
+            reply()
+        }
     }
 
     func setJailEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void) {
         guard let server else { reply(false); return }
-        server.setJailEnabled(enabled)
-        reply(true)
+        server.serverQueue.async {
+            server.setJailEnabled(enabled)
+            reply(true)
+        }
     }
 }
 
