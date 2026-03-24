@@ -39,12 +39,12 @@ final class ESInboundAdapter {
                 }
                 Self.dispatchFileAuth(from: message, esClient: esClient, interactor: interactor, correlationID: correlationID)
             case ES_EVENT_TYPE_AUTH_OPEN where message.pointee.event.open.file.pointee.path.data == nil:
+                logger.error("Path invariant not met. Got nil path.")
                 es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), false)
                 return
-            case ES_EVENT_TYPE_AUTH_EXEC:
+            case ES_EVENT_TYPE_NOTIFY_EXEC:
                 let target = message.pointee.event.exec.target
                 interactor.handleExec(newImage: processRecord(from: target))
-                es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, false)
             case ES_EVENT_TYPE_NOTIFY_FORK:
                 interactor.handleFork(child: processRecord(from: message.pointee.event.fork.child))
             case ES_EVENT_TYPE_NOTIFY_EXIT:
@@ -88,7 +88,7 @@ final class ESInboundAdapter {
             ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
             ES_EVENT_TYPE_AUTH_CLONE,
             ES_EVENT_TYPE_NOTIFY_FORK,
-            ES_EVENT_TYPE_AUTH_EXEC,
+            ES_EVENT_TYPE_NOTIFY_EXEC,
             ES_EVENT_TYPE_NOTIFY_EXIT,
             ES_EVENT_TYPE_NOTIFY_WRITE,
         ]
