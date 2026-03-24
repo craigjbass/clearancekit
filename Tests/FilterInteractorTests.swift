@@ -33,11 +33,6 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
 
 // MARK: - FilterInteractorTests
 
-// .serialized prevents thread starvation on low-core CI runners (e.g. 3 cores).
-// Each test blocks a cooperative thread on DispatchSemaphore.wait() while waiting
-// for a Task spawned by FilterInteractor.handle(.fileAuth) to call respond(). With
-// concurrent execution, all pool threads can be blocked simultaneously, deadlocking
-/// the spawned Tasks. See: https://github.com/craigjbass/clearancekit/issues/66
 private func makeInteractor(
     rules: [FAARule] = [],
     allowlist: [AllowlistEntry] = [],
@@ -68,7 +63,7 @@ private func makeInteractor(
     return interactor
 }
 
-@Suite("FilterInteractor", .serialized)
+@Suite("FilterInteractor")
 struct FilterInteractorTests {
 
     private func identity(pid: pid_t, version: UInt32 = 1) -> ProcessIdentity {
@@ -181,19 +176,15 @@ struct FilterInteractorTests {
     }
 
     @Test("openFile with no matching rule allows access without consulting tree")
-    func openFileNoRuleAllows() {
+    func openFileNoRuleAllows() async {
         let tree = FakeProcessTree()
         let interactor = makeInteractor(processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(path: "/tmp/file.txt") { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(path: "/tmp/file.txt") { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
         #expect(tree.insertedIdentities.isEmpty)
@@ -201,7 +192,7 @@ struct FilterInteractorTests {
     }
 
     @Test("openFile allowed by process signature without consulting tree for ancestry")
-    func openFileAllowedBySignature() {
+    func openFileAllowedBySignature() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -209,26 +200,22 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "TEAM1",
-            signingID: "com.example.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/data.db",
+                teamID: "TEAM1",
+                signingID: "com.example.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("openFile denied when process signature does not match")
-    func openFileDeniedBySignatureMismatch() {
+    func openFileDeniedBySignatureMismatch() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -236,26 +223,22 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "OTHER",
-            signingID: "com.other.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/data.db",
+                teamID: "OTHER",
+                signingID: "com.other.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == false)
     }
 
     @Test("openFile allowed when ancestor matches allowed ancestor path")
-    func openFileAllowedByAncestorPath() {
+    func openFileAllowedByAncestorPath() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -265,22 +248,18 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/terminal", teamID: "", signingID: "")]
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(path: "/protected/file.txt") { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("openFile denied when process is not found in tree before deadline")
-    func openFileDeniedWhenProcessNotInTree() {
+    func openFileDeniedWhenProcessNotInTree() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -289,23 +268,19 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = false
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
         // deadline = 0 ensures waitForProcess exits immediately without spinning
-        let event = openFileEvent(path: "/protected/file.txt", deadline: 0) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(path: "/protected/file.txt", deadline: 0) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == false)
     }
 
     @Test("openFile denied when ancestor path does not match allowed ancestor")
-    func openFileDeniedWhenAncestorPathMismatches() {
+    func openFileDeniedWhenAncestorPathMismatches() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -315,22 +290,18 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/other", teamID: "", signingID: "")]
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(path: "/protected/file.txt") { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(path: "/protected/file.txt") { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == false)
     }
 
     @Test("globally allowlisted process bypasses all rules")
-    func globallyAllowlistedProcessAllowed() {
+    func globallyAllowlistedProcessAllowed() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -339,49 +310,41 @@ struct FilterInteractorTests {
         let allowlistEntry = AllowlistEntry(signingID: "com.example.allowlisted", teamID: "ALLOWLISTED")
         let tree = FakeProcessTree()
         let interactor = makeInteractor(rules: [rule], allowlist: [allowlistEntry], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "ALLOWLISTED",
-            signingID: "com.example.allowlisted"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/data.db",
+                teamID: "ALLOWLISTED",
+                signingID: "com.example.allowlisted"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("globally allowlisted process responds with cache enabled")
-    func globallyAllowlistedProcessCaches() {
+    func globallyAllowlistedProcessCaches() async {
         let allowlistEntry = AllowlistEntry(signingID: "com.example.allowlisted", teamID: "ALLOWLISTED")
         let tree = FakeProcessTree()
         let interactor = makeInteractor(allowlist: [allowlistEntry], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var cached: Bool?
 
-        let event = openFileEventCapturingCache(
-            path: "/any/path",
-            teamID: "ALLOWLISTED",
-            signingID: "com.example.allowlisted"
-        ) { _, cache in
-            cached = cache
-            semaphore.signal()
+        let cached: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEventCapturingCache(
+                path: "/any/path",
+                teamID: "ALLOWLISTED",
+                signingID: "com.example.allowlisted"
+            ) { _, cache in
+                continuation.resume(returning: cache)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(cached == true)
     }
 
     @Test("process allowed when ancestor matches ancestor allowlist entry")
-    func ancestorAllowlistBypasses() {
+    func ancestorAllowlistBypasses() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -392,26 +355,22 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/trusted-shell", teamID: "", signingID: "")]
         let interactor = makeInteractor(rules: [rule], ancestorAllowlist: [ancestorEntry], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "UNRELATED",
-            signingID: "com.unrelated.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/data.db",
+                teamID: "UNRELATED",
+                signingID: "com.unrelated.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("process denied when ancestor does not match ancestor allowlist entry")
-    func ancestorAllowlistMismatchDenied() {
+    func ancestorAllowlistMismatchDenied() async {
         let rule = FAARule(
             protectedPathPrefix: "/protected",
             source: .user,
@@ -422,26 +381,22 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/evil-shell", teamID: "", signingID: "")]
         let interactor = makeInteractor(rules: [rule], ancestorAllowlist: [ancestorEntry], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/data.db",
-            teamID: "UNRELATED",
-            signingID: "com.unrelated.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/data.db",
+                teamID: "UNRELATED",
+                signingID: "com.unrelated.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == false)
     }
 
     @Test("openFile allowed by process path without consulting tree when rule also has ancestor criteria")
-    func openFileProcessPathMatchSkipsAncestryLookup() {
+    func openFileProcessPathMatchSkipsAncestryLookup() async {
         // Rule has BOTH process-path AND ancestor criteria. When the process path
         // matches, the ancestry provider must not be invoked — so even with an
         // expired deadline (process never in tree), the access is allowed.
@@ -454,20 +409,16 @@ struct FilterInteractorTests {
         let tree = FakeProcessTree()
         tree.containsResult = false  // process not in tree; would trigger deny in old code
         let interactor = makeInteractor(rules: [rule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/protected/file.txt",
-            processPath: "/usr/bin/safe",
-            deadline: 0  // immediate deadline — any wait would expire instantly
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/protected/file.txt",
+                processPath: "/usr/bin/safe",
+                deadline: 0  // immediate deadline — any wait would expire instantly
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
@@ -475,7 +426,7 @@ struct FilterInteractorTests {
     // MARK: - Jail tests
 
     @Test("jailed process allowed when accessing path within allowed prefixes")
-    func jailedProcessAllowedWithinPrefixes() {
+    func jailedProcessAllowedWithinPrefixes() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -483,26 +434,22 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/allowed/data.db",
-            teamID: "TEAM1",
-            signingID: "com.example.jailed"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/allowed/data.db",
+                teamID: "TEAM1",
+                signingID: "com.example.jailed"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("globally allowlisted process escapes jail")
-    func globallyAllowlistedProcessEscapesJail() {
+    func globallyAllowlistedProcessEscapesJail() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -511,26 +458,22 @@ struct FilterInteractorTests {
         let allowlistEntry = AllowlistEntry(signingID: "com.example.jailed", teamID: "TEAM1")
         let tree = FakeProcessTree()
         let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/forbidden/file.txt",
-            teamID: "TEAM1",
-            signingID: "com.example.jailed"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/forbidden/file.txt",
+                teamID: "TEAM1",
+                signingID: "com.example.jailed"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("non-jailed process is unaffected by jail rules")
-    func nonJailedProcessUnaffected() {
+    func nonJailedProcessUnaffected() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -538,20 +481,16 @@ struct FilterInteractorTests {
         )
         let tree = FakeProcessTree()
         let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/forbidden/file.txt",
-            teamID: "OTHER",
-            signingID: "com.other.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/forbidden/file.txt",
+                teamID: "OTHER",
+                signingID: "com.other.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
@@ -638,7 +577,7 @@ struct FilterInteractorTests {
     // MARK: - Ancestor jail propagation via handleFileAuth
 
     @Test("descendant of jailed ancestor is allowed access within allowed prefixes")
-    func ancestorJailAllowsDescendantWithinPrefixes() {
+    func ancestorJailAllowsDescendantWithinPrefixes() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -648,26 +587,22 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
         let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/allowed/data.db",
-            teamID: "OTHER",
-            signingID: "com.child.process"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/allowed/data.db",
+                teamID: "OTHER",
+                signingID: "com.child.process"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("globally allowlisted descendant escapes ancestor jail")
-    func globalAllowlistEscapesAncestorJail() {
+    func globalAllowlistEscapesAncestorJail() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -678,26 +613,22 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/app", teamID: "TEAM1", signingID: "com.example.jailed")]
         let interactor = makeInteractor(allowlist: [allowlistEntry], jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/forbidden/file",
-            teamID: "OTHER",
-            signingID: "com.child.process"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/forbidden/file",
+                teamID: "OTHER",
+                signingID: "com.child.process"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
 
     @Test("no ancestor jail match leaves process unaffected")
-    func noAncestorJailMatchUnaffected() {
+    func noAncestorJailMatchUnaffected() async {
         let jailRule = JailRule(
             name: "Confine App",
             jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
@@ -707,20 +638,16 @@ struct FilterInteractorTests {
         tree.containsResult = true
         tree.ancestorsResult = [AncestorInfo(path: "/usr/bin/other", teamID: "OTHER", signingID: "com.other.app")]
         let interactor = makeInteractor(jailRules: [jailRule], processTree: tree)
-        let semaphore = DispatchSemaphore(value: 0)
-        var allowed: Bool?
 
-        let event = openFileEvent(
-            path: "/forbidden/file.txt",
-            teamID: "OTHER",
-            signingID: "com.other.app"
-        ) { result in
-            allowed = result
-            semaphore.signal()
+        let allowed: Bool = await withCheckedContinuation { continuation in
+            interactor.handleFileAuth(openFileEvent(
+                path: "/forbidden/file.txt",
+                teamID: "OTHER",
+                signingID: "com.other.app"
+            ) { result in
+                continuation.resume(returning: result)
+            })
         }
-
-        interactor.handleFileAuth(event)
-        semaphore.wait()
 
         #expect(allowed == true)
     }
