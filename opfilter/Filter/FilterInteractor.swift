@@ -93,6 +93,7 @@ final class FilterInteractor: @unchecked Sendable {
     private let ancestorAllowlistStorage: OSAllocatedUnfairLock<[AncestorAllowlistEntry]>
     private let jailRulesStorage: OSAllocatedUnfairLock<[JailRule]>
     private let processTree: ProcessTreeProtocol
+    private let postRespondQueue: DispatchQueue
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
     let pipeline: FileAuthPipeline
@@ -103,7 +104,8 @@ final class FilterInteractor: @unchecked Sendable {
         initialAncestorAllowlist: [AncestorAllowlistEntry] = [],
         initialJailRules: [JailRule] = [],
         processTree: ProcessTreeProtocol,
-        pipeline: FileAuthPipeline
+        pipeline: FileAuthPipeline,
+        postRespondQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
     ) {
         self.rulesStorage = OSAllocatedUnfairLock(initialState: initialRules)
         self.allowlistStorage = OSAllocatedUnfairLock(initialState: initialAllowlist)
@@ -111,6 +113,7 @@ final class FilterInteractor: @unchecked Sendable {
         self.jailRulesStorage = OSAllocatedUnfairLock(initialState: initialJailRules)
         self.processTree = processTree
         self.pipeline = pipeline
+        self.postRespondQueue = postRespondQueue
     }
 
     func currentRules() -> [FAARule] {
@@ -142,10 +145,10 @@ final class FilterInteractor: @unchecked Sendable {
     }
 
     // Called synchronously from the ESJailAdapter ES callback queue.
-    // Jail policy is pure synchronous logic; responding inline avoids the async
-    // Task dispatch that causes thread-pool saturation and deadline misses when
-    // the jail client receives the high volume of events its inverted process
-    // muting generates.
+    // Jail policy is pure synchronous logic; responding inline avoids cooperative
+    // thread saturation and deadline misses when the jail client receives the high
+    // volume of events its inverted process muting generates. Post-respond work is
+    // handed off to postRespondQueue immediately after respond() returns.
     //
     // jailRuleID is resolved by ESJailAdapter from its tracked muted-PID map,
     // covering both direct matches (signing ID matches rule) and inherited jails
@@ -168,11 +171,8 @@ final class FilterInteractor: @unchecked Sendable {
         let decision = checkJailPath(rule: rule, path: fileEvent.path)
         fileEvent.respond(decision.isAllowed, false)
 
-        Task { [weak self] in
-            guard let self else { return }
-            let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
-            postRespond(fileEvent: fileEvent, decision: decision, ancestors: ancestors, dwellNanoseconds: 0)
-        }
+        let ancestors = processTree.ancestors(of: fileEvent.processIdentity)
+        postRespond(fileEvent: fileEvent, decision: decision, ancestors: ancestors, dwellNanoseconds: 0)
     }
 
     func handleFork(child: ProcessRecord) {
@@ -192,30 +192,32 @@ final class FilterInteractor: @unchecked Sendable {
     }
 
     func postRespond(fileEvent: FileAuthEvent, decision: PolicyDecision, ancestors: [AncestorInfo], dwellNanoseconds: UInt64) {
-        let allowed = decision.isAllowed
+        postRespondQueue.async { [self] in
+            let allowed = decision.isAllowed
 
-        auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: fileEvent.correlationID)
+            auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: fileEvent.correlationID)
 
-        if !allowed {
-            ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
+            if !allowed {
+                ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
+            }
+
+            let folderOpenEvent = FolderOpenEvent(
+                operation: fileEvent.operation.rawValue,
+                path: fileEvent.path,
+                timestamp: Date(),
+                processID: fileEvent.processID,
+                processPath: fileEvent.processPath,
+                teamID: fileEvent.teamID,
+                signingID: fileEvent.signingID,
+                accessAllowed: allowed,
+                decisionReason: decision.reason,
+                ancestors: ancestors,
+                matchedRuleID: decision.matchedRuleID,
+                jailedRuleID: decision.jailedRuleID,
+                eventID: fileEvent.correlationID
+            )
+            onEvent?(folderOpenEvent)
         }
-
-        let folderOpenEvent = FolderOpenEvent(
-            operation: fileEvent.operation.rawValue,
-            path: fileEvent.path,
-            timestamp: Date(),
-            processID: fileEvent.processID,
-            processPath: fileEvent.processPath,
-            teamID: fileEvent.teamID,
-            signingID: fileEvent.signingID,
-            accessAllowed: allowed,
-            decisionReason: decision.reason,
-            ancestors: ancestors,
-            matchedRuleID: decision.matchedRuleID,
-            jailedRuleID: decision.jailedRuleID,
-            eventID: fileEvent.correlationID
-        )
-        onEvent?(folderOpenEvent)
     }
 
 }

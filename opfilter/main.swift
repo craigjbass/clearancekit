@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 
 let evictionQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background)
 let hotPathQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive)
@@ -13,6 +14,7 @@ let slowWorkerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.s
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
 let eventSignal = DispatchSemaphore(value: 0)
 let slowSignal = DispatchSemaphore(value: 0)
+let postRespondQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
 let xpcServerQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
 
 let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
@@ -52,7 +54,8 @@ let pipeline = FileAuthPipeline(
 let interactor = FilterInteractor(
     initialRules: faaPolicy,
     processTree: processTree,
-    pipeline: pipeline
+    pipeline: pipeline,
+    postRespondQueue: postRespondQueue
 )
 interactorRef.value = interactor
 pipeline.start()
@@ -81,5 +84,28 @@ server.start()
 let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()
 adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXProtectChange() })
+
+let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
+let metricsQueue = DispatchQueue(label: "uk.craigbass.clearancekit.metrics", qos: .utility)
+let timer = DispatchSource.makeTimerSource(queue: metricsQueue)
+
+timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
+
+timer.setEventHandler {
+    let m = pipeline.metrics()
+
+        metricsLogger.info("""
+        pipeline_metrics \
+        eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
+        eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
+        hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
+        hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
+        slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
+        slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
+        slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public)
+        """)
+}
+
+timer.resume()
 
 dispatchMain()
