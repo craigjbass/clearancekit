@@ -169,7 +169,7 @@ final class ESJailAdapter {
                         let nonJailedCache = jailCacheProcessor.decide(jailsConfigured: !rulesLock.withLock({ $0 }).isEmpty).shouldCache
                         switch message.pointee.event_type {
                         case ES_EVENT_TYPE_AUTH_OPEN:
-                            es_respond_flags_result(esClient, message, UInt32(message.pointee.event.open.fflag), nonJailedCache)
+                            es_respond_flags_result(esClient, message, UInt32.max, nonJailedCache)
                         default:
                             es_respond_auth_result(esClient, message, ES_AUTH_RESULT_ALLOW, nonJailedCache)
                         }
