@@ -8,16 +8,15 @@
 import Foundation
 import OSLog
 
-let evictionQueue    = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background,       autoreleaseFrequency: .never)
-let esAdapterQueue      = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter",       qos: .userInteractive,  autoreleaseFrequency: .never)
-let esJailAdapterQueue  = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter", qos: .userInteractive,  autoreleaseFrequency: .never)
-let hotPathQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot",          qos: .userInteractive,  autoreleaseFrequency: .never)
-let slowWorkerQueue  = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow",         qos: .userInitiated,    attributes: .concurrent, autoreleaseFrequency: .never)
-let processTreeQueue = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree",          qos: .userInitiated,    autoreleaseFrequency: .never)
-let postRespondQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond",          qos: .background,       autoreleaseFrequency: .never)
-let xpcServerQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server",            qos: .userInitiated,    autoreleaseFrequency: .never)
-let metricsQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.metrics",               qos: .utility,          autoreleaseFrequency: .never)
-let cleanupQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.cleanup",               qos: .background,       autoreleaseFrequency: .never)
+let evictionQueue      = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree-eviction", qos: .background)
+let esAdapterQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter",            qos: .userInteractive)
+let esJailAdapterQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter",       qos: .userInteractive)
+let hotPathQueue       = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot",          qos: .userInteractive)
+let slowWorkerQueue    = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow",         qos: .userInitiated,    attributes: .concurrent)
+let processTreeQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.process-tree",          qos: .userInitiated)
+let postRespondQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond",          qos: .background)
+let xpcServerQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server",            qos: .userInitiated)
+let metricsQueue       = DispatchQueue(label: "uk.craigbass.clearancekit.metrics",               qos: .utility)
 
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
 let eventSignal = DispatchSemaphore(value: 0)
@@ -109,12 +108,5 @@ metricsTimer.setEventHandler {
     """)
 }
 metricsTimer.resume()
-
-let cleanupTimer = DispatchSource.makeTimerSource(queue: cleanupQueue)
-cleanupTimer.schedule(deadline: .now() + .seconds(60), repeating: .seconds(60))
-cleanupTimer.setEventHandler {
-    autoreleasepool {}
-}
-cleanupTimer.resume()
 
 dispatchMain()
