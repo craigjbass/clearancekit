@@ -323,13 +323,15 @@ extension XPCServer: NSXPCListenerDelegate {
         newConnection.remoteObjectInterface = remoteInterface
 
         newConnection.invalidationHandler = { [weak self, weak newConnection] in
-            guard let conn = newConnection else { return }
-            self?.removeClient(conn)
+            guard let conn = newConnection, let self else { return }
+            serverQueue.async { self.removeClient(conn) }
         }
         newConnection.interruptionHandler = { [weak self, weak newConnection] in
-            guard let conn = newConnection else { return }
-            logger.error("XPCServer: Connection interrupted")
-            self?.removeClient(conn)
+            guard let conn = newConnection, let self else { return }
+            serverQueue.async {
+                logger.error("XPCServer: Connection interrupted")
+                self.removeClient(conn)
+            }
         }
 
         guard ConnectionValidator.validate(newConnection) else {
@@ -371,7 +373,10 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
-        reply(server?.recentEvents() ?? [])
+        guard let server else { reply([]); return }
+        server.serverQueue.async {
+            reply(server.recentEvents())
+        }
     }
 
     func fetchVersionInfo(withReply reply: @escaping (NSString) -> Void) {
@@ -504,14 +509,16 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func fetchProcessList(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
+        guard let server else { reply([]); return }
+        server.serverQueue.async {
             reply(ProcessEnumerator.enumerateAll())
         }
     }
 
     func fetchActiveJailedProcesses(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            reply(self?.server?.activeJailedProcesses() ?? [])
+        guard let server else { reply([]); return }
+        server.serverQueue.async {
+            reply(server.activeJailedProcesses())
         }
     }
 
