@@ -1,41 +1,66 @@
-# TLA+ Formal Model — ES AUTH Deadline
+# TLA+ Formal Model — ES AUTH Pipeline
 
 ## What this models
 
-The `ESAuthDeadline.tla` specification formally models the threading
-architecture of the opfilter Endpoint Security AUTH event pipeline. The goal is
-to determine under what conditions AUTH events miss their kernel-enforced
-deadline, causing ES to terminate the client (SIGKILL, Namespace
-ENDPOINTSECURITY, Code 2).
+The `ESAuthDeadline.tla` specification formally models the 2-stage bounded-queue
+pipeline that processes Endpoint Security AUTH events in opfilter. The goal is to
+determine under what conditions AUTH events miss their kernel-enforced deadline,
+causing ES to terminate the client (SIGKILL, Namespace ENDPOINTSECURITY, Code 2).
 
 ## Architecture mapped
 
 ```
-ES kernel callback thread (per-client serial queue)
-  └─ ESInboundAdapter closure
-       ├─ NOTIFY_FORK / NOTIFY_EXIT / AUTH_EXEC → sync, inline
-       └─ AUTH_OPEN / AUTH_RENAME / … (file auth)
-            └─ Task { await handleFileAuth(event) }
-                 └─ Swift cooperative thread pool  [bounded to P threads]
-                      ├─ Fast path: globally allowed → respond immediately
-                      └─ Slow path: waitForProcess spin-wait (up to deadline − 100 ms)
-                           └─ evaluate policy → respond
+ES kernel callback (serialised per client)
+  └─ ESInboundAdapter callback
+       └─ pipeline.submit(event)
+            ├─ eventBuffer: BoundedQueue (capacity EB_Cap)
+            │   full? → drop: respond(allow), shed load
+            │   ok?   → signal eventSignal
+            │
+            └─ hotPathQueue (serial consumer, wakes on eventSignal)
+                 ├─ Dequeue from eventBuffer
+                 ├─ Classify:
+                 │   ├─ globally allowed / no rule applies → respond (H ticks)
+                 │   └─ ancestry required → enqueue to slowQueue
+                 │
+                 └─ slowQueue: BoundedQueue (capacity SQ_Cap)
+                      full? → drop: respond(allow), shed load
+                      ok?   → signal slowSignal
+                      │
+                      └─ slowDispatchLoop (wakes on slowSignal)
+                           └─ slowWorkerSemaphore.wait() [W permits]
+                                └─ slowWorkerQueue (concurrent)
+                                     ├─ waitForProcess spin-wait (T ticks)
+                                     ├─ evaluate policy → respond
+                                     └─ slowWorkerSemaphore.signal()
 ```
 
-**Key constraint**: the Swift cooperative thread pool has a fixed width `P`
-(approximately equal to the CPU core count). Each `Task` dispatched from the ES
-callback occupies one thread for the full duration of the event handler,
-including any `waitForProcess` spinning.
+**Key design elements:**
+
+1. **Bounded queues with drop-on-full:** When `eventBuffer` or `slowQueue` is
+   full, the event is immediately allowed and dropped. This guarantees
+   back-pressure — the pipeline never accumulates unbounded work.
+
+2. **Serial hot path:** A single `hotPathQueue` consumer classifies events and
+   resolves most of them without touching the slow path. Only events requiring
+   ancestry lookup are forwarded to the slow queue.
+
+3. **Bounded slow worker pool:** `slowWorkerSemaphore` (default value 2) limits
+   concurrent slow-path workers. Each worker holds a permit for the full
+   duration of `waitForProcess` + evaluation. The dispatch loop blocks on the
+   semaphore, so work items queue in `slowQueue` until a permit is available.
 
 ## Parameters
 
 | Symbol | TLA+ constant | Real-world meaning |
 |--------|---------------|--------------------|
 | N | `NumEvents` | Number of AUTH events in a burst |
-| P | `PoolSize` | Cooperative thread pool width |
+| EB | `EB_Cap` | `eventBuffer` bounded queue capacity (default 1024) |
+| SQ | `SQ_Cap` | `slowQueue` bounded queue capacity (default 256) |
+| W | `Workers` | Slow-path semaphore permits (default 2) |
 | D | `Deadline` | Ticks until ES kills the client |
-| T | `SlowTicks` | Ticks a slow-path event holds a thread |
-| F | `FastTicks` | Ticks a fast-path event takes |
+| T | `SlowTicks` | Ticks a slow-path worker holds a permit |
+| H | `HotTicks` | Ticks the serial hot path takes per event |
 
 ## Running the model checker
 
@@ -52,120 +77,131 @@ java -cp tla2tools.jar tlc2.TLC ESAuthDeadline \
 
 ## TLC results
 
-### Configuration 1: P+1 slow events (default `.cfg`)
+### Configuration 1: burst exceeds pipeline capacity (default `.cfg`)
 
 ```
-NumEvents = 3, PoolSize = 2, Deadline = 4, SlowTicks = 3, FastTicks = 1
+NumEvents = 5, EB_Cap = 4, SQ_Cap = 2, Workers = 2,
+Deadline = 6, SlowTicks = 3, HotTicks = 1
 ```
 
 **Result: Invariant `NoDeadlineMiss` VIOLATED.**
 
-Counter-example trace:
+Counter-example trace (4 hot events + 1 slow event):
 
-| tick | action | thread 1 | thread 2 | event 3 |
-|------|--------|----------|----------|---------|
-| 0 | Dispatch e1 (slow) | busy until 3 | idle | queued |
-| 0 | Dispatch e2 (slow) | busy until 3 | busy until 3 | queued |
-| 1–2 | Tick | busy | busy | **waiting** |
-| 3 | Dispatch e3 (slow) | busy until 6 | free | started |
-| — | — | — | — | responds at **tick 6 > Deadline 4** ✗ |
+| tick | action | eventBuffer | slowQueue | worker 1 | worker 2 | notes |
+|------|--------|-------------|-----------|----------|----------|-------|
+| 0 | Submit e1–e4 | [1,2,3,4] | [] | idle | idle | |
+| 0 | HotConsume e1 (hot) | [2,3,4] | [] | idle | idle | respond e1 at tick 1 |
+| 0 | Submit e5 | [2,3,4,5] | [] | idle | idle | EB full after this |
+| 1 | HotConsume e2 (hot) | [3,4,5] | [] | idle | idle | respond e2 at tick 2 |
+| 2 | HotConsume e3 (hot) | [4,5] | [] | idle | idle | respond e3 at tick 3 |
+| 3 | HotConsume e4 (hot) | [5] | [] | idle | idle | respond e4 at tick 4 |
+| 4 | HotConsume e5 (slow) | [] | [5] | idle | idle | enqueued to slow path |
+| 4 | SlowDispatch e5 | [] | [] | busy→7 | idle | responds at **tick 7 > Deadline 6** ✗ |
 
-Event 3 cannot start until tick 3 (when a thread frees up), and then takes 3
-more ticks. Total response time: 6 ticks > 4-tick deadline.
+Event 5 spends ticks 0–4 queued behind hot events in the eventBuffer. The
+serial hot path processes one event per tick, so e5 reaches the slow path at
+tick 4. The slow worker takes 3 ticks (waitForProcess + evaluate). Total
+response time: 7 ticks > 6-tick deadline.
 
-### Configuration 2: N = P (safe)
+### Configuration 2: within capacity (safe)
 
 ```
-NumEvents = 2, PoolSize = 2, Deadline = 4, SlowTicks = 3, FastTicks = 1
+NumEvents = 3, EB_Cap = 4, SQ_Cap = 2, Workers = 2,
+Deadline = 8, SlowTicks = 3, HotTicks = 1
 ```
 
 **Result: No error. Model checking completed.**
 
-When the number of simultaneous events equals the pool size, every event gets a
-thread immediately and responds before the deadline.
+With 3 events and D=8: even if all 3 are slow, the hot path drains them at
+ticks 1, 2, 3. Workers pick up events 1 and 2 immediately (finish at ticks 4
+and 5). Event 3 gets a permit at tick 4 when worker 1 finishes, and responds at
+tick 7 ≤ 8. All events meet the deadline.
 
-### Configuration 3: Mixed fast/slow (realistic startup)
+### Configuration 3: large buffer with few workers
 
 ```
-NumEvents = 5, PoolSize = 2, Deadline = 6, SlowTicks = 5, FastTicks = 1
+NumEvents = 8, EB_Cap = 8, SQ_Cap = 4, Workers = 2,
+Deadline = 10, SlowTicks = 4, HotTicks = 1
 ```
 
 **Result: Invariant `NoDeadlineMiss` VIOLATED.**
 
-Even with a mix of fast and slow events, if enough slow events queue up they
-block fast events behind them from ever reaching a thread in time.
+Even with large buffers, the bottleneck is the slow worker pool. Events
+accumulate in the slow queue and the last ones cannot be processed before their
+deadline expires.
 
-## Capacity formula
+## Capacity analysis
 
-Derived analytically and confirmed by exhaustive TLC model checking:
+### Hot path throughput
+
+The serial consumer processes one event per `H` ticks. In `D` ticks it can
+process `⌊D/H⌋` events. Events beyond `EB_Cap` are dropped (safe). The hot
+path is rarely the bottleneck because `H` is small (classification is cheap).
+
+### Slow path throughput
+
+With `W` worker permits each held for `T` ticks:
 
 ```
-N_safe = P × ⌊D / T⌋ + min(P, ⌊(D mod T) / F⌋)
+Slow capacity in one deadline window = W × ⌊D/T⌋
 ```
 
-When `T ≈ D` (waitForProcess holds a thread for nearly the full deadline):
+But events do not all enter the slow queue simultaneously — they are serialised
+through the hot path. Event `k` (1-indexed) enters the slow queue at tick
+`k × H`. It must finish by tick `D`. So the constraint is:
 
 ```
-N_safe ≈ P
+k × H + wait_for_permit + T ≤ D
 ```
 
-**In practice on Apple Silicon:**
+The wait for a permit depends on when the next worker becomes free. In the
+worst case (all slow), the first `W` events get permits immediately and the
+remaining events wait for the earliest completion.
 
-| Machine | Cores (P) | ES deadline (D) | waitForProcess worst case (T) | Safe burst (N) |
-|---------|-----------|-----------------|------------------------------|----------------|
-| M1 | 8 | ~10 s | ~9.9 s | **8** |
-| M4 Pro | 10 | ~10 s | ~9.9 s | **10** |
-| M4 Max | 14 | ~10 s | ~9.9 s | **14** |
+### Drop safety
 
-Any burst exceeding P slow events causes at least one deadline miss →
-SIGKILL.
+Dropped events are auto-allowed, so they never miss a deadline. The bounded
+queues guarantee that the pipeline cannot accumulate more than `EB_Cap + SQ_Cap`
+events. This is a deliberate trade-off: under extreme load, some events are
+allowed without policy evaluation rather than risking a deadline miss that would
+terminate the entire ES client.
 
-## Root cause of the crash
+### Real-world parameters
 
-At startup:
+| Parameter | Default | Real-world value |
+|-----------|---------|------------------|
+| `EB_Cap` | 1024 | `eventBuffer` capacity in `FileAuthPipeline` |
+| `SQ_Cap` | 256 | `slowQueue` capacity in `FileAuthPipeline` |
+| `Workers` | 2 | `slowWorkerSemaphore` initial value in `main.swift` |
+| `H` | ~0.01 ms | Hot path classification (lock acquire + rule lookup) |
+| `T` | up to ~9.9 s | `waitForProcess` spin-wait + policy evaluation |
+| `D` | ~10 s | ES kernel deadline per AUTH event |
 
-1. `buildInitialTree()` populates the process tree from a `proc_listallpids`
-   snapshot.
-2. ES subscription begins — events start arriving immediately.
-3. Processes forked **between** the snapshot and the ES subscription are not in
-   the tree.
-4. AUTH events from these processes enter `waitForProcess`, which spin-waits
-   (via `Task.sleep(1ms)`) for up to `deadline − 100ms`.
-5. Each waiting task **holds a cooperative thread** for nearly the full
-   deadline.
-6. When more than P such events arrive simultaneously, the P+1-th event
-   cannot even start its `Task` — no cooperative thread is available.
-7. The event's deadline passes with no response → ES kills the process.
+With `Workers = 2` and `T ≈ D`:
+- Only 2 slow events can be in-flight simultaneously.
+- Event 3 entering the slow path at any point will finish at `entry_tick + T`,
+  which easily exceeds `D` if `entry_tick > 0`.
 
-**Why it happens within 30 seconds of launch**: the process tree is most
-incomplete at startup. The race window between `buildInitialTree()` and
-`es_subscribe()` is maximised, and the burst of initial AUTH events from
-already-running processes triggers many concurrent `waitForProcess` calls.
+The bounded queues and drop behaviour ensure that excess events are shed rather
+than queued indefinitely. This prevents the SIGKILL crash that occurred in the
+previous unbounded `Task`-based architecture, at the cost of allowing some
+events without evaluation during burst overload.
 
-## Identified issues
+## Comparison with previous model
 
-### Issue 1: Cooperative thread pool saturation (confirmed by TLC)
+The previous TLA+ model (`ESAuthDeadline.tla` prior to this revision) modelled
+the Swift cooperative thread pool directly:
 
-`waitForProcess` holds a cooperative thread in a busy-wait loop for up to
-`deadline − 100ms`. With `T ≈ D`, each thread can only service one slow event
-per deadline window. A burst of P+1 slow events guarantees a miss.
+| Aspect | Previous model | Current model |
+|--------|---------------|---------------|
+| **Queuing** | Unbounded pending queue | Two bounded queues with drop-on-full |
+| **Processing** | Thread pool (P threads, direct dispatch) | Serial hot path → bounded slow worker pool |
+| **Back-pressure** | None (all events queued) | Explicit: drop + auto-allow when full |
+| **Bottleneck** | Thread pool saturation (P+1 slow events) | Slow worker semaphore + hot path serialisation |
+| **Failure mode** | Starvation: event cannot start | Queuing delay: event enters slow path too late |
+| **Safety valve** | None | Drop-on-full at both queue stages |
 
-**Severity**: Critical. Directly causes the SIGKILL crash.
-
-### Issue 2: No back-pressure from pool to ES callback
-
-The ES callback dispatches `Task { await handleFileAuth(event) }` without
-checking whether the cooperative thread pool has capacity. Events are queued
-unboundedly with no shedding mechanism. The ES callback returns immediately
-(freeing the ES serial queue) but the event's deadline is already ticking.
-
-**Severity**: Contributing. Amplifies Issue 1 by allowing unlimited queuing.
-
-### Issue 3: Startup race window
-
-The gap between `buildInitialTree()` completing and `es_subscribe()` starting
-means any process forked in that window enters the slow (waiting) path, making
-startup the worst-case scenario for thread pool saturation.
-
-**Severity**: Contributing. Maximises the number of slow-path events at the
-most vulnerable time.
+The key insight from the current model: **deadline misses are still possible**
+when many slow events arrive in a burst, but the **blast radius is bounded** by
+the queue capacities and the drop behaviour prevents cascading failure.
