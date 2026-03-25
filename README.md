@@ -72,6 +72,67 @@ Two components work together:
 - **clearancekit.app** — SwiftUI sidebar app. Manages policies, displays live events, renders a real-time pipeline throughput graph, and communicates with the system extension over XPC.
 - **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Runs two Endpoint Security clients: one for path-based policy enforcement that intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`, `AUTH_EXCHANGEDATA`, `AUTH_CLONE`), and a second dedicated jail client that tracks jailed processes by audit token and denies file access outside their allowed path prefixes. Both clients evaluate policies and serve the GUI over XPC.
 
+### Event pipeline
+
+The ES kernel delivers every file-system event to **both** ES clients independently. Each client receives its own copy of every AUTH and NOTIFY event that passes its muting filter, and each must respond to its AUTH events separately within the kernel-enforced deadline.
+
+```mermaid
+flowchart TB
+    subgraph Kernel["macOS Kernel — Endpoint Security"]
+        ES["ES subsystem<br/>(AUTH + NOTIFY events)"]
+    end
+
+    ES -- "serialised callback<br/>(duplicate delivery)" --> CB_FAA["ESInboundAdapter<br/>callback"]
+    ES -- "serialised callback<br/>(duplicate delivery)" --> CB_JAIL["ESJailAdapter<br/>callback"]
+
+    subgraph FAA["ESInboundAdapter — path-based policy enforcement"]
+        CB_FAA --> LIFE_FAA{"event type?"}
+        LIFE_FAA -- "NOTIFY_FORK / EXEC / EXIT" --> TREE_FAA["processTreeQueue<br/>(update ProcessTree)"]
+        LIFE_FAA -- "NOTIFY_WRITE / AUTH_RENAME / AUTH_UNLINK<br/>(XProtect path)" --> XPROTECT["allow + reload<br/>XProtect entries"]
+        LIFE_FAA -- "AUTH_OPEN / AUTH_RENAME / …<br/>(file auth)" --> SUBMIT["pipeline.submit()"]
+
+        subgraph Pipeline["FileAuthPipeline — 2-stage queue model"]
+            SUBMIT --> EB["eventBuffer<br/>BoundedQueue ≤ 1024"]
+            EB -- "full → drop" --> DROP_EB["respond allow<br/>(shed load)"]
+            EB -- "signal eventSignal" --> HOT["hotPathQueue<br/>(serial consumer)"]
+            HOT --> CLASS{"classify"}
+            CLASS -- "globally allowed /<br/>no rule applies" --> RESP_HOT["respond<br/>+ cache"]
+            CLASS -- "process-level only,<br/>no ancestor allowlist" --> EVAL_HOT["evaluate policy<br/>→ respond"]
+            CLASS -- "ancestry required /<br/>ancestor allowlist present" --> SQ["slowQueue<br/>BoundedQueue ≤ 256"]
+            SQ -- "full → drop" --> DROP_SQ["respond allow<br/>(shed load)"]
+            SQ -- "signal slowSignal" --> SEMA["slowWorkerSemaphore<br/>(permits = 2)"]
+            SEMA --> SLOW["slowWorkerQueue<br/>(concurrent, bounded)"]
+            SLOW --> WAIT["waitForProcess<br/>(spin until deadline − 100 ms)"]
+            WAIT --> EVAL_SLOW["fetch ancestors<br/>→ evaluate policy<br/>→ respond"]
+        end
+    end
+
+    subgraph JAIL["ESJailAdapter — process jail enforcement"]
+        CB_JAIL --> LIFE_JAIL{"event type?"}
+        LIFE_JAIL -- "NOTIFY_FORK" --> FORK_J["inherit parent jail<br/>or match signature<br/>→ update jailedProcesses"]
+        LIFE_JAIL -- "NOTIFY_EXEC" --> EXEC_J["atomic key replace<br/>(pre→post exec token)<br/>→ update jailedProcesses"]
+        LIFE_JAIL -- "NOTIFY_EXIT" --> EXIT_J["remove from<br/>jailedProcesses"]
+        LIFE_JAIL -- "AUTH_OPEN / AUTH_RENAME / …<br/>(file auth)" --> JAIL_CHECK{"process jailed?"}
+        JAIL_CHECK -- "no" --> ALLOW_NJ["respond allow<br/>(+ cache decision)"]
+        JAIL_CHECK -- "yes" --> JAIL_EVAL["check global allowlist<br/>→ checkJailPath<br/>→ respond inline"]
+    end
+
+    RESP_HOT --> POST["postRespondQueue"]
+    EVAL_HOT --> POST
+    EVAL_SLOW --> POST
+    DROP_EB --> POST
+    DROP_SQ --> POST
+    JAIL_EVAL --> POST
+
+    subgraph PostRespond["Post-respond (background)"]
+        POST --> AUDIT["AuditLogger"]
+        POST --> TTY["TTYNotifier<br/>(write denial to tty)"]
+        POST --> BROADCAST["EventBroadcaster<br/>→ XPC → GUI"]
+    end
+```
+
+**Why two clients?** Fault isolation (a jail client crash does not affect FAA enforcement), performance (jail responses are synchronous with no pipeline delay), and deadline safety (jail evaluation never contends with FAA slow-path workers for thread pool capacity).
+
 ## Development
 
 ### Prerequisites
