@@ -131,7 +131,7 @@ flowchart TB
     end
 ```
 
-**Why two clients?** Fault isolation (a jail client crash does not affect FAA enforcement), performance (jail responses are synchronous with no pipeline delay), and deadline safety (jail evaluation never contends with FAA slow-path workers for thread pool capacity).
+**Why two clients?** Rule policy isolation and es mute divergence, which allows both routes to not need to process unnecessary events, but overlap is handled cleanly (both policy sets apply consistently and independently). 
 
 ## Development
 
