@@ -19,6 +19,8 @@ struct MetricsView: View {
             if xpcClient.metricsHistory.count < 2 {
                 waitingPlaceholder
             } else {
+                gaugeRow
+                Divider()
                 throughputChart
             }
         }
@@ -35,6 +37,46 @@ struct MetricsView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var gaugeRow: some View {
+        let s = seriesStats
+        return HStack(spacing: 0) {
+            rateGauge("Simple events",   s.simpleEvents,   .blue)
+            Divider()
+            rateGauge("Ancestry events", s.ancestryEvents, .indigo)
+            Divider()
+            rateGauge("Drops",           s.drops,          .red)
+            Divider()
+            rateGauge("Jail events",     s.jailEvents,     .orange)
+            Divider()
+            rateGauge("Jail denies",     s.jailDenies,     .pink)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func rateGauge(_ label: String, _ stats: SeriesStats, _ color: Color) -> some View {
+        VStack(spacing: 4) {
+            Gauge(value: stats.avg10, in: 0...max(stats.peak, 1)) {
+                EmptyView()
+            } currentValueLabel: {
+                Text(formattedRate(stats.avg10))
+                    .font(.system(.caption2, design: .monospaced))
+                    .minimumScaleFactor(0.6)
+            }
+            .gaugeStyle(.accessoryCircular)
+            .tint(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    private func formattedRate(_ rate: Double) -> String {
+        rate >= 100 ? "\(Int(rate.rounded()))" : String(format: "%.1f", rate)
     }
 
     private var throughputChart: some View {
@@ -61,6 +103,56 @@ struct MetricsView: View {
 
     // MARK: - Data
 
+    private struct SeriesStats {
+        let avg10: Double
+        let peak: Double
+    }
+
+    private struct AllSeriesStats {
+        let simpleEvents: SeriesStats
+        let ancestryEvents: SeriesStats
+        let drops: SeriesStats
+        let jailEvents: SeriesStats
+        let jailDenies: SeriesStats
+    }
+
+    private var seriesStats: AllSeriesStats {
+        let history = xpcClient.metricsHistory
+        guard history.count >= 2 else {
+            let zero = SeriesStats(avg10: 0, peak: 0)
+            return AllSeriesStats(simpleEvents: zero, ancestryEvents: zero, drops: zero, jailEvents: zero, jailDenies: zero)
+        }
+        var simple:   [Double] = []
+        var ancestry: [Double] = []
+        var drops:    [Double] = []
+        var jail:     [Double] = []
+        var jailDeny: [Double] = []
+        for i in 1..<history.count {
+            let curr = history[i], prev = history[i - 1]
+            simple.append(curr.hotPathProcessedCount  >= prev.hotPathProcessedCount  ? Double(curr.hotPathProcessedCount  - prev.hotPathProcessedCount)  : 0)
+            ancestry.append(curr.slowPathProcessedCount >= prev.slowPathProcessedCount ? Double(curr.slowPathProcessedCount - prev.slowPathProcessedCount) : 0)
+            let cd = curr.eventBufferDropCount + curr.slowQueueDropCount
+            let pd = prev.eventBufferDropCount + prev.slowQueueDropCount
+            drops.append(cd >= pd ? Double(cd - pd) : 0)
+            jail.append(curr.jailEvaluatedCount >= prev.jailEvaluatedCount ? Double(curr.jailEvaluatedCount - prev.jailEvaluatedCount) : 0)
+            jailDeny.append(curr.jailDenyCount  >= prev.jailDenyCount      ? Double(curr.jailDenyCount      - prev.jailDenyCount)      : 0)
+        }
+        func stats(_ rates: [Double]) -> SeriesStats {
+            let window = rates.suffix(10)
+            return SeriesStats(
+                avg10: window.reduce(0, +) / Double(window.count),
+                peak:  rates.max() ?? 0
+            )
+        }
+        return AllSeriesStats(
+            simpleEvents:   stats(simple),
+            ancestryEvents: stats(ancestry),
+            drops:          stats(drops),
+            jailEvents:     stats(jail),
+            jailDenies:     stats(jailDeny)
+        )
+    }
+
     private struct ChartPoint: Identifiable {
         let id: String
         let timestamp: Date
@@ -73,11 +165,9 @@ struct MetricsView: View {
         guard history.count >= 2 else { return [] }
         var points: [ChartPoint] = []
         for i in 1..<history.count {
-            let curr = history[i]
-            let prev = history[i - 1]
+            let curr = history[i], prev = history[i - 1]
             let t = curr.timestamp
             let key = String(t.timeIntervalSince1970)
-
             let hot  = curr.hotPathProcessedCount  >= prev.hotPathProcessedCount
                      ? Double(curr.hotPathProcessedCount  - prev.hotPathProcessedCount)  : 0
             let slow = curr.slowPathProcessedCount >= prev.slowPathProcessedCount
@@ -89,7 +179,6 @@ struct MetricsView: View {
                      ? Double(curr.jailEvaluatedCount - prev.jailEvaluatedCount) : 0
             let jailDeny = curr.jailDenyCount >= prev.jailDenyCount
                          ? Double(curr.jailDenyCount - prev.jailDenyCount) : 0
-
             points.append(ChartPoint(id: "\(key)-hot",       timestamp: t, rate: hot,      series: "Simple events"))
             points.append(ChartPoint(id: "\(key)-slow",      timestamp: t, rate: slow,     series: "Ancestry events"))
             points.append(ChartPoint(id: "\(key)-drop",      timestamp: t, rate: drop,     series: "Drops"))
