@@ -11,17 +11,16 @@ struct MetricsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Pipeline throughput — events per second over the last 60 seconds (simple, ancestry, jail)")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding()
-            Divider()
             if xpcClient.metricsHistory.count < 2 {
                 waitingPlaceholder
             } else {
                 gaugeRow
-                Divider()
                 throughputChart
+                Divider()
+                Text("Pipeline throughput — events per second over the last 60 seconds")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding()
             }
         }
         .navigationTitle("Metrics")
@@ -42,17 +41,12 @@ struct MetricsView: View {
     private var gaugeRow: some View {
         let s = seriesStats
         return HStack(spacing: 0) {
-            rateGauge("Simple events",   s.simpleEvents,   .blue)
-            Divider()
-            rateGauge("Ancestry events", s.ancestryEvents, .indigo)
-            Divider()
-            rateGauge("Drops",           s.drops,          .red)
-            Divider()
-            rateGauge("Jail events",     s.jailEvents,     .orange)
-            Divider()
-            rateGauge("Jail denies",     s.jailDenies,     .pink)
+            rateGauge("Simple events / s",   s.simpleEvents,   .blue)
+            rateGauge("Ancestry events / s", s.ancestryEvents, .indigo)
+            rateGauge("Drops / s",           s.drops,          .red)
+            rateGauge("Jail events / s",     s.jailEvents,     .orange)
+            rateGauge("Jail denies / s",     s.jailDenies,     .pink)
         }
-        .padding(.vertical, 8)
     }
 
     private func rateGauge(_ label: String, _ stats: SeriesStats, _ color: Color) -> some View {
@@ -72,7 +66,9 @@ struct MetricsView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, 2)
+        .padding(.top, 8)
+        
     }
 
     private func formattedRate(_ rate: Double) -> String {
