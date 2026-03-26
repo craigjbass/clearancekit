@@ -223,7 +223,8 @@ func codeSigningInfo(for code: SecCode) -> (teamID: String, signingID: String) {
     // kSecCSSigningInformation = 2: request team ID, signing identifier, etc.
     guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: 2), &dict) == errSecSuccess,
           let info = dict as? [CFString: Any] else { return ("", "") }
-    let teamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
     let signingID = info[kSecCodeInfoIdentifier] as? String ?? ""
+    let rawTeamID = info[kSecCodeInfoTeamIdentifier] as? String ?? ""
+    let teamID = rawTeamID.isEmpty && !signingID.isEmpty ? "apple" : rawTeamID
     return (teamID, signingID)
 }

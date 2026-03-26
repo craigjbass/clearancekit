@@ -253,6 +253,9 @@ final class ESInboundAdapter {
             pid: pid_t(bitPattern: process.audit_token.val.5),
             pidVersion: process.audit_token.val.7
         )
+        let signingID = string(from: process.signing_id)
+        let rawTeamID = string(from: process.team_id)
+        let teamID = rawTeamID.isEmpty && !signingID.isEmpty ? "apple" : rawTeamID
         return FileAuthEvent(
             correlationID: correlationID,
             operation: operation,
@@ -261,8 +264,8 @@ final class ESInboundAdapter {
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
             processPath: string(from: process.executable.pointee.path),
-            teamID: string(from: process.team_id),
-            signingID: string(from: process.signing_id),
+            teamID: teamID,
+            signingID: signingID,
             uid: uid_t(process.audit_token.val.1),
             gid: gid_t(process.audit_token.val.2),
             ttyPath: ttyPath,

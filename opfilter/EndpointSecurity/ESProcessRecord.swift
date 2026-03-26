@@ -28,19 +28,20 @@ func processRecord(from esProcess: UnsafeMutablePointer<es_process_t>) -> Proces
         path = ""
     }
 
-    let teamID: String
-    if let data = process.team_id.data {
-        teamID = String(bytes: Data(bytes: data, count: process.team_id.length), encoding: .utf8) ?? ""
-    } else {
-        teamID = ""
-    }
-
     let signingID: String
     if let data = process.signing_id.data {
         signingID = String(bytes: Data(bytes: data, count: process.signing_id.length), encoding: .utf8) ?? ""
     } else {
         signingID = ""
     }
+
+    let rawTeamID: String
+    if let data = process.team_id.data {
+        rawTeamID = String(bytes: Data(bytes: data, count: process.team_id.length), encoding: .utf8) ?? ""
+    } else {
+        rawTeamID = ""
+    }
+    let teamID = rawTeamID.isEmpty && !signingID.isEmpty ? "apple" : rawTeamID
 
     let uid = uid_t(process.audit_token.val.1)
     let gid = gid_t(process.audit_token.val.2)
