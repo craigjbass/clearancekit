@@ -69,6 +69,7 @@ pipeline.start()
 let adapter = ESInboundAdapter(interactor: interactor, esAdapterQueue: esAdapterQueue)
 let jailAdapter = ESJailAdapter(interactor: interactor, esJailAdapterQueue: esJailAdapterQueue)
 let server = XPCServer(
+    processTree: processTree,
     policyRepository: policyRepository,
     broadcaster: broadcaster,
     interactor: interactor,

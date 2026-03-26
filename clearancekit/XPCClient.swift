@@ -88,6 +88,12 @@ final class XPCClient: NSObject, ObservableObject {
             argumentIndex: 0,
             ofReply: true
         )
+        remoteInterface.setClasses(
+            processInfoClasses,
+            for: #selector(ServiceProtocol.fetchProcessTree(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         conn.remoteObjectInterface = remoteInterface
 
         conn.exportedInterface = NSXPCInterface(with: ClientProtocol.self)
@@ -371,6 +377,21 @@ final class XPCClient: NSObject, ObservableObject {
                 return
             }
             service.fetchActiveJailedProcesses { processes in
+                continuation.resume(returning: processes)
+            }
+        }
+    }
+
+    func fetchProcessTree() async -> [RunningProcessInfo] {
+        await withCheckedContinuation { continuation in
+            guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+                logger.error("XPCClient: fetchProcessTree error: \(error.localizedDescription, privacy: .public)")
+                continuation.resume(returning: [])
+            }) as? ServiceProtocol else {
+                continuation.resume(returning: [])
+                return
+            }
+            service.fetchProcessTree { processes in
                 continuation.resume(returning: processes)
             }
         }

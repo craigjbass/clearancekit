@@ -23,11 +23,14 @@ enum ProcessEnumerator {
             let (teamID, signingID) = codeSigningIDs(forPID: pid)
             result.append(RunningProcessInfo(
                 pid: pid,
+                pidVersion: 0,
                 parentPID: Int32(bsdInfo.pbi_ppid),
+                parentPIDVersion: 0,
                 path: path,
                 teamID: teamID,
                 signingID: signingID,
-                uid: bsdInfo.pbi_uid
+                uid: bsdInfo.pbi_uid,
+                gid: bsdInfo.pbi_gid
             ))
         }
         return result
@@ -59,11 +62,14 @@ enum ProcessEnumerator {
 
             result.append(RunningProcessInfo(
                 pid: pid,
+                pidVersion: 0,
                 parentPID: Int32(bsdInfo.pbi_ppid),
+                parentPIDVersion: 0,
                 path: path,
                 teamID: teamID,
                 signingID: signingID,
-                uid: bsdInfo.pbi_uid
+                uid: bsdInfo.pbi_uid,
+                gid: bsdInfo.pbi_gid
             ))
         }
 

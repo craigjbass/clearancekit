@@ -158,40 +158,52 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
     public static var supportsSecureCoding: Bool { true }
 
     @objc public let pid: Int32
+    @objc public let pidVersion: UInt32
     @objc public let parentPID: Int32
+    @objc public let parentPIDVersion: UInt32
     @objc public let path: String
     @objc public let teamID: String
     @objc public let signingID: String
     @objc public let uid: UInt32
+    @objc public let gid: UInt32
 
-    public init(pid: Int32, parentPID: Int32, path: String, teamID: String, signingID: String, uid: UInt32) {
+    public init(pid: Int32, pidVersion: UInt32, parentPID: Int32, parentPIDVersion: UInt32, path: String, teamID: String, signingID: String, uid: UInt32, gid: UInt32) {
         self.pid = pid
+        self.pidVersion = pidVersion
         self.parentPID = parentPID
+        self.parentPIDVersion = parentPIDVersion
         self.path = path
         self.teamID = teamID
         self.signingID = signingID
         self.uid = uid
+        self.gid = gid
         super.init()
     }
 
     public required init?(coder: NSCoder) {
         guard let path = coder.decodeObject(of: NSString.self, forKey: "path") as String? else { return nil }
         self.pid = coder.decodeInt32(forKey: "pid")
+        self.pidVersion = UInt32(bitPattern: coder.decodeInt32(forKey: "pidVersion"))
         self.parentPID = coder.decodeInt32(forKey: "parentPID")
+        self.parentPIDVersion = UInt32(bitPattern: coder.decodeInt32(forKey: "parentPIDVersion"))
         self.path = path
         self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
         self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
         self.uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
+        self.gid = UInt32(bitPattern: coder.decodeInt32(forKey: "gid"))
         super.init()
     }
 
     public func encode(with coder: NSCoder) {
         coder.encode(pid, forKey: "pid")
+        coder.encode(Int32(bitPattern: pidVersion), forKey: "pidVersion")
         coder.encode(parentPID, forKey: "parentPID")
+        coder.encode(Int32(bitPattern: parentPIDVersion), forKey: "parentPIDVersion")
         coder.encode(path as NSString, forKey: "path")
         coder.encode(teamID as NSString, forKey: "teamID")
         coder.encode(signingID as NSString, forKey: "signingID")
         coder.encode(Int32(bitPattern: uid), forKey: "uid")
+        coder.encode(Int32(bitPattern: gid), forKey: "gid")
     }
 }
 
@@ -268,6 +280,9 @@ public protocol ServiceProtocol {
 
     // Returns the subset of running processes currently tracked as jailed by the extension.
     func fetchActiveJailedProcesses(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
+
+    // Returns a snapshot of all ProcessRecord entries currently held in the extension's ProcessTree.
+    func fetchProcessTree(withReply reply: @escaping ([RunningProcessInfo]) -> Void)
 
     // Discovery mode: temporarily monitor /Users so opfilter delivers events
     // for apps that have no policy rules yet. Call endDiscovery when done.

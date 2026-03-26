@@ -9,27 +9,29 @@ import SwiftUI
 import AppKit
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case events     = "Events"
-    case policy     = "Policy"
-    case presets    = "App Protections"
-    case jail       = "Jail"
-    case allowlist  = "Allowlist"
-    case processes  = "Processes"
-    case metrics    = "Metrics"
-    case setup      = "Setup"
+    case events      = "Events"
+    case policy      = "Policy"
+    case presets     = "App Protections"
+    case jail        = "Jail"
+    case allowlist   = "Allowlist"
+    case processes   = "Processes"
+    case processTree = "Process Tree"
+    case metrics     = "Metrics"
+    case setup       = "Setup"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .events:    return "list.bullet"
-        case .policy:    return "shield"
-        case .presets:   return "lock.app.dashed"
-        case .jail:      return "lock.rectangle.on.rectangle"
-        case .allowlist: return "checkmark.shield"
-        case .processes: return "cpu"
-        case .metrics:   return "chart.xyaxis.line"
-        case .setup:     return "gearshape"
+        case .events:      return "list.bullet"
+        case .policy:      return "shield"
+        case .presets:     return "lock.app.dashed"
+        case .jail:        return "lock.rectangle.on.rectangle"
+        case .allowlist:   return "checkmark.shield"
+        case .processes:   return "cpu"
+        case .processTree: return "list.bullet.indent"
+        case .metrics:     return "chart.xyaxis.line"
+        case .setup:       return "gearshape"
         }
     }
 }
@@ -55,6 +57,8 @@ struct ContentView: View {
                             .tag(SidebarItem.events)
                         Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
                             .tag(SidebarItem.processes)
+                        Label(SidebarItem.processTree.rawValue, systemImage: SidebarItem.processTree.icon)
+                            .tag(SidebarItem.processTree)
                         Label(SidebarItem.metrics.rawValue, systemImage: SidebarItem.metrics.icon)
                             .tag(SidebarItem.metrics)
                     }
@@ -79,8 +83,9 @@ struct ContentView: View {
                 case .presets:   PresetsView()
                 case .jail:      JailView()
                 case .allowlist: AllowlistView()
-                case .processes: ProcessesView()
-                case .metrics:   MetricsView()
+                case .processes:   ProcessesView()
+                case .processTree: ProcessTreeView()
+                case .metrics:     MetricsView()
                 case .setup:     SetupView()
                 }
             }

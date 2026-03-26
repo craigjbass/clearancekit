@@ -15,6 +15,7 @@ private let jailEnabledFile = URL(fileURLWithPath: "/Library/Application Support
 
 final class XPCServer: NSObject, @unchecked Sendable {
     private var listener: NSXPCListener?
+    private let processTree: ProcessTreeProtocol
     private let policyRepository: PolicyRepository
     private let broadcaster: EventBroadcaster
     private let interactor: FilterInteractor
@@ -23,6 +24,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     fileprivate let serverQueue: DispatchQueue
 
     init(
+        processTree: ProcessTreeProtocol,
         policyRepository: PolicyRepository,
         broadcaster: EventBroadcaster,
         interactor: FilterInteractor,
@@ -30,6 +32,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         jailAdapter: ESJailAdapter,
         serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
     ) {
+        self.processTree = processTree
         self.policyRepository = policyRepository
         self.broadcaster = broadcaster
         self.interactor = interactor
@@ -226,6 +229,24 @@ final class XPCServer: NSObject, @unchecked Sendable {
         ProcessEnumerator.enumerate(pids: jailAdapter.activeJailedPIDs())
     }
 
+    // MARK: - Process tree snapshot
+
+    fileprivate func processTreeSnapshot() -> [RunningProcessInfo] {
+        processTree.allRecords().map { record in
+            RunningProcessInfo(
+                pid: record.identity.pid,
+                pidVersion: record.identity.pidVersion,
+                parentPID: record.parentIdentity.pid,
+                parentPIDVersion: record.parentIdentity.pidVersion,
+                path: record.path,
+                teamID: record.teamID,
+                signingID: record.signingID,
+                uid: record.uid,
+                gid: record.gid
+            )
+        }
+    }
+
     // MARK: - Discovery mode
 
     fileprivate func beginDiscovery() {
@@ -308,6 +329,12 @@ extension XPCServer: NSXPCListenerDelegate {
         exportedInterface.setClasses(
             processInfoClasses,
             for: #selector(ServiceProtocol.fetchActiveJailedProcesses(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
+        exportedInterface.setClasses(
+            processInfoClasses,
+            for: #selector(ServiceProtocol.fetchProcessTree(withReply:)),
             argumentIndex: 0,
             ofReply: true
         )
@@ -532,6 +559,13 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply([]); return }
         server.serverQueue.async {
             reply(server.activeJailedProcesses())
+        }
+    }
+
+    func fetchProcessTree(withReply reply: @escaping ([RunningProcessInfo]) -> Void) {
+        guard let server else { reply([]); return }
+        server.serverQueue.async {
+            reply(server.processTreeSnapshot())
         }
     }
 

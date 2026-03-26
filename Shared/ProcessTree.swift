@@ -33,6 +33,7 @@ protocol ProcessTreeProtocol: AnyObject {
     func remove(identity: ProcessIdentity)
     func contains(identity: ProcessIdentity) -> Bool
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo]
+    func allRecords() -> [ProcessRecord]
 }
 
 // MARK: - ProcessTree
@@ -87,6 +88,10 @@ final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
             let resolved = Self.resolveIdentity(identity, state: state)
             return state.ancestorCache[resolved] ?? []
         }
+    }
+
+    func allRecords() -> [ProcessRecord] {
+        storage.withLock { Array($0.records.values) }
     }
 
     private static func lookup(_ identity: ProcessIdentity, state: State) -> ProcessRecord? {
