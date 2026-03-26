@@ -61,7 +61,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         }
     }
 
-    func pushMetrics(_ metrics: PipelineMetrics, jail: JailMetrics) {
+    func pushMetrics(_ metrics: PipelineMetrics, jail: JailMetrics, timestamp: Date) {
         let snapshot = PipelineMetricsSnapshot(
             eventBufferEnqueueCount: metrics.eventBufferEnqueueCount,
             eventBufferDropCount:    metrics.eventBufferDropCount,
@@ -71,7 +71,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
             slowQueueDropCount:      metrics.slowQueueDropCount,
             slowPathProcessedCount:  metrics.slowPathProcessedCount,
             jailEvaluatedCount:      jail.jailEvaluatedCount,
-            jailDenyCount:           jail.jailDenyCount
+            jailDenyCount:           jail.jailDenyCount,
+            timestamp:               timestamp
         )
         serverQueue.async { [self] in
             broadcaster.broadcastToAllClients { $0.metricsUpdated(snapshot) }

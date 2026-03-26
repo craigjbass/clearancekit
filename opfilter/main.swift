@@ -95,11 +95,13 @@ let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", categ
 let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
 metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
 metricsTimer.setEventHandler {
+    let sampleDate = Date(timeIntervalSince1970: Double(clock_gettime_nsec_np(CLOCK_REALTIME)) / 1_000_000_000)
     let m = pipeline.metrics()
     let jm = interactor.jailMetrics()
-    server.pushMetrics(m, jail: jm)
+    server.pushMetrics(m, jail: jm, timestamp: sampleDate)
     metricsLogger.info("""
     pipeline_metrics \
+    ts=\(sampleDate.timeIntervalSince1970, privacy: .public) \
     eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
     eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
     hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
