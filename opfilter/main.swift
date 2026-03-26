@@ -80,10 +80,6 @@ let server = XPCServer(
     serverQueue: xpcServerQueue
 )
 
-server.applyPolicyToFilter()
-server.applyAllowlistToFilter()
-server.applyJailRulesToFilter()
-
 interactor.onEvent = { event in
     server.handleEvent(event)
 }
@@ -94,8 +90,9 @@ let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()
 jailAdapter.startSweepTimer()
 adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXProtectChange() })
-adapter.clearCache()
-jailAdapter.clearCache()
+server.applyPolicyToFilter()
+server.applyAllowlistToFilter()
+server.applyJailRulesToFilter()
 
 let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
 let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
