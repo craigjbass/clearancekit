@@ -23,6 +23,8 @@ private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreePro
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] {
         ancestorsResult
     }
+
+    func allRecords() -> [ProcessRecord] { [] }
 }
 
 // MARK: - Helpers

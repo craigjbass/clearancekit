@@ -29,6 +29,8 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] {
         ancestorsResult
     }
+
+    func allRecords() -> [ProcessRecord] { [] }
 }
 
 // MARK: - FilterInteractorTests
