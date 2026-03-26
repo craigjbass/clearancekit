@@ -283,6 +283,11 @@ final class ESJailAdapter {
         }
     }
 
+    func clearCache() {
+        guard let client else { return }
+        es_clear_cache(client)
+    }
+
     func activeJailedPIDs() -> Set<pid_t> {
         jailedProcessesLock.withLock { Set($0.keys.map(\.pid)) }
     }
