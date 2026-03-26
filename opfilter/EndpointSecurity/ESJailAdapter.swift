@@ -261,7 +261,6 @@ final class ESJailAdapter {
         }
 
         rulesLock.withLock { $0 = initialRules }
-        startSweepTimer()
     }
 
     // MARK: - Lifecycle
@@ -290,7 +289,7 @@ final class ESJailAdapter {
 
     // MARK: - Sweep
 
-    private func startSweepTimer() {
+    func startSweepTimer() {
         let timer = DispatchSource.makeTimerSource(queue: jailSweepQueue)
         timer.schedule(deadline: .now() + .seconds(10), repeating: .seconds(10))
         timer.setEventHandler { [weak self] in self?.sweepJailedProcesses() }

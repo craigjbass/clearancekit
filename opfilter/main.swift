@@ -92,6 +92,7 @@ server.start()
 
 let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()
+jailAdapter.startSweepTimer()
 adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXProtectChange() })
 
 let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
