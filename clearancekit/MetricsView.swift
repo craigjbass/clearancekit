@@ -44,7 +44,7 @@ struct MetricsView: View {
                 y: .value("Events/s", point.rate)
             )
             .foregroundStyle(by: .value("Series", point.series))
-            .interpolationMethod(.linear)
+            .interpolationMethod(.monotone)
         }
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 6)) { _ in
