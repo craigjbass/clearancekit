@@ -128,19 +128,21 @@ struct AllowlistEntryTests {
     @Test("signing ID match")
     func signingIDMatch() {
         let entry = AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)
-        #expect(entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: ""))
+        #expect(entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: "apple"))
     }
 
     @Test("signing ID mismatch")
     func signingIDMismatch() {
         let entry = AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)
-        #expect(!entry.matches(processPath: "/anything", signingID: "com.apple.safari", teamID: ""))
+        #expect(!entry.matches(processPath: "/anything", signingID: "com.apple.safari", teamID: "apple"))
     }
 
-    @Test("platform binary requires empty team ID")
-    func platformBinaryRequiresEmptyTeamID() {
+    @Test("platform binary requires apple team ID")
+    func platformBinaryRequiresAppleTeamID() {
         let entry = AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)
         #expect(!entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: "SOMETEAM"))
+        #expect(!entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: ""))
+        #expect(entry.matches(processPath: "/anything", signingID: "com.apple.finder", teamID: "apple"))
     }
 
     @Test("third-party signing ID with matching team")
@@ -195,10 +197,11 @@ struct AllowlistEntryTests {
         #expect(entry.matches(processPath: "/usr/bin/tool", signingID: "com.evil.malware", teamID: "EVIL"))
     }
 
-    @Test("path-based entry with platform binary flag requires empty team")
+    @Test("path-based entry with platform binary flag requires apple team ID")
     func pathBasedPlatformBinary() {
         let entry = AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)
-        #expect(entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: ""))
+        #expect(entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: "apple"))
+        #expect(!entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: ""))
         #expect(!entry.matches(processPath: "/Library/Apple/XProtect", signingID: "", teamID: "TEAM"))
     }
 
@@ -267,7 +270,7 @@ struct AccessEvaluationTests {
     func platformBinaryGloballyAllowed() async {
         let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
         let rules = [ruleProtecting("/protected")]
-        let decision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        let decision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", teamID: "apple", signingID: "com.apple.finder")
         guard case .globallyAllowed = decision else {
             Issue.record("Expected .globallyAllowed, got \(decision)")
             return
@@ -331,12 +334,12 @@ struct AccessEvaluationTests {
         #expect(!decision.isAllowed)
     }
 
-    @Test("path-based platform binary allowlist entry requires empty team")
+    @Test("path-based platform binary allowlist entry requires apple team ID")
     func pathPlatformBinaryEnforcesTeam() async {
         let allowlist = [AllowlistEntry(processPath: "/Library/Apple/XProtect", platformBinary: true)]
         let rules = [ruleProtecting("/protected")]
 
-        let allowed = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/Library/Apple/XProtect")
+        let allowed = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/Library/Apple/XProtect", teamID: "apple")
         guard case .globallyAllowed = allowed else {
             Issue.record("Expected .globallyAllowed, got \(allowed)")
             return
@@ -355,7 +358,7 @@ struct AccessEvaluationTests {
             AllowlistEntry(processPath: "/usr/libexec/custom-scanner"),
         ]
         let rules = [ruleProtecting("/protected")]
-        let decision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/mdworker", signingID: "com.apple.mdworker")
+        let decision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/mdworker", teamID: "apple", signingID: "com.apple.mdworker")
         guard case .globallyAllowed = decision else {
             Issue.record("Expected .globallyAllowed, got \(decision)")
             return
@@ -395,7 +398,7 @@ struct AccessEvaluationTests {
         let allowlist = baseline + managed + user
         let rules = [ruleProtecting("/protected")]
 
-        let finderDecision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        let finderDecision = await decide(rules: rules, allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", teamID: "apple", signingID: "com.apple.finder")
         guard case .globallyAllowed = finderDecision else {
             Issue.record("Expected Finder to be globally allowed")
             return
@@ -423,7 +426,7 @@ struct AccessEvaluationTests {
     func allowlistBypassesDenyAll() async {
         let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
         let denyAllRule = FAARule(protectedPathPrefix: "/protected")
-        let decision = await decide(rules: [denyAllRule], allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        let decision = await decide(rules: [denyAllRule], allowlist: allowlist, path: "/protected/file", processPath: "/System/Finder", teamID: "apple", signingID: "com.apple.finder")
         guard case .globallyAllowed = decision else {
             Issue.record("Allowlisted process should bypass deny-all rule")
             return
@@ -637,7 +640,7 @@ struct AccessEvaluationTests {
     func ancestorSigningIDGloballyAllowed() async {
         let ancestorEntry = AncestorAllowlistEntry(signingID: "com.apple.terminal", platformBinary: true)
         let rules = [ruleProtecting("/protected")]
-        let ancestors = [AncestorInfo(path: "/Applications/Terminal.app/Contents/MacOS/Terminal", teamID: "", signingID: "com.apple.terminal")]
+        let ancestors = [AncestorInfo(path: "/Applications/Terminal.app/Contents/MacOS/Terminal", teamID: "apple", signingID: "com.apple.terminal")]
         let decision = await decideWithAncestorAllowlist(
             rules: rules, ancestorAllowlist: [ancestorEntry],
             processPath: "/usr/bin/cat", ancestors: ancestors
@@ -686,8 +689,8 @@ struct AccessEvaluationTests {
         #expect(!decision.isAllowed)
     }
 
-    @Test("ancestor allowlist platform binary requires empty team ID")
-    func ancestorPlatformBinaryRequiresEmptyTeam() async {
+    @Test("ancestor allowlist platform binary requires apple team ID")
+    func ancestorPlatformBinaryRequiresAppleTeam() async {
         let ancestorEntry = AncestorAllowlistEntry(signingID: "com.apple.terminal", platformBinary: true)
         let rules = [ruleProtecting("/protected")]
         let ancestorWithTeam = AncestorInfo(path: "/Applications/Terminal.app/Contents/MacOS/Terminal", teamID: "SOMETEAM", signingID: "com.apple.terminal")

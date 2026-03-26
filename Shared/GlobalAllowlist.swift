@@ -43,7 +43,7 @@ public struct AllowlistEntry: Identifiable, Codable {
 
     public func matches(processPath: String, signingID: String, teamID: String) -> Bool {
         if platformBinary {
-            guard teamID.isEmpty else { return false }
+            guard teamID == "apple" else { return false }
         } else if !self.teamID.isEmpty {
             guard teamID == self.teamID else { return false }
         }
@@ -88,7 +88,7 @@ public struct AncestorAllowlistEntry: Identifiable, Codable {
 
     public func matchesAncestor(path: String, signingID: String, teamID: String) -> Bool {
         if platformBinary {
-            guard teamID.isEmpty else { return false }
+            guard teamID == "apple" else { return false }
         } else if !self.teamID.isEmpty {
             guard teamID == self.teamID else { return false }
         }
