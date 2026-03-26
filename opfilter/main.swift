@@ -17,6 +17,8 @@ let processTreeQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.process
 let postRespondQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond",          qos: .background)
 let xpcServerQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server",            qos: .userInitiated)
 let metricsQueue       = DispatchQueue(label: "uk.craigbass.clearancekit.metrics",               qos: .utility)
+let jailSweepQueue     = DispatchQueue(label: "uk.craigbass.clearancekit.jail-sweep",            qos: .background)
+let jailCascadeQueue   = DispatchQueue(label: "uk.craigbass.clearancekit.jail-cascade",          qos: .background,       attributes: .concurrent)
 
 let slowWorkerSemaphore = DispatchSemaphore(value: 2)
 let eventSignal = DispatchSemaphore(value: 0)
@@ -67,7 +69,7 @@ interactorRef.value = interactor
 pipeline.start()
 
 let adapter = ESInboundAdapter(interactor: interactor, esAdapterQueue: esAdapterQueue)
-let jailAdapter = ESJailAdapter(interactor: interactor, esJailAdapterQueue: esJailAdapterQueue)
+let jailAdapter = ESJailAdapter(interactor: interactor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
 let server = XPCServer(
     processTree: processTree,
     policyRepository: policyRepository,

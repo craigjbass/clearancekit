@@ -51,14 +51,23 @@ private struct ProcessKey: Hashable {
         self.pid = pid_t(bitPattern: token.val.5)
         self.pidVersion = token.val.7
     }
+
+    init(pid: pid_t, pidVersion: UInt32) {
+        self.pid = pid
+        self.pidVersion = pidVersion
+    }
 }
 
 // MARK: - ESJailAdapter
 
 final class ESJailAdapter {
     private let interactor: FilterInteractor
+    private let processTree: ProcessTreeProtocol
     private let esJailAdapterQueue: DispatchQueue
+    private let jailSweepQueue: DispatchQueue
+    private let jailCascadeQueue: DispatchQueue
     private var client: OpaquePointer?
+    private var sweepTimer: DispatchSourceTimer?
     private let rulesLock = OSAllocatedUnfairLock(initialState: [JailRule]())
     /// Maps each jailed process's (pid, pidVersion) to the jail rule ID that
     /// covers it. Populated for direct signature matches and inherited
@@ -69,10 +78,16 @@ final class ESJailAdapter {
 
     init(
         interactor: FilterInteractor,
-        esJailAdapterQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter", qos: .userInteractive, autoreleaseFrequency: .never)
+        processTree: ProcessTreeProtocol,
+        esJailAdapterQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter", qos: .userInteractive),
+        jailSweepQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.jail-sweep", qos: .background),
+        jailCascadeQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.jail-cascade", qos: .background, attributes: .concurrent)
     ) {
         self.interactor = interactor
+        self.processTree = processTree
         self.esJailAdapterQueue = esJailAdapterQueue
+        self.jailSweepQueue = jailSweepQueue
+        self.jailCascadeQueue = jailCascadeQueue
     }
 
     // MARK: - Startup
@@ -246,11 +261,14 @@ final class ESJailAdapter {
         }
 
         rulesLock.withLock { $0 = initialRules }
+        startSweepTimer()
     }
 
     // MARK: - Lifecycle
 
     func stop() {
+        sweepTimer?.cancel()
+        sweepTimer = nil
         guard let client else { return }
         es_delete_client(client)
         self.client = nil
@@ -268,5 +286,78 @@ final class ESJailAdapter {
 
     func activeJailedPIDs() -> Set<pid_t> {
         jailedProcessesLock.withLock { Set($0.keys.map(\.pid)) }
+    }
+
+    // MARK: - Sweep
+
+    private func startSweepTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: jailSweepQueue)
+        timer.schedule(deadline: .now() + .seconds(10), repeating: .seconds(10))
+        timer.setEventHandler { [weak self] in self?.sweepJailedProcesses() }
+        timer.resume()
+        sweepTimer = timer
+    }
+
+    private func sweepJailedProcesses() {
+        let rules = rulesLock.withLock { $0 }
+        guard !rules.isEmpty else { return }
+
+        let allRecords = processTree.allRecords()
+        let currentJailed = jailedProcessesLock.withLock { $0 }
+
+        var newlyJailed: [(key: ProcessKey, ruleID: UUID, pid: pid_t)] = []
+        for record in allRecords {
+            let key = ProcessKey(pid: record.identity.pid, pidVersion: record.identity.pidVersion)
+            guard currentJailed[key] == nil else { continue }
+            guard let rule = rules.first(where: {
+                $0.jailedSignature.matches(resolvedTeamID: record.teamID, signingID: record.signingID)
+            }) else { continue }
+            newlyJailed.append((key: key, ruleID: rule.id, pid: record.identity.pid))
+        }
+
+        guard !newlyJailed.isEmpty else { return }
+
+        jailedProcessesLock.withLock {
+            for entry in newlyJailed { $0[entry.key] = entry.ruleID }
+        }
+        if let client { es_clear_cache(client) }
+        logger.info("ESJailAdapter sweep: added \(newlyJailed.count, privacy: .public) untracked processes to jail")
+
+        let seeds = newlyJailed.map { (pid: $0.pid, ruleID: $0.ruleID) }
+        jailCascadeQueue.async { [self] in
+            cascadeJailToDescendants(seeds: seeds, allRecords: allRecords)
+        }
+    }
+
+    private func cascadeJailToDescendants(seeds: [(pid: pid_t, ruleID: UUID)], allRecords: [ProcessRecord]) {
+        var frontier = seeds
+        var visited = Set(seeds.map { $0.pid })
+
+        while !frontier.isEmpty {
+            let parentMap = Dictionary(uniqueKeysWithValues: frontier.map { ($0.pid, $0.ruleID) })
+            var nextFrontier: [(pid: pid_t, ruleID: UUID)] = []
+            var batch: [(ProcessKey, UUID)] = []
+
+            for record in allRecords {
+                guard let ruleID = parentMap[record.parentIdentity.pid] else { continue }
+                let childPID = record.identity.pid
+                guard !visited.contains(childPID) else { continue }
+                let key = ProcessKey(pid: childPID, pidVersion: record.identity.pidVersion)
+                guard !jailedProcessesLock.withLock({ $0[key] != nil }) else { continue }
+                visited.insert(childPID)
+                batch.append((key, ruleID))
+                nextFrontier.append((pid: childPID, ruleID: ruleID))
+            }
+
+            if !batch.isEmpty {
+                jailedProcessesLock.withLock {
+                    for (key, ruleID) in batch { $0[key] = ruleID }
+                }
+                if let client { es_clear_cache(client) }
+                logger.info("ESJailAdapter cascade: jailed \(batch.count, privacy: .public) descendant processes")
+            }
+
+            frontier = nextFrontier
+        }
     }
 }
