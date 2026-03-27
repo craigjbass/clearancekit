@@ -15,6 +15,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            DispatchQueue.main.async {
+                if NSApp.windows.allSatisfy({ !$0.isVisible }) {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+            }
+        }
     }
 
     func userNotificationCenter(
@@ -45,14 +56,12 @@ struct clearancekitApp: App {
         }
         .onChange(of: nav.highlightedEventID) { _, eventID in
             if eventID != nil {
-                openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+                showWindow()
             }
         }
         .onChange(of: xpcClient.pendingSignatureIssue) { _, issue in
             if issue != nil {
-                openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+                showWindow()
             }
         }
 
@@ -61,8 +70,7 @@ struct clearancekitApp: App {
             Text("ClearanceKit \(marketing) \(BuildInfo.gitHash)")
             Divider()
             Button("Show") {
-                openWindow(id: "main")
-                NSApp.activate(ignoringOtherApps: true)
+                showWindow()
             }
             Button("Check for updates") {
                 let cleanHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
@@ -78,6 +86,12 @@ struct clearancekitApp: App {
             Image(systemName: menuBarIconName)
                 .foregroundStyle(menuBarIconColor)
         }
+    }
+
+    private func showWindow() {
+        NSApp.setActivationPolicy(.regular)
+        openWindow(id: "main")
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private var menuBarIconName: String {
