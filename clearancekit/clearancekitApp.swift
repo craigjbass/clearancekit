@@ -64,6 +64,12 @@ struct clearancekitApp: App {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
             }
+            Button("Check for updates") {
+                let cleanHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
+                var components = URLComponents(string: "https://craigjbass.github.io/clearancekit/update.html")
+                components?.queryItems = [URLQueryItem(name: "sha", value: cleanHash)]
+                if let url = components?.url { NSWorkspace.shared.open(url) }
+            }
             Divider()
             Button("Quit") {
                 NSApplication.shared.terminate(nil)

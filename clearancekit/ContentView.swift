@@ -285,8 +285,22 @@ struct SetupView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Spacer()
+            Button("Check for updates") {
+                openUpdatePage()
+            }
+            .font(.caption)
+            .buttonStyle(.plain)
+            .foregroundStyle(.accent)
         }
         .padding()
+    }
+
+    private func openUpdatePage() {
+        let cleanHash = BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
+        var components = URLComponents(string: "https://craigjbass.github.io/clearancekit/update.html")
+        components?.queryItems = [URLQueryItem(name: "sha", value: cleanHash)]
+        guard let url = components?.url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var statusColor: Color {
