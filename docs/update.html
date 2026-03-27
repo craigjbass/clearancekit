@@ -21,7 +21,7 @@
       --accent: #7c3aed;
       --accent-bright: #8b5cf6;
       --accent-glow: rgba(124,58,237,0.25);
-      --danger: #ef4444;
+      --danger: #dc2626;
       --warning: #d97706;
       --green: #16a34a;
       --radius: 14px;
@@ -79,41 +79,22 @@
     .status-card {
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      padding: 32px;
-      margin-bottom: 40px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
       display: flex;
       align-items: flex-start;
       gap: 20px;
     }
 
-    .status-card.up-to-date {
-      background: #f0fdf4;
-      border-color: rgba(22,163,74,0.25);
-    }
-
-    .status-card.outdated {
-      background: #fffbeb;
-      border-color: rgba(217,119,6,0.25);
-    }
-
-    .status-card.loading {
-      background: var(--surface);
-    }
-
-    .status-card.error {
-      background: #fef2f2;
-      border-color: rgba(239,68,68,0.25);
-    }
-
-    .status-card.unknown {
-      background: var(--surface);
-      border-color: rgba(109,40,217,0.2);
-    }
+    .status-card.up-to-date  { background: #f0fdf4; border-color: rgba(22,163,74,0.25); }
+    .status-card.outdated    { background: #fffbeb; border-color: rgba(217,119,6,0.25); }
+    .status-card.loading     { background: var(--surface); }
+    .status-card.error       { background: #fef2f2; border-color: rgba(239,68,68,0.25); }
+    .status-card.unknown     { background: var(--surface); border-color: rgba(109,40,217,0.2); }
 
     .status-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
+      width: 44px; height: 44px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -129,7 +110,7 @@
     .status-body { flex: 1; min-width: 0; }
 
     .status-title {
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 700;
       letter-spacing: -0.02em;
       margin-bottom: 4px;
@@ -158,35 +139,164 @@
     /* ── SPINNER ── */
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
-      width: 22px; height: 22px;
+      width: 20px; height: 20px;
       border: 2px solid rgba(124,58,237,0.2);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
 
-    /* ── RELEASE NOTES ── */
-    .releases-heading {
-      font-size: 13px;
-      font-weight: 600;
+    /* ── SECTION HEADING ── */
+    .section-heading {
+      font-size: 11px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
       color: var(--text-faint);
-      margin-bottom: 16px;
+      margin: 32px 0 12px;
     }
 
+    /* ── ADVISORY CARDS ── */
+    .advisory {
+      border-radius: var(--radius);
+      border: 1px solid;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .advisory.critical { border-color: rgba(127,29,29,0.3);  background: #fff1f2; }
+    .advisory.high     { border-color: rgba(220,38,38,0.25); background: #fef2f2; }
+    .advisory.medium   { border-color: rgba(217,119,6,0.25); background: #fffbeb; }
+    .advisory.low      { border-color: rgba(22,163,74,0.2);  background: #f0fdf4; }
+
+    .advisory-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .advisory-header:hover { filter: brightness(0.97); }
+
+    .severity-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 3px 9px;
+      border-radius: 100px;
+      flex-shrink: 0;
+    }
+
+    .advisory.critical .severity-badge { background: rgba(127,29,29,0.12); color: #7f1d1d; }
+    .advisory.high     .severity-badge { background: rgba(220,38,38,0.12); color: #b91c1c; }
+    .advisory.medium   .severity-badge { background: rgba(217,119,6,0.12); color: #b45309; }
+    .advisory.low      .severity-badge { background: rgba(22,163,74,0.12); color: #15803d; }
+
+    .advisory-summary {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .advisory-status {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 100px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .advisory-status.affected {
+      background: rgba(220,38,38,0.1);
+      color: #b91c1c;
+    }
+
+    .advisory-status.patched {
+      background: rgba(22,163,74,0.1);
+      color: #15803d;
+    }
+
+    .advisory-status.unknown-status {
+      background: rgba(109,40,217,0.08);
+      color: var(--accent);
+    }
+
+    .advisory-chevron {
+      flex-shrink: 0;
+      transition: transform 0.2s;
+      color: var(--text-faint);
+    }
+
+    .advisory.open .advisory-chevron { transform: rotate(180deg); }
+
+    .advisory-body {
+      display: none;
+      padding: 0 20px 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .advisory.open .advisory-body { display: block; }
+
+    .advisory-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .advisory-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .advisory-meta-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+    }
+
+    .advisory-meta-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .advisory-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      text-decoration: none;
+      margin-top: 8px;
+    }
+
+    .advisory-link:hover { text-decoration: underline; }
+
+    /* ── RELEASE ACCORDION ── */
     .release {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
 
     .release-header {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
+      padding: 14px 20px;
       background: var(--surface);
       cursor: pointer;
       user-select: none;
@@ -197,7 +307,7 @@
 
     .release-tag {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       color: var(--accent);
       flex-shrink: 0;
@@ -235,7 +345,7 @@
 
     /* ── MARKDOWN RENDERING ── */
     .release-body h2 {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       color: var(--text);
       margin: 20px 0 8px;
@@ -245,10 +355,10 @@
     .release-body h2:first-child { margin-top: 0; }
 
     .release-body h3 {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text);
-      margin: 16px 0 6px;
+      margin: 14px 0 5px;
     }
 
     .release-body p { margin-bottom: 10px; }
@@ -279,25 +389,12 @@
       margin-bottom: 10px;
     }
 
-    .release-body pre code {
-      background: none;
-      padding: 0;
-      color: var(--text);
-    }
+    .release-body pre code { background: none; padding: 0; color: var(--text); }
 
-    .release-body a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
+    .release-body a { color: var(--accent); text-decoration: none; }
     .release-body a:hover { text-decoration: underline; }
 
-    .release-body hr {
-      border: none;
-      border-top: 1px solid var(--border);
-      margin: 20px 0;
-    }
-
+    .release-body hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     .release-body strong { color: var(--text); font-weight: 600; }
 
     .release-body blockquote {
@@ -317,16 +414,12 @@
     }
 
     .release-body th, .release-body td {
-      padding: 8px 12px;
+      padding: 7px 12px;
       text-align: left;
       border: 1px solid var(--border);
     }
 
-    .release-body th {
-      background: var(--surface);
-      font-weight: 600;
-      color: var(--text);
-    }
+    .release-body th { background: var(--surface); font-weight: 600; color: var(--text); }
 
     /* ── NO SHA ── */
     .no-sha {
@@ -341,10 +434,7 @@
       margin-bottom: 10px;
     }
 
-    .no-sha p {
-      color: var(--text-muted);
-      font-size: 15px;
-    }
+    .no-sha p { color: var(--text-muted); font-size: 15px; }
 
     .no-sha code {
       font-family: 'JetBrains Mono', monospace;
@@ -364,11 +454,7 @@
       font-size: 13px;
     }
 
-    footer a {
-      color: var(--text-faint);
-      text-decoration: none;
-    }
-
+    footer a { color: var(--text-faint); text-decoration: none; }
     footer a:hover { color: var(--text-muted); }
   </style>
 </head>
@@ -393,11 +479,13 @@
 (function () {
   const OWNER = 'craigjbass';
   const REPO  = 'clearancekit';
-  const API   = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=100`;
+  const RELEASES_API   = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=100`;
+  const ADVISORIES_API = `https://api.github.com/repos/${OWNER}/${REPO}/security-advisories?per_page=100`;
+  const GH_HEADERS     = { Accept: 'application/vnd.github+json' };
 
   const app = document.getElementById('app');
 
-  const params = new URLSearchParams(window.location.search);
+  const params   = new URLSearchParams(window.location.search);
   const querySha = (params.get('sha') || '').trim().toLowerCase();
 
   if (!querySha) {
@@ -411,7 +499,62 @@
   }
 
   renderLoading();
-  fetchReleases();
+
+  Promise.all([
+    fetch(RELEASES_API,   { headers: GH_HEADERS }).then(r => { if (!r.ok) throw new Error(`Releases API: ${r.status}`); return r.json(); }),
+    fetch(ADVISORIES_API, { headers: GH_HEADERS }).then(r => r.ok ? r.json() : []),
+  ])
+  .then(([releases, advisories]) => render(releases, advisories))
+  .catch(err => renderError(err.message));
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  function shaFromTag(tag) {
+    const parts = tag.split('-');
+    return parts[parts.length - 1].toLowerCase();
+  }
+
+  function isBeta(release) {
+    return release.prerelease || /beta|alpha|rc/i.test(release.tag_name);
+  }
+
+  // Parse a semver-ish version string "X.Y.Z" → [X, Y, Z] or null
+  function parseVersion(str) {
+    const m = str.match(/(\d+)\.(\d+)\.?(\d*)/);
+    if (!m) return null;
+    return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3] || '0', 10)];
+  }
+
+  // -1 / 0 / 1
+  function compareVersions(a, b) {
+    for (let i = 0; i < 3; i++) {
+      if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    }
+    return 0;
+  }
+
+  // Given a patched_versions string like ">= 4.2.14", return the min patched version
+  function minPatchedVersion(str) {
+    if (!str) return null;
+    const m = str.match(/>=?\s*([0-9.]+)/);
+    return m ? parseVersion(m[1]) : null;
+  }
+
+  // 'affected' | 'patched' | 'unknown'
+  function advisoryStatus(advisory, currentTag) {
+    const current = parseVersion(currentTag);
+    if (!current) return 'unknown';
+    for (const vuln of (advisory.vulnerabilities || [])) {
+      const minPatched = minPatchedVersion(vuln.patched_versions);
+      if (!minPatched) continue;
+      // If current >= minPatched → patched by at least this vuln entry
+      if (compareVersions(current, minPatched) >= 0) return 'patched';
+      return 'affected';
+    }
+    return 'unknown';
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   function renderLoading() {
     app.innerHTML = `
@@ -424,92 +567,66 @@
       </div>`;
   }
 
-  async function fetchReleases() {
-    let releases;
-    try {
-      const res = await fetch(API, { headers: { Accept: 'application/vnd.github+json' } });
-      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-      releases = await res.json();
-    } catch (err) {
-      renderError(err.message);
-      return;
-    }
-    render(releases);
-  }
+  function render(allReleases, advisories) {
+    const releases = allReleases.filter(r => !isBeta(r));
+    if (!releases.length) { renderError('No stable releases found.'); return; }
 
-  function shaFromTag(tag) {
-    const parts = tag.split('-');
-    return parts[parts.length - 1].toLowerCase();
-  }
-
-  function render(releases) {
-    if (!releases.length) { renderError('No releases found.'); return; }
-
-    const latest = releases[0];
+    const latest  = releases[0];
     const current = releases.find(r => shaFromTag(r.tag_name) === querySha);
 
+    const published = (advisories || []).filter(a => a.state === 'published');
+
+    let statusHtml;
+    let newerReleases = [];
+
     if (!current) {
-      renderUnknown(latest);
-      return;
+      statusHtml = `
+        <div class="status-card unknown">
+          <div class="status-icon">${iconUnknown()}</div>
+          <div class="status-body">
+            <div class="status-title">Build not recognised</div>
+            <div class="status-detail">No release found matching SHA <code>${escapeHtml(querySha)}</code>.
+              The latest release is <code>${escapeHtml(latest.tag_name)}</code>.</div>
+          </div>
+        </div>`;
+      newerReleases = [latest];
+    } else if (current.tag_name === latest.tag_name) {
+      statusHtml = `
+        <div class="status-card up-to-date">
+          <div class="status-icon">${iconCheck()}</div>
+          <div class="status-body">
+            <div class="status-title">You're up to date</div>
+            <div class="status-detail"><code>${escapeHtml(current.tag_name)}</code> is the latest release.</div>
+          </div>
+        </div>`;
+    } else {
+      const idx   = releases.indexOf(current);
+      newerReleases = releases.slice(0, idx);
+      const count = newerReleases.length;
+      const word  = count === 1 ? 'release' : 'releases';
+      statusHtml = `
+        <div class="status-card outdated">
+          <div class="status-icon">${iconWarning()}</div>
+          <div class="status-body">
+            <div class="status-title">Update available</div>
+            <div class="status-detail">You are running <code>${escapeHtml(current.tag_name)}</code>.
+              There ${count === 1 ? 'is' : 'are'} <strong>${count} newer ${word}</strong> available.</div>
+          </div>
+        </div>`;
     }
 
-    if (current.tag_name === latest.tag_name) {
-      renderUpToDate(current);
-      return;
-    }
+    const currentTagForAdvisories = current ? current.tag_name : querySha;
 
-    const currentIndex = releases.indexOf(current);
-    const newer = releases.slice(0, currentIndex);
-    renderOutdated(current, newer);
-  }
+    const advisoriesHtml = published.length ? `
+      <div class="section-heading">Security advisories</div>
+      ${published.map(a => advisoryCard(a, currentTagForAdvisories)).join('')}` : '';
 
-  function renderUpToDate(release) {
-    app.innerHTML = `
-      <div class="status-card up-to-date">
-        <div class="status-icon">${iconCheck()}</div>
-        <div class="status-body">
-          <div class="status-title">You're up to date</div>
-          <div class="status-detail">
-            <code>${escapeHtml(release.tag_name)}</code> is the latest release.
-          </div>
-        </div>
-      </div>`;
-  }
+    const releasesHtml = newerReleases.length ? `
+      <div class="section-heading">${current && current.tag_name !== (releases[0] || {}).tag_name ? "What's new" : 'Latest release'}</div>
+      ${newerReleases.map(r => releaseCard(r)).join('')}` : '';
 
-  function renderOutdated(current, newer) {
-    const count = newer.length;
-    const releaseWord = count === 1 ? 'release' : 'releases';
-    app.innerHTML = `
-      <div class="status-card outdated">
-        <div class="status-icon">${iconWarning()}</div>
-        <div class="status-body">
-          <div class="status-title">Update available</div>
-          <div class="status-detail">
-            You are running <code>${escapeHtml(current.tag_name)}</code>.
-            There ${count === 1 ? 'is' : 'are'} <strong>${count} newer ${releaseWord}</strong> available.
-          </div>
-        </div>
-      </div>
-      <div class="releases-heading">What's new</div>
-      ${newer.map(releaseCard).join('')}`;
-    wireAccordion();
-  }
-
-  function renderUnknown(latest) {
-    app.innerHTML = `
-      <div class="status-card unknown">
-        <div class="status-icon">${iconUnknown()}</div>
-        <div class="status-body">
-          <div class="status-title">Build not recognised</div>
-          <div class="status-detail">
-            No release found matching SHA <code>${escapeHtml(querySha)}</code>.
-            The latest release is <code>${escapeHtml(latest.tag_name)}</code>.
-          </div>
-        </div>
-      </div>
-      <div class="releases-heading">Latest release</div>
-      ${releaseCard(latest)}`;
-    wireAccordion();
+    app.innerHTML = statusHtml + advisoriesHtml + releasesHtml;
+    wireAccordions();
   }
 
   function renderError(msg) {
@@ -523,6 +640,51 @@
       </div>`;
   }
 
+  // ── Cards ────────────────────────────────────────────────────────────────
+
+  function advisoryCard(advisory, currentTag) {
+    const severity   = (advisory.severity || 'unknown').toLowerCase();
+    const safeClass  = ['critical','high','medium','low'].includes(severity) ? severity : 'medium';
+    const status     = advisoryStatus(advisory, currentTag);
+    const statusLabel = status === 'affected' ? 'Affects your version'
+                      : status === 'patched'  ? 'Your version is patched'
+                      :                         'Check advisory';
+
+    const patchedStr = (advisory.vulnerabilities || [])
+      .map(v => v.patched_versions).filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i).join(', ');
+
+    return `
+      <div class="advisory ${safeClass}">
+        <div class="advisory-header">
+          <span class="severity-badge">${escapeHtml(severity)}</span>
+          <span class="advisory-summary">${escapeHtml(advisory.summary || advisory.ghsa_id)}</span>
+          <span class="advisory-status ${status === 'affected' ? 'affected' : status === 'patched' ? 'patched' : 'unknown-status'}">${statusLabel}</span>
+          <svg class="advisory-chevron" width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="advisory-body">
+          <div class="advisory-meta">
+            <div class="advisory-meta-item">
+              <span class="advisory-meta-label">ID</span>
+              <span class="advisory-meta-value">${escapeHtml(advisory.ghsa_id)}</span>
+            </div>
+            ${patchedStr ? `<div class="advisory-meta-item">
+              <span class="advisory-meta-label">Patched in</span>
+              <span class="advisory-meta-value">${escapeHtml(patchedStr)}</span>
+            </div>` : ''}
+          </div>
+          <a class="advisory-link" href="${escapeHtml(advisory.html_url)}" target="_blank" rel="noopener">
+            View full advisory
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 10L10 2M10 2H5M10 2v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
+      </div>`;
+  }
+
   function releaseCard(release) {
     const body = release.body ? markdownToHtml(release.body) : '<p><em>No release notes.</em></p>';
     const name = release.name || release.tag_name;
@@ -531,7 +693,7 @@
         <div class="release-header">
           <span class="release-tag">${escapeHtml(release.tag_name)}</span>
           <span class="release-name">${escapeHtml(name)}</span>
-          <svg class="release-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <svg class="release-chevron" width="15" height="15" viewBox="0 0 16 16" fill="none">
             <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
@@ -539,58 +701,39 @@
       </div>`;
   }
 
-  function wireAccordion() {
-    document.querySelectorAll('.release-header').forEach(header => {
-      header.addEventListener('click', () => {
-        header.closest('.release').classList.toggle('open');
-      });
+  function wireAccordions() {
+    document.querySelectorAll('.release-header, .advisory-header').forEach(header => {
+      header.addEventListener('click', () => header.closest('.release, .advisory').classList.toggle('open'));
     });
-    // Auto-open the first release
-    const first = document.querySelector('.release');
-    if (first) first.classList.add('open');
+    // Auto-open first release if any
+    const firstRelease = document.querySelector('.release');
+    if (firstRelease) firstRelease.classList.add('open');
+    // Auto-open affected advisories
+    document.querySelectorAll('.advisory').forEach(el => {
+      if (el.querySelector('.advisory-status.affected')) el.classList.add('open');
+    });
   }
 
   // ── Minimal Markdown → HTML ──────────────────────────────────────────────
+
   function markdownToHtml(md) {
-    let html = md;
-
-    // Escape HTML in the raw source (we'll re-inject safe tags below)
-    // We need a targeted approach: escape first, then re-apply markdown.
-    // Instead, process line-by-line for block elements, inline for spans.
-
     const lines = md.split('\n');
-    const out = [];
-    let inList = false;
+    const out   = [];
+    let inList  = false;
     let inTable = false;
     let tableHeaderDone = false;
 
-    function flushList() {
-      if (inList) { out.push('</ul>'); inList = false; }
-    }
+    function flushList()  { if (inList)  { out.push('</ul>'); inList = false; } }
     function flushTable() {
       if (inTable) { out.push('</tbody></table>'); inTable = false; tableHeaderDone = false; }
     }
 
-    for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
+    for (const raw of lines) {
       const line = raw.trimEnd();
 
-      // Blank line
-      if (line === '') {
-        flushList();
-        flushTable();
-        out.push('');
-        continue;
-      }
+      if (line === '') { flushList(); flushTable(); out.push(''); continue; }
+      if (/^---+$/.test(line)) { flushList(); flushTable(); out.push('<hr>'); continue; }
 
-      // Horizontal rule
-      if (/^---+$/.test(line)) {
-        flushList(); flushTable();
-        out.push('<hr>');
-        continue;
-      }
-
-      // Headings
       const h2 = line.match(/^## (.+)/);
       if (h2) { flushList(); flushTable(); out.push(`<h2>${inline(h2[1])}</h2>`); continue; }
 
@@ -600,100 +743,69 @@
       const h4 = line.match(/^#### (.+)/);
       if (h4) { flushList(); flushTable(); out.push(`<h4>${inline(h4[1])}</h4>`); continue; }
 
-      // Blockquote
       const bq = line.match(/^> (.+)/);
       if (bq) { flushList(); flushTable(); out.push(`<blockquote>${inline(bq[1])}</blockquote>`); continue; }
 
-      // Table
       if (line.includes('|')) {
         const cells = line.split('|').slice(1, -1).map(c => c.trim());
         if (/^\|[-| :]+\|$/.test(line.replace(/\s/g, ''))) {
-          // Separator row — close thead, open tbody
-          out.push('</thead><tbody>');
-          tableHeaderDone = true;
-          continue;
+          out.push('</thead><tbody>'); tableHeaderDone = true; continue;
         }
-        if (!inTable) {
-          flushList();
-          out.push('<table><thead>');
-          inTable = true;
-          tableHeaderDone = false;
-        }
+        if (!inTable) { flushList(); out.push('<table><thead>'); inTable = true; tableHeaderDone = false; }
         const tag = tableHeaderDone ? 'td' : 'th';
         out.push(`<tr>${cells.map(c => `<${tag}>${inline(c)}</${tag}>`).join('')}</tr>`);
         continue;
       }
 
-      // List item
       const li = line.match(/^[-*] (.+)/);
-      if (li) {
-        flushTable();
-        if (!inList) { out.push('<ul>'); inList = true; }
-        out.push(`<li>${inline(li[1])}</li>`);
-        continue;
-      }
+      if (li) { flushTable(); if (!inList) { out.push('<ul>'); inList = true; } out.push(`<li>${inline(li[1])}</li>`); continue; }
 
-      // Paragraph / other
-      flushList();
-      flushTable();
+      flushList(); flushTable();
       out.push(`<p>${inline(line)}</p>`);
     }
 
-    flushList();
-    flushTable();
-
+    flushList(); flushTable();
     return out.join('\n');
   }
 
   function inline(text) {
     return text
-      // Escape HTML entities
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      // Bold + italic
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      // Bold
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      // Italic
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      // Inline code
       .replace(/`([^`]+)`/g, '<code>$1</code>')
-      // Links
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   }
 
   function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function iconCheck() {
     return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <circle cx="11" cy="11" r="10" fill="rgba(22,163,74,0.15)"/>
-      <path d="M6.5 11.5l3 3 6-6" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
+      <path d="M6.5 11.5l3 3 6-6" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
 
   function iconWarning() {
     return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <path d="M11 2L20.5 19H1.5L11 2Z" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M11 8.5v4M11 14.5v.5" stroke="#d97706" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>`;
+      <path d="M11 8.5v4M11 14.5v.5" stroke="#d97706" stroke-width="1.8" stroke-linecap="round"/></svg>`;
   }
 
   function iconError() {
     return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <circle cx="11" cy="11" r="10" fill="rgba(239,68,68,0.12)" stroke="#ef4444" stroke-width="1.5"/>
-      <path d="M7.5 7.5l7 7M14.5 7.5l-7 7" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>`;
+      <path d="M7.5 7.5l7 7M14.5 7.5l-7 7" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg>`;
   }
 
   function iconUnknown() {
     return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
       <circle cx="11" cy="11" r="10" fill="rgba(124,58,237,0.1)" stroke="#7c3aed" stroke-width="1.5"/>
       <path d="M8.5 8.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 4" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="11" cy="15.5" r="0.8" fill="#7c3aed"/>
-    </svg>`;
+      <circle cx="11" cy="15.5" r="0.8" fill="#7c3aed"/></svg>`;
   }
 })();
 </script>
