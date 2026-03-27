@@ -70,7 +70,6 @@ final class SystemExtensionManager: NSObject, ObservableObject {
             queue: .main
         )
         request.delegate = self
-        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.global(qos: .userInitiated).async {
             OSSystemExtensionManager.shared.submitRequest(request)
@@ -88,7 +87,6 @@ final class SystemExtensionManager: NSObject, ObservableObject {
             queue: .main
         )
         request.delegate = self
-        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.global(qos: .userInitiated).async {
             OSSystemExtensionManager.shared.submitRequest(request)

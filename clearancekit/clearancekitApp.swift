@@ -15,17 +15,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            DispatchQueue.main.async {
-                if NSApp.windows.allSatisfy({ !$0.isVisible }) {
-                    NSApp.setActivationPolicy(.accessory)
-                }
-            }
-        }
     }
 
     func userNotificationCenter(
@@ -89,7 +78,6 @@ struct clearancekitApp: App {
     }
 
     private func showWindow() {
-        NSApp.setActivationPolicy(.regular)
         openWindow(id: "main")
         NSApp.activate(ignoringOtherApps: true)
     }
