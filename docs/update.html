@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearanceKit — Update Check</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --surface: #f5f3ff;
+      --surface-2: #ede9fe;
+      --border: rgba(109,40,217,0.12);
+      --text: #1e1030;
+      --text-muted: #5a4b78;
+      --text-faint: #9e8fb5;
+      --accent: #7c3aed;
+      --accent-bright: #8b5cf6;
+      --accent-glow: rgba(124,58,237,0.25);
+      --danger: #ef4444;
+      --warning: #d97706;
+      --green: #16a34a;
+      --radius: 14px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-logo img { flex-shrink: 0; border-radius: 6px; }
+
+    /* ── MAIN ── */
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 120px 24px 80px;
+    }
+
+    /* ── STATUS CARD ── */
+    .status-card {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 32px;
+      margin-bottom: 40px;
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .status-card.up-to-date {
+      background: #f0fdf4;
+      border-color: rgba(22,163,74,0.25);
+    }
+
+    .status-card.outdated {
+      background: #fffbeb;
+      border-color: rgba(217,119,6,0.25);
+    }
+
+    .status-card.loading {
+      background: var(--surface);
+    }
+
+    .status-card.error {
+      background: #fef2f2;
+      border-color: rgba(239,68,68,0.25);
+    }
+
+    .status-card.unknown {
+      background: var(--surface);
+      border-color: rgba(109,40,217,0.2);
+    }
+
+    .status-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .status-card.up-to-date .status-icon { background: rgba(22,163,74,0.12); }
+    .status-card.outdated   .status-icon { background: rgba(217,119,6,0.12); }
+    .status-card.loading    .status-icon { background: rgba(124,58,237,0.12); }
+    .status-card.error      .status-icon { background: rgba(239,68,68,0.12); }
+    .status-card.unknown    .status-icon { background: rgba(124,58,237,0.12); }
+
+    .status-body { flex: 1; min-width: 0; }
+
+    .status-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .status-card.up-to-date .status-title { color: var(--green); }
+    .status-card.outdated   .status-title { color: var(--warning); }
+    .status-card.loading    .status-title { color: var(--accent); }
+    .status-card.error      .status-title { color: var(--danger); }
+    .status-card.unknown    .status-title { color: var(--text-muted); }
+
+    .status-detail {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .status-detail code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(0,0,0,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* ── SPINNER ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 22px; height: 22px;
+      border: 2px solid rgba(124,58,237,0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ── RELEASE NOTES ── */
+    .releases-heading {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 16px;
+    }
+
+    .release {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .release-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: var(--surface);
+      cursor: pointer;
+      user-select: none;
+      gap: 12px;
+    }
+
+    .release-header:hover { background: var(--surface-2); }
+
+    .release-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .release-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .release-chevron {
+      flex-shrink: 0;
+      transition: transform 0.2s;
+      color: var(--text-faint);
+    }
+
+    .release.open .release-chevron { transform: rotate(180deg); }
+
+    .release-body {
+      display: none;
+      padding: 20px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    .release.open .release-body { display: block; }
+
+    /* ── MARKDOWN RENDERING ── */
+    .release-body h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 20px 0 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .release-body h2:first-child { margin-top: 0; }
+
+    .release-body h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 16px 0 6px;
+    }
+
+    .release-body p { margin-bottom: 10px; }
+    .release-body p:last-child { margin-bottom: 0; }
+
+    .release-body ul, .release-body ol {
+      padding-left: 20px;
+      margin-bottom: 10px;
+    }
+
+    .release-body li { margin-bottom: 4px; }
+
+    .release-body code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(124,58,237,0.07);
+      color: var(--accent);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .release-body pre {
+      background: #f8f7fe;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin-bottom: 10px;
+    }
+
+    .release-body pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+
+    .release-body a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .release-body a:hover { text-decoration: underline; }
+
+    .release-body hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+
+    .release-body strong { color: var(--text); font-weight: 600; }
+
+    .release-body blockquote {
+      border-left: 3px solid rgba(217,119,6,0.4);
+      background: #fffbeb;
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .release-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+
+    .release-body th, .release-body td {
+      padding: 8px 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+
+    .release-body th {
+      background: var(--surface);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ── NO SHA ── */
+    .no-sha {
+      text-align: center;
+      padding: 60px 24px;
+    }
+
+    .no-sha h2 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+    }
+
+    .no-sha p {
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    .no-sha code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: var(--accent);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-faint);
+      font-size: 13px;
+    }
+
+    footer a {
+      color: var(--text-faint);
+      text-decoration: none;
+    }
+
+    footer a:hover { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">
+    <img src="logo.png" width="28" height="28" alt="" />
+    ClearanceKit
+  </a>
+</nav>
+
+<main>
+  <div id="app"></div>
+</main>
+
+<footer>
+  <a href="https://github.com/craigjbass/clearancekit">GitHub</a>
+</footer>
+
+<script>
+(function () {
+  const OWNER = 'craigjbass';
+  const REPO  = 'clearancekit';
+  const API   = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=100`;
+
+  const app = document.getElementById('app');
+
+  const params = new URLSearchParams(window.location.search);
+  const querySha = (params.get('sha') || '').trim().toLowerCase();
+
+  if (!querySha) {
+    app.innerHTML = `
+      <div class="no-sha">
+        <h2>Update Check</h2>
+        <p>Pass your installed build's git SHA as a query parameter:<br>
+           <code>?sha=56d617b</code></p>
+      </div>`;
+    return;
+  }
+
+  renderLoading();
+  fetchReleases();
+
+  function renderLoading() {
+    app.innerHTML = `
+      <div class="status-card loading">
+        <div class="status-icon"><div class="spinner"></div></div>
+        <div class="status-body">
+          <div class="status-title">Checking for updates…</div>
+          <div class="status-detail">Looking up <code>${escapeHtml(querySha)}</code></div>
+        </div>
+      </div>`;
+  }
+
+  async function fetchReleases() {
+    let releases;
+    try {
+      const res = await fetch(API, { headers: { Accept: 'application/vnd.github+json' } });
+      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+      releases = await res.json();
+    } catch (err) {
+      renderError(err.message);
+      return;
+    }
+    render(releases);
+  }
+
+  function shaFromTag(tag) {
+    const parts = tag.split('-');
+    return parts[parts.length - 1].toLowerCase();
+  }
+
+  function render(releases) {
+    if (!releases.length) { renderError('No releases found.'); return; }
+
+    const latest = releases[0];
+    const current = releases.find(r => shaFromTag(r.tag_name) === querySha);
+
+    if (!current) {
+      renderUnknown(latest);
+      return;
+    }
+
+    if (current.tag_name === latest.tag_name) {
+      renderUpToDate(current);
+      return;
+    }
+
+    const currentIndex = releases.indexOf(current);
+    const newer = releases.slice(0, currentIndex);
+    renderOutdated(current, newer);
+  }
+
+  function renderUpToDate(release) {
+    app.innerHTML = `
+      <div class="status-card up-to-date">
+        <div class="status-icon">${iconCheck()}</div>
+        <div class="status-body">
+          <div class="status-title">You're up to date</div>
+          <div class="status-detail">
+            <code>${escapeHtml(release.tag_name)}</code> is the latest release.
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderOutdated(current, newer) {
+    const count = newer.length;
+    const releaseWord = count === 1 ? 'release' : 'releases';
+    app.innerHTML = `
+      <div class="status-card outdated">
+        <div class="status-icon">${iconWarning()}</div>
+        <div class="status-body">
+          <div class="status-title">Update available</div>
+          <div class="status-detail">
+            You are running <code>${escapeHtml(current.tag_name)}</code>.
+            There ${count === 1 ? 'is' : 'are'} <strong>${count} newer ${releaseWord}</strong> available.
+          </div>
+        </div>
+      </div>
+      <div class="releases-heading">What's new</div>
+      ${newer.map(releaseCard).join('')}`;
+    wireAccordion();
+  }
+
+  function renderUnknown(latest) {
+    app.innerHTML = `
+      <div class="status-card unknown">
+        <div class="status-icon">${iconUnknown()}</div>
+        <div class="status-body">
+          <div class="status-title">Build not recognised</div>
+          <div class="status-detail">
+            No release found matching SHA <code>${escapeHtml(querySha)}</code>.
+            The latest release is <code>${escapeHtml(latest.tag_name)}</code>.
+          </div>
+        </div>
+      </div>
+      <div class="releases-heading">Latest release</div>
+      ${releaseCard(latest)}`;
+    wireAccordion();
+  }
+
+  function renderError(msg) {
+    app.innerHTML = `
+      <div class="status-card error">
+        <div class="status-icon">${iconError()}</div>
+        <div class="status-body">
+          <div class="status-title">Could not check for updates</div>
+          <div class="status-detail">${escapeHtml(msg)}</div>
+        </div>
+      </div>`;
+  }
+
+  function releaseCard(release) {
+    const body = release.body ? markdownToHtml(release.body) : '<p><em>No release notes.</em></p>';
+    const name = release.name || release.tag_name;
+    return `
+      <div class="release">
+        <div class="release-header">
+          <span class="release-tag">${escapeHtml(release.tag_name)}</span>
+          <span class="release-name">${escapeHtml(name)}</span>
+          <svg class="release-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="release-body">${body}</div>
+      </div>`;
+  }
+
+  function wireAccordion() {
+    document.querySelectorAll('.release-header').forEach(header => {
+      header.addEventListener('click', () => {
+        header.closest('.release').classList.toggle('open');
+      });
+    });
+    // Auto-open the first release
+    const first = document.querySelector('.release');
+    if (first) first.classList.add('open');
+  }
+
+  // ── Minimal Markdown → HTML ──────────────────────────────────────────────
+  function markdownToHtml(md) {
+    let html = md;
+
+    // Escape HTML in the raw source (we'll re-inject safe tags below)
+    // We need a targeted approach: escape first, then re-apply markdown.
+    // Instead, process line-by-line for block elements, inline for spans.
+
+    const lines = md.split('\n');
+    const out = [];
+    let inList = false;
+    let inTable = false;
+    let tableHeaderDone = false;
+
+    function flushList() {
+      if (inList) { out.push('</ul>'); inList = false; }
+    }
+    function flushTable() {
+      if (inTable) { out.push('</tbody></table>'); inTable = false; tableHeaderDone = false; }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const line = raw.trimEnd();
+
+      // Blank line
+      if (line === '') {
+        flushList();
+        flushTable();
+        out.push('');
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^---+$/.test(line)) {
+        flushList(); flushTable();
+        out.push('<hr>');
+        continue;
+      }
+
+      // Headings
+      const h2 = line.match(/^## (.+)/);
+      if (h2) { flushList(); flushTable(); out.push(`<h2>${inline(h2[1])}</h2>`); continue; }
+
+      const h3 = line.match(/^### (.+)/);
+      if (h3) { flushList(); flushTable(); out.push(`<h3>${inline(h3[1])}</h3>`); continue; }
+
+      const h4 = line.match(/^#### (.+)/);
+      if (h4) { flushList(); flushTable(); out.push(`<h4>${inline(h4[1])}</h4>`); continue; }
+
+      // Blockquote
+      const bq = line.match(/^> (.+)/);
+      if (bq) { flushList(); flushTable(); out.push(`<blockquote>${inline(bq[1])}</blockquote>`); continue; }
+
+      // Table
+      if (line.includes('|')) {
+        const cells = line.split('|').slice(1, -1).map(c => c.trim());
+        if (/^\|[-| :]+\|$/.test(line.replace(/\s/g, ''))) {
+          // Separator row — close thead, open tbody
+          out.push('</thead><tbody>');
+          tableHeaderDone = true;
+          continue;
+        }
+        if (!inTable) {
+          flushList();
+          out.push('<table><thead>');
+          inTable = true;
+          tableHeaderDone = false;
+        }
+        const tag = tableHeaderDone ? 'td' : 'th';
+        out.push(`<tr>${cells.map(c => `<${tag}>${inline(c)}</${tag}>`).join('')}</tr>`);
+        continue;
+      }
+
+      // List item
+      const li = line.match(/^[-*] (.+)/);
+      if (li) {
+        flushTable();
+        if (!inList) { out.push('<ul>'); inList = true; }
+        out.push(`<li>${inline(li[1])}</li>`);
+        continue;
+      }
+
+      // Paragraph / other
+      flushList();
+      flushTable();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+
+    flushList();
+    flushTable();
+
+    return out.join('\n');
+  }
+
+  function inline(text) {
+    return text
+      // Escape HTML entities
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      // Bold + italic
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      // Bold
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline code
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // Links
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function iconCheck() {
+    return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" fill="rgba(22,163,74,0.15)"/>
+      <path d="M6.5 11.5l3 3 6-6" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+  }
+
+  function iconWarning() {
+    return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <path d="M11 2L20.5 19H1.5L11 2Z" fill="rgba(217,119,6,0.15)" stroke="#d97706" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M11 8.5v4M11 14.5v.5" stroke="#d97706" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  function iconError() {
+    return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" fill="rgba(239,68,68,0.12)" stroke="#ef4444" stroke-width="1.5"/>
+      <path d="M7.5 7.5l7 7M14.5 7.5l-7 7" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>`;
+  }
+
+  function iconUnknown() {
+    return `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" fill="rgba(124,58,237,0.1)" stroke="#7c3aed" stroke-width="1.5"/>
+      <path d="M8.5 8.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 4" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="11" cy="15.5" r="0.8" fill="#7c3aed"/>
+    </svg>`;
+  }
+})();
+</script>
+</body>
+</html>
