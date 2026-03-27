@@ -456,29 +456,55 @@
 
     .release-body th { background: var(--surface); font-weight: 600; color: var(--text); }
 
-    /* ── NO SHA ── */
-    .no-sha {
+    /* ── VERSION PICKER ── */
+    .version-picker {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 36px 32px;
       text-align: center;
-      padding: 60px 24px;
     }
 
-    .no-sha h2 {
-      font-size: 22px;
+    .version-picker h2 {
+      font-size: 20px;
       font-weight: 700;
       letter-spacing: -0.02em;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
-    .no-sha p { color: var(--text-muted); font-size: 15px; }
+    .version-picker p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
 
-    .no-sha code {
+    .version-picker-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .version-select {
+      appearance: none;
+      -webkit-appearance: none;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%239e8fb5' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+      border: 1px solid rgba(109,40,217,0.2);
+      border-radius: 8px;
+      padding: 10px 36px 10px 14px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 2px 8px;
-      border-radius: 6px;
-      color: var(--accent);
+      color: var(--text);
+      cursor: pointer;
+      min-width: 220px;
+      transition: border-color 0.15s;
+    }
+
+    .version-select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
     }
 
     /* ── FOOTER ── */
@@ -520,18 +546,11 @@
 
   const app = document.getElementById('app');
 
-  const params   = new URLSearchParams(window.location.search);
-  const querySha = (params.get('sha') || '').trim().toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  let activeSha = (params.get('sha') || '').trim().toLowerCase();
 
-  if (!querySha) {
-    app.innerHTML = `
-      <div class="no-sha">
-        <h2>Update Check</h2>
-        <p>Pass your installed build's git SHA as a query parameter:<br>
-           <code>?sha=56d617b</code></p>
-      </div>`;
-    return;
-  }
+  let cachedReleases   = null;
+  let cachedAdvisories = null;
 
   renderLoading();
 
@@ -539,7 +558,15 @@
     fetch(RELEASES_API,   { headers: GH_HEADERS }).then(r => { if (!r.ok) throw new Error(`Releases API: ${r.status}`); return r.json(); }),
     fetch(ADVISORIES_API, { headers: GH_HEADERS }).then(r => r.ok ? r.json() : []),
   ])
-  .then(([releases, advisories]) => render(releases, advisories))
+  .then(([releases, advisories]) => {
+    cachedReleases   = releases;
+    cachedAdvisories = advisories;
+    if (!activeSha) {
+      renderPicker(releases.filter(r => !isBeta(r)));
+    } else {
+      render(releases, advisories);
+    }
+  })
   .catch(err => renderError(err.message));
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -596,13 +623,37 @@
 
   // ── Render ───────────────────────────────────────────────────────────────
 
+  function renderPicker(stableReleases) {
+    const options = stableReleases
+      .map(r => `<option value="${escapeHtml(r.tag_name)}">${escapeHtml(r.tag_name)}</option>`)
+      .join('');
+    app.innerHTML = `
+      <div class="version-picker">
+        <h2>Which version are you running?</h2>
+        <p>Select your installed version to check for updates.</p>
+        <div class="version-picker-row">
+          <select id="version-select" class="version-select">
+            <option value="">Choose a version…</option>
+            ${options}
+          </select>
+        </div>
+      </div>`;
+    document.getElementById('version-select').addEventListener('change', e => {
+      const tag = e.target.value;
+      if (!tag) return;
+      activeSha = shaFromTag(tag);
+      history.replaceState(null, '', `?sha=${activeSha}`);
+      render(cachedReleases, cachedAdvisories);
+    });
+  }
+
   function renderLoading() {
     app.innerHTML = `
       <div class="status-card loading">
         <div class="status-icon"><div class="spinner"></div></div>
         <div class="status-body">
           <div class="status-title">Checking for updates…</div>
-          <div class="status-detail">Looking up <code>${escapeHtml(querySha)}</code></div>
+          <div class="status-detail">Looking up <code>${escapeHtml(activeSha || '…')}</code></div>
         </div>
       </div>`;
   }
@@ -612,7 +663,7 @@
     if (!releases.length) { renderError('No stable releases found.'); return; }
 
     const latest  = releases[0];
-    const current = releases.find(r => shaFromTag(r.tag_name) === querySha);
+    const current = releases.find(r => shaFromTag(r.tag_name) === activeSha);
 
     const published = (advisories || []).filter(a => a.state === 'published');
 
@@ -626,7 +677,7 @@
           <div class="status-icon">${iconUnknown()}</div>
           <div class="status-body">
             <div class="status-title">Build not recognised</div>
-            <div class="status-detail">No release found matching SHA <code>${escapeHtml(querySha)}</code>.
+            <div class="status-detail">No release found matching SHA <code>${escapeHtml(activeSha)}</code>.
               The latest release is <code>${escapeHtml(latest.tag_name)}</code>.</div>
             ${latestDmg ? `<a class="btn-download" href="${escapeHtml(latestDmg)}">${iconDownload()} Download ${escapeHtml(latest.tag_name)}</a>` : ''}
           </div>
