@@ -19,7 +19,7 @@ struct EventsWindowView: View {
     @State private var filter: EventFilter = .deny
     @State private var showDefaultAllows = false
 
-    private static let maxDisplayedEvents = 500
+    private static let maxDisplayedEvents = 1250
 
     private var filteredEvents: [FolderOpenEvent] {
         let base: [FolderOpenEvent]
@@ -95,7 +95,7 @@ struct EventsWindowView: View {
                         Task { @MainActor in
                             filter = .deny
                             withAnimation { proxy.scrollTo(eventID, anchor: .center) }
-                            try? await Task.sleep(for: .seconds(2))
+                            try? await Task.sleep(for: .seconds(5))
                             nav.highlightedEventID = nil
                         }
                     }

@@ -48,7 +48,7 @@ final class XPCClient: NSObject, ObservableObject {
         super.init()
         Task { @MainActor in
             while true {
-                try? await Task.sleep(for: .milliseconds(150))
+                try? await Task.sleep(for: .seconds(3))
                 self.flushPendingEvents()
             }
         }
