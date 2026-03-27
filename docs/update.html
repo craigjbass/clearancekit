@@ -567,6 +567,7 @@
       render(releases, advisories);
     }
   })
+  .catch(err => renderError(err.message));
 
   window.addEventListener('popstate', () => {
     activeSha = (new URLSearchParams(window.location.search).get('sha') || '').trim().toLowerCase();
@@ -576,7 +577,6 @@
       render(cachedReleases, cachedAdvisories);
     }
   });
-  .catch(err => renderError(err.message));
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
