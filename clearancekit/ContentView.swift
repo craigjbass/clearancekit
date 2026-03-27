@@ -290,7 +290,7 @@ struct SetupView: View {
             }
             .font(.caption)
             .buttonStyle(.plain)
-            .foregroundStyle(.accent)
+            .foregroundStyle(Color.accentColor)
         }
         .padding()
     }
