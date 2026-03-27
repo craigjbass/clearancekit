@@ -567,6 +567,15 @@
       render(releases, advisories);
     }
   })
+
+  window.addEventListener('popstate', () => {
+    activeSha = (new URLSearchParams(window.location.search).get('sha') || '').trim().toLowerCase();
+    if (!activeSha) {
+      renderPicker(cachedReleases.filter(r => !isBeta(r)));
+    } else {
+      render(cachedReleases, cachedAdvisories);
+    }
+  });
   .catch(err => renderError(err.message));
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -642,7 +651,7 @@
       const tag = e.target.value;
       if (!tag) return;
       activeSha = shaFromTag(tag);
-      history.replaceState(null, '', `?sha=${activeSha}`);
+      history.pushState(null, '', `?sha=${activeSha}`);
       render(cachedReleases, cachedAdvisories);
     });
   }
