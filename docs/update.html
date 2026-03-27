@@ -136,6 +136,24 @@
       border-radius: 4px;
     }
 
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 12px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      background: var(--accent);
+      color: #fff;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn-download:hover { background: var(--accent-bright); transform: translateY(-1px); }
+    .btn-download:active { transform: translateY(0); }
+
     /* ── SPINNER ── */
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
@@ -323,6 +341,23 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
+    .release-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(124,58,237,0.2);
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+
+    .release-download:hover { background: rgba(124,58,237,0.06); }
 
     .release-chevron {
       flex-shrink: 0;
@@ -514,6 +549,11 @@
     return parts[parts.length - 1].toLowerCase();
   }
 
+  function dmgUrl(release) {
+    const asset = (release.assets || []).find(a => a.name.endsWith('.dmg'));
+    return asset ? asset.browser_download_url : null;
+  }
+
   function isBeta(release) {
     return release.prerelease || /beta|alpha|rc/i.test(release.tag_name);
   }
@@ -580,6 +620,7 @@
     let newerReleases = [];
 
     if (!current) {
+      const latestDmg = dmgUrl(latest);
       statusHtml = `
         <div class="status-card unknown">
           <div class="status-icon">${iconUnknown()}</div>
@@ -587,16 +628,19 @@
             <div class="status-title">Build not recognised</div>
             <div class="status-detail">No release found matching SHA <code>${escapeHtml(querySha)}</code>.
               The latest release is <code>${escapeHtml(latest.tag_name)}</code>.</div>
+            ${latestDmg ? `<a class="btn-download" href="${escapeHtml(latestDmg)}">${iconDownload()} Download ${escapeHtml(latest.tag_name)}</a>` : ''}
           </div>
         </div>`;
       newerReleases = [latest];
     } else if (current.tag_name === latest.tag_name) {
+      const latestDmg = dmgUrl(current);
       statusHtml = `
         <div class="status-card up-to-date">
           <div class="status-icon">${iconCheck()}</div>
           <div class="status-body">
             <div class="status-title">You're up to date</div>
             <div class="status-detail"><code>${escapeHtml(current.tag_name)}</code> is the latest release.</div>
+            ${latestDmg ? `<a class="btn-download" href="${escapeHtml(latestDmg)}">${iconDownload()} Download ${escapeHtml(current.tag_name)}</a>` : ''}
           </div>
         </div>`;
     } else {
@@ -604,6 +648,7 @@
       newerReleases = releases.slice(0, idx);
       const count = newerReleases.length;
       const word  = count === 1 ? 'release' : 'releases';
+      const latestDmg = dmgUrl(latest);
       statusHtml = `
         <div class="status-card outdated">
           <div class="status-icon">${iconWarning()}</div>
@@ -611,6 +656,7 @@
             <div class="status-title">Update available</div>
             <div class="status-detail">You are running <code>${escapeHtml(current.tag_name)}</code>.
               There ${count === 1 ? 'is' : 'are'} <strong>${count} newer ${word}</strong> available.</div>
+            ${latestDmg ? `<a class="btn-download" href="${escapeHtml(latestDmg)}">${iconDownload()} Download ${escapeHtml(latest.tag_name)}</a>` : ''}
           </div>
         </div>`;
     }
@@ -688,11 +734,16 @@
   function releaseCard(release) {
     const body = release.body ? markdownToHtml(release.body) : '<p><em>No release notes.</em></p>';
     const name = release.name || release.tag_name;
+    const dlUrl = dmgUrl(release);
+    const dlLink = dlUrl
+      ? `<a class="release-download" href="${escapeHtml(dlUrl)}" title="Download DMG" onclick="event.stopPropagation()">${iconDownload()} DMG</a>`
+      : '';
     return `
       <div class="release">
         <div class="release-header">
           <span class="release-tag">${escapeHtml(release.tag_name)}</span>
           <span class="release-name">${escapeHtml(name)}</span>
+          ${dlLink}
           <svg class="release-chevron" width="15" height="15" viewBox="0 0 16 16" fill="none">
             <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -806,6 +857,12 @@
       <circle cx="11" cy="11" r="10" fill="rgba(124,58,237,0.1)" stroke="#7c3aed" stroke-width="1.5"/>
       <path d="M8.5 8.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 4" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round"/>
       <circle cx="11" cy="15.5" r="0.8" fill="#7c3aed"/></svg>`;
+  }
+
+  function iconDownload() {
+    return `<svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
   }
 })();
 </script>
