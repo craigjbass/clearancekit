@@ -570,9 +570,9 @@
     cachedReleases   = releases;
     cachedAdvisories = advisories;
     if (!activeSha) {
-      renderPicker(releases.filter(r => !isBeta(r)));
+      renderPicker(allReleases.filter(r => !isBeta(r)));
     } else {
-      render(releases, advisories);
+      render(allReleases, advisories);
     }
   })
   .catch(err => renderError(err.message));
@@ -676,11 +676,11 @@
   }
 
   function render(allReleases, advisories) {
-    const releases = allReleases.filter(r => !isBeta(r));
-    if (!releases.length) { renderError('No stable releases found.'); return; }
+    const current = allReleases.find(r => shaFromTag(r.tag_name) === activeSha);
+    const releases = (current && isBeta(current)) ? allReleases : allReleases.filter(r => !isBeta(r));
+    if (!releases.length) { renderError('No releases found.'); return; }
 
     const latest  = releases[0];
-    const current = releases.find(r => shaFromTag(r.tag_name) === activeSha);
 
     const published = (advisories || []).filter(a => a.state === 'published');
 
