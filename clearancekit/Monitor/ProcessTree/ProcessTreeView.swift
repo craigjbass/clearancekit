@@ -96,7 +96,7 @@ struct ProcessTreeView: View {
                 Text(countLabel)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .contentMargins(.left, 4)
+                    .contentMargins(.leading, 4)
             }
             ToolbarItem {
                 TextField("Search", text: $searchText)
