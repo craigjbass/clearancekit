@@ -73,6 +73,14 @@ final class AllowlistStore: ObservableObject {
         service.removeAllowlistEntry(entryID: entry.id)
     }
 
+    func update(_ entry: AllowlistEntry) async throws {
+        try await authenticate("Update a global allowlist entry")
+        userEntries.removeAll { $0.id == entry.id }
+        userEntries.append(entry)
+        service.removeAllowlistEntry(entryID: entry.id)
+        service.addAllowlistEntry(entry)
+    }
+
     func addAncestor(_ entry: AncestorAllowlistEntry) async throws {
         try await authenticate("Add a global ancestor allowlist entry")
         userAncestorEntries.append(entry)
@@ -83,5 +91,13 @@ final class AllowlistStore: ObservableObject {
         try await authenticate("Remove a global ancestor allowlist entry")
         userAncestorEntries.removeAll { $0.id == entry.id }
         service.removeAncestorAllowlistEntry(entryID: entry.id)
+    }
+
+    func updateAncestor(_ entry: AncestorAllowlistEntry) async throws {
+        try await authenticate("Update a global ancestor allowlist entry")
+        userAncestorEntries.removeAll { $0.id == entry.id }
+        userAncestorEntries.append(entry)
+        service.removeAncestorAllowlistEntry(entryID: entry.id)
+        service.addAncestorAllowlistEntry(entry)
     }
 }

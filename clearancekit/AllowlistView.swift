@@ -9,6 +9,8 @@ struct AllowlistView: View {
     @StateObject private var allowlistStore = AllowlistStore.shared
     @State private var isAddingEntry = false
     @State private var isAddingAncestorEntry = false
+    @State private var editingEntry: AllowlistEntry? = nil
+    @State private var editingAncestorEntry: AncestorAllowlistEntry? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +19,7 @@ struct AllowlistView: View {
             entryList
         }
         .sheet(isPresented: $isAddingEntry) {
-            AllowlistEntryAddView { entry in
+            AllowlistEntryEditView { entry in
                 Task {
                     do {
                         try await allowlistStore.add(entry)
@@ -29,7 +31,7 @@ struct AllowlistView: View {
             }
         }
         .sheet(isPresented: $isAddingAncestorEntry) {
-            AncestorAllowlistEntryAddView { entry in
+            AncestorAllowlistEntryEditView { entry in
                 Task {
                     do {
                         try await allowlistStore.addAncestor(entry)
@@ -38,6 +40,30 @@ struct AllowlistView: View {
                 }
             } onCancel: {
                 isAddingAncestorEntry = false
+            }
+        }
+        .sheet(item: $editingEntry) { entry in
+            AllowlistEntryEditView(existing: entry) { updated in
+                Task {
+                    do {
+                        try await allowlistStore.update(updated)
+                        editingEntry = nil
+                    } catch {}
+                }
+            } onCancel: {
+                editingEntry = nil
+            }
+        }
+        .sheet(item: $editingAncestorEntry) { entry in
+            AncestorAllowlistEntryEditView(existing: entry) { updated in
+                Task {
+                    do {
+                        try await allowlistStore.updateAncestor(updated)
+                        editingAncestorEntry = nil
+                    } catch {}
+                }
+            } onCancel: {
+                editingAncestorEntry = nil
             }
         }
     }
@@ -58,7 +84,7 @@ struct AllowlistView: View {
             if !allowlistStore.baselineEntries.isEmpty {
                 Section("Baseline Entries") {
                     ForEach(allowlistStore.baselineEntries) { entry in
-                        AllowlistEntryRow(entry: entry, source: .baseline, isEditable: false) { }
+                        AllowlistEntryRow(entry: entry, source: .baseline, isEditable: false, onEdit: { }, onDelete: { })
                             .padding(.vertical, 4)
                     }
                 }
@@ -66,7 +92,7 @@ struct AllowlistView: View {
             if !allowlistStore.managedEntries.isEmpty {
                 Section("Managed Profile Entries") {
                     ForEach(allowlistStore.managedEntries) { entry in
-                        AllowlistEntryRow(entry: entry, source: .managed, isEditable: false) { }
+                        AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
                             .padding(.vertical, 4)
                     }
                 }
@@ -74,9 +100,11 @@ struct AllowlistView: View {
             if !allowlistStore.userEntries.isEmpty {
                 Section("User Entries") {
                     ForEach(allowlistStore.userEntries) { entry in
-                        AllowlistEntryRow(entry: entry, source: .user, isEditable: true) {
+                        AllowlistEntryRow(entry: entry, source: .user, isEditable: true, onEdit: {
+                            editingEntry = entry
+                        }, onDelete: {
                             Task { try? await allowlistStore.remove(entry) }
-                        }
+                        })
                         .padding(.vertical, 4)
                     }
                 }
@@ -84,7 +112,7 @@ struct AllowlistView: View {
             if !allowlistStore.managedAncestorEntries.isEmpty {
                 Section("Managed Profile Ancestor Entries") {
                     ForEach(allowlistStore.managedAncestorEntries) { entry in
-                        AncestorAllowlistEntryRow(entry: entry, isEditable: false) { }
+                        AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
                             .padding(.vertical, 4)
                     }
                 }
@@ -92,9 +120,11 @@ struct AllowlistView: View {
             if !allowlistStore.userAncestorEntries.isEmpty {
                 Section("User Ancestor Entries") {
                     ForEach(allowlistStore.userAncestorEntries) { entry in
-                        AncestorAllowlistEntryRow(entry: entry, isEditable: true) {
+                        AncestorAllowlistEntryRow(entry: entry, isEditable: true, onEdit: {
+                            editingAncestorEntry = entry
+                        }, onDelete: {
                             Task { try? await allowlistStore.removeAncestor(entry) }
-                        }
+                        })
                         .padding(.vertical, 4)
                     }
                 }
@@ -124,6 +154,7 @@ private struct AllowlistEntryRow: View {
     let entry: AllowlistEntry
     let source: AllowlistEntrySource
     let isEditable: Bool
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     private var issueURL: URL? {
@@ -165,6 +196,10 @@ private struct AllowlistEntryRow: View {
                 .controlSize(.mini)
             }
             if isEditable {
+                Button { onEdit() } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
                 Button { onDelete() } label: {
                     Image(systemName: "trash")
                         .foregroundColor(.red)
@@ -197,6 +232,7 @@ private struct AllowlistEntryRow: View {
 private struct AncestorAllowlistEntryRow: View {
     let entry: AncestorAllowlistEntry
     let isEditable: Bool
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -223,6 +259,10 @@ private struct AncestorAllowlistEntryRow: View {
             }
             Spacer()
             if isEditable {
+                Button { onEdit() } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
                 Button { onDelete() } label: {
                     Image(systemName: "trash")
                         .foregroundColor(.red)
@@ -250,27 +290,46 @@ private struct AncestorAllowlistEntryRow: View {
     }
 }
 
-// MARK: - AllowlistEntryAddView
+// MARK: - AllowlistEntryEditView
 
-struct AllowlistEntryAddView: View {
+struct AllowlistEntryEditView: View {
     enum MatchType: String, CaseIterable {
         case signingID = "Signing ID"
         case processPath = "Process Path"
     }
 
-    @State private var matchType: MatchType = .signingID
-    @State private var value = ""
-    @State private var platformBinary = false
-    @State private var teamID = ""
+    @State private var matchType: MatchType
+    @State private var value: String
+    @State private var platformBinary: Bool
+    @State private var teamID: String
 
-    let onAdd: (AllowlistEntry) -> Void
+    private let existing: AllowlistEntry?
+    let onSave: (AllowlistEntry) -> Void
     let onCancel: () -> Void
 
+    init(existing: AllowlistEntry? = nil, onSave: @escaping (AllowlistEntry) -> Void, onCancel: @escaping () -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        self.onCancel = onCancel
+        if let e = existing {
+            _matchType      = State(initialValue: e.signingID.isEmpty ? .processPath : .signingID)
+            _value          = State(initialValue: e.signingID.isEmpty ? e.processPath : e.signingID)
+            _platformBinary = State(initialValue: e.platformBinary)
+            _teamID         = State(initialValue: e.teamID)
+        } else {
+            _matchType      = State(initialValue: .signingID)
+            _value          = State(initialValue: "")
+            _platformBinary = State(initialValue: false)
+            _teamID         = State(initialValue: "")
+        }
+    }
+
     private var isValid: Bool { !value.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var isEditing: Bool { existing != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Add Allowlist Entry")
+            Text(isEditing ? "Edit Allowlist Entry" : "Add Allowlist Entry")
                 .font(.headline)
                 .padding()
 
@@ -305,15 +364,16 @@ struct AllowlistEntryAddView: View {
                 Spacer()
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add") {
+                Button(isEditing ? "Save" : "Add") {
                     let trimmed = value.trimmingCharacters(in: .whitespaces)
                     let entry = AllowlistEntry(
-                        signingID:    matchType == .signingID   ? trimmed : "",
-                        processPath:  matchType == .processPath ? trimmed : "",
+                        id:             existing?.id ?? UUID(),
+                        signingID:      matchType == .signingID   ? trimmed : "",
+                        processPath:    matchType == .processPath ? trimmed : "",
                         platformBinary: platformBinary,
-                        teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
+                        teamID:         platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
                     )
-                    onAdd(entry)
+                    onSave(entry)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
@@ -324,27 +384,46 @@ struct AllowlistEntryAddView: View {
     }
 }
 
-// MARK: - AncestorAllowlistEntryAddView
+// MARK: - AncestorAllowlistEntryEditView
 
-struct AncestorAllowlistEntryAddView: View {
+struct AncestorAllowlistEntryEditView: View {
     enum MatchType: String, CaseIterable {
         case signingID = "Signing ID"
         case processPath = "Process Path"
     }
 
-    @State private var matchType: MatchType = .signingID
-    @State private var value = ""
-    @State private var platformBinary = false
-    @State private var teamID = ""
+    @State private var matchType: MatchType
+    @State private var value: String
+    @State private var platformBinary: Bool
+    @State private var teamID: String
 
-    let onAdd: (AncestorAllowlistEntry) -> Void
+    private let existing: AncestorAllowlistEntry?
+    let onSave: (AncestorAllowlistEntry) -> Void
     let onCancel: () -> Void
 
+    init(existing: AncestorAllowlistEntry? = nil, onSave: @escaping (AncestorAllowlistEntry) -> Void, onCancel: @escaping () -> Void) {
+        self.existing = existing
+        self.onSave = onSave
+        self.onCancel = onCancel
+        if let e = existing {
+            _matchType      = State(initialValue: e.signingID.isEmpty ? .processPath : .signingID)
+            _value          = State(initialValue: e.signingID.isEmpty ? e.processPath : e.signingID)
+            _platformBinary = State(initialValue: e.platformBinary)
+            _teamID         = State(initialValue: e.teamID)
+        } else {
+            _matchType      = State(initialValue: .signingID)
+            _value          = State(initialValue: "")
+            _platformBinary = State(initialValue: false)
+            _teamID         = State(initialValue: "")
+        }
+    }
+
     private var isValid: Bool { !value.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var isEditing: Bool { existing != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Add Ancestor Allowlist Entry")
+            Text(isEditing ? "Edit Ancestor Allowlist Entry" : "Add Ancestor Allowlist Entry")
                 .font(.headline)
                 .padding()
 
@@ -385,15 +464,16 @@ struct AncestorAllowlistEntryAddView: View {
                 Spacer()
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add") {
+                Button(isEditing ? "Save" : "Add") {
                     let trimmed = value.trimmingCharacters(in: .whitespaces)
                     let entry = AncestorAllowlistEntry(
-                        signingID:    matchType == .signingID   ? trimmed : "",
-                        processPath:  matchType == .processPath ? trimmed : "",
+                        id:             existing?.id ?? UUID(),
+                        signingID:      matchType == .signingID   ? trimmed : "",
+                        processPath:    matchType == .processPath ? trimmed : "",
                         platformBinary: platformBinary,
-                        teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
+                        teamID:         platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
                     )
-                    onAdd(entry)
+                    onSave(entry)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
