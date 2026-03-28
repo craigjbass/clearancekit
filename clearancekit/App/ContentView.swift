@@ -18,7 +18,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case processTree = "Process Tree"
     case metrics     = "Metrics"
     case setup       = "Setup"
-    case exportSanta = "Santa"
+    case exportSanta         = "Santa"
+    case exportClearanceKit  = "ClearanceKit (.mobileconfig)"
 
     var id: String { rawValue }
 
@@ -32,8 +33,9 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .processes:   return "cpu"
         case .processTree: return "list.bullet.indent"
         case .metrics:     return "chart.xyaxis.line"
-        case .setup:       return "gearshape"
-        case .exportSanta: return "square.and.arrow.up"
+        case .setup:              return "gearshape"
+        case .exportSanta:        return "square.and.arrow.up"
+        case .exportClearanceKit: return "doc.richtext"
         }
     }
 }
@@ -79,6 +81,8 @@ struct ContentView: View {
                     Section("Export as\u{2026}") {
                         Label(SidebarItem.exportSanta.rawValue, systemImage: SidebarItem.exportSanta.icon)
                             .tag(SidebarItem.exportSanta)
+                        Label(SidebarItem.exportClearanceKit.rawValue, systemImage: SidebarItem.exportClearanceKit.icon)
+                            .tag(SidebarItem.exportClearanceKit)
                     }
                 }
                 .navigationSplitViewColumnWidth(min: 160, ideal: 180)
@@ -93,7 +97,8 @@ struct ContentView: View {
                 case .processTree: ProcessTreeView()
                 case .metrics:     MetricsView()
                 case .setup:       SetupView()
-                case .exportSanta: SantaExportView()
+                case .exportSanta:        SantaExportView()
+                case .exportClearanceKit: ClearanceKitExportView()
                 }
             }
         }
