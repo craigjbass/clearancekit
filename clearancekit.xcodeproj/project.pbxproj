@@ -86,9 +86,9 @@
 				Configure/Policy/RuleEditView.swift,
 				Configure/ProcessPickerView.swift,
 				Monitor/Events/EventsWindowView.swift,
+				Monitor/Processes/ProcessesView.swift,
 				Monitor/ProcessTree/ProcessTreeView.swift,
 				Monitor/ProcessTree/ProcessTreeWizardSheet.swift,
-				Monitor/Processes/ProcessesView.swift,
 			);
 			target = EE4444444444444444440006 /* clearancekitTests */;
 		};

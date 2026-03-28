@@ -13,14 +13,14 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 final class ESInboundAdapter {
     static let xprotectPath = "/Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS"
 
-    private let interactor: FilterInteractor
+    private let interactor: FAAFilterInteractor
     private let esAdapterQueue: DispatchQueue
     private var client: OpaquePointer?
     private var policyPrefixes: Set<String> = []
     private var discoveryPrefixes: Set<String> = []
 
     init(
-        interactor: FilterInteractor,
+        interactor: FAAFilterInteractor,
         esAdapterQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-adapter", qos: .userInteractive, autoreleaseFrequency: .never)
     ) {
         self.interactor = interactor
@@ -180,7 +180,7 @@ final class ESInboundAdapter {
         return string(from: token).hasPrefix(xprotectPath)
     }
 
-    private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FilterInteractor, correlationID: UUID) {
+    private static func dispatchFileAuth(from message: UnsafePointer<es_message_t>, esClient: OpaquePointer, interactor: FAAFilterInteractor, correlationID: UUID) {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_AUTH_OPEN:
             interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient, correlationID: correlationID))

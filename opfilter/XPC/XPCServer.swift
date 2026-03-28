@@ -3,7 +3,7 @@
 //  opfilter
 //
 //  Thin coordinator: sets up the XPC listener, wires PolicyRepository,
-//  EventBroadcaster, FilterInteractor, and ESInboundAdapter together.
+//  EventBroadcaster, FAAFilterInteractor, JailFilterInteractor, and ESInboundAdapter together.
 //
 
 import Foundation
@@ -18,7 +18,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
     private let processTree: ProcessTreeProtocol
     private let policyRepository: PolicyRepository
     private let broadcaster: EventBroadcaster
-    private let interactor: FilterInteractor
+    private let faaInteractor: FAAFilterInteractor
+    private let jailInteractor: JailFilterInteractor
     private let adapter: ESInboundAdapter
     private let jailAdapter: ESJailAdapter
     fileprivate let serverQueue: DispatchQueue
@@ -27,7 +28,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
         processTree: ProcessTreeProtocol,
         policyRepository: PolicyRepository,
         broadcaster: EventBroadcaster,
-        interactor: FilterInteractor,
+        faaInteractor: FAAFilterInteractor,
+        jailInteractor: JailFilterInteractor,
         adapter: ESInboundAdapter,
         jailAdapter: ESJailAdapter,
         serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
@@ -35,7 +37,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
         self.processTree = processTree
         self.policyRepository = policyRepository
         self.broadcaster = broadcaster
-        self.interactor = interactor
+        self.faaInteractor = faaInteractor
+        self.jailInteractor = jailInteractor
         self.adapter = adapter
         self.jailAdapter = jailAdapter
         self.serverQueue = serverQueue
@@ -125,13 +128,13 @@ final class XPCServer: NSObject, @unchecked Sendable {
     }
 
     func applyAllowlistToFilter() {
-        interactor.updateAllowlist(policyRepository.mergedAllowlist())
-        interactor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
+        faaInteractor.updateAllowlist(policyRepository.mergedAllowlist())
+        faaInteractor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
     }
 
     func applyJailRulesToFilter() {
         let rules = policyRepository.mergedJailRules()
-        interactor.updateJailRules(rules)
+        jailInteractor.updateJailRules(rules)
         jailAdapter.updateJailRules(rules)
     }
 

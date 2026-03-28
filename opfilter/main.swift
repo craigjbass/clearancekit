@@ -43,14 +43,17 @@ let policyRepository = PolicyRepository(
 )
 let broadcaster = EventBroadcaster()
 
-let interactorRef = WeakBox<FilterInteractor>()
+let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
+let allowlistState = AllowlistState()
+
+let faaInteractorRef = WeakBox<FAAFilterInteractor>()
 let pipeline = FileAuthPipeline(
     processTree: processTree,
-    rulesProvider: { interactorRef.value?.currentRules() ?? [] },
-    allowlistProvider: { interactorRef.value?.currentAllowlist() ?? [] },
-    ancestorAllowlistProvider: { interactorRef.value?.currentAncestorAllowlist() ?? [] },
+    rulesProvider: { faaInteractorRef.value?.currentRules() ?? [] },
+    allowlistProvider: { allowlistState.currentAllowlist() },
+    ancestorAllowlistProvider: { allowlistState.currentAncestorAllowlist() },
     postRespond: { event, decision, ancestors, dwell in
-        interactorRef.value?.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+        postRespondHandler.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
     },
     hotPathQueue: hotPathQueue,
     slowWorkerQueue: slowWorkerQueue,
@@ -58,29 +61,37 @@ let pipeline = FileAuthPipeline(
     eventSignal: eventSignal,
     slowSignal: slowSignal
 )
-let interactor = FilterInteractor(
+let faaInteractor = FAAFilterInteractor(
     initialRules: faaPolicy,
+    allowlistState: allowlistState,
     processTree: processTree,
     pipeline: pipeline,
     processTreeQueue: processTreeQueue,
-    postRespondQueue: postRespondQueue
+    postRespondHandler: postRespondHandler
 )
-interactorRef.value = interactor
+faaInteractorRef.value = faaInteractor
 pipeline.start()
 
-let adapter = ESInboundAdapter(interactor: interactor, esAdapterQueue: esAdapterQueue)
-let jailAdapter = ESJailAdapter(interactor: interactor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
+let jailInteractor = JailFilterInteractor(
+    allowlistState: allowlistState,
+    processTree: processTree,
+    postRespondHandler: postRespondHandler
+)
+
+let adapter = ESInboundAdapter(interactor: faaInteractor, esAdapterQueue: esAdapterQueue)
+let jailAdapter = ESJailAdapter(interactor: jailInteractor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
 let server = XPCServer(
     processTree: processTree,
     policyRepository: policyRepository,
     broadcaster: broadcaster,
-    interactor: interactor,
+    faaInteractor: faaInteractor,
+    jailInteractor: jailInteractor,
     adapter: adapter,
     jailAdapter: jailAdapter,
     serverQueue: xpcServerQueue
 )
 
-interactor.onEvent = { event in
+postRespondHandler.onEvent = { event in
     server.handleEvent(event)
 }
 
@@ -100,7 +111,7 @@ metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
 metricsTimer.setEventHandler {
     let sampleDate = Date(timeIntervalSince1970: Double(clock_gettime_nsec_np(CLOCK_REALTIME)) / 1_000_000_000)
     let m = pipeline.metrics()
-    let jm = interactor.jailMetrics()
+    let jm = jailInteractor.jailMetrics()
     server.pushMetrics(m, jail: jm, timestamp: sampleDate)
     metricsLogger.info("""
     pipeline_metrics \

@@ -61,7 +61,7 @@ private struct ProcessKey: Hashable {
 // MARK: - ESJailAdapter
 
 final class ESJailAdapter {
-    private let interactor: FilterInteractor
+    private let interactor: JailFilterInteractor
     private let processTree: ProcessTreeProtocol
     private let esJailAdapterQueue: DispatchQueue
     private let jailSweepQueue: DispatchQueue
@@ -77,7 +77,7 @@ final class ESJailAdapter {
     private let jailCacheProcessor = JailFileAccessEventCacheDecisionProcessor()
 
     init(
-        interactor: FilterInteractor,
+        interactor: JailFilterInteractor,
         processTree: ProcessTreeProtocol,
         esJailAdapterQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.es-jail-adapter", qos: .userInteractive),
         jailSweepQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.jail-sweep", qos: .background),
