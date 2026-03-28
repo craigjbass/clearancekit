@@ -16,9 +16,22 @@ struct ProcessTreeView: View {
     @State private var sortOrder = [KeyPathComparator(\RunningProcessInfo.pid)]
     @State private var selectedProcessID: RunningProcessInfo.ID?
     @State private var wizardProcess: RunningProcessInfo?
+    @State private var searchText = ""
+
+    private var filteredRecords: [RunningProcessInfo] {
+        guard !searchText.isEmpty else { return records }
+        return records.filter { r in
+            let name = URL(fileURLWithPath: r.path).lastPathComponent
+            return [
+                String(r.pid), String(r.pidVersion), String(r.parentPID),
+                name, r.path, r.signingID, r.teamID,
+                String(r.uid), String(r.gid)
+            ].contains { $0.localizedCaseInsensitiveContains(searchText) }
+        }
+    }
 
     var body: some View {
-        Table(records.sorted(using: sortOrder), selection: $selectedProcessID, sortOrder: $sortOrder) {
+        Table(filteredRecords.sorted(using: sortOrder), selection: $selectedProcessID, sortOrder: $sortOrder) {
             TableColumn("PID", value: \.pid) { r in
                 Text(String(r.pid)).font(.system(.body, design: .monospaced))
             }
@@ -59,9 +72,14 @@ struct ProcessTreeView: View {
         .navigationTitle("Process Tree")
         .toolbar {
             ToolbarItem {
-                Text("\(records.count) processes")
+                Text(searchText.isEmpty ? "\(records.count) processes" : "\(filteredRecords.count) of \(records.count)")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+            ToolbarItem {
+                TextField("Search", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
             }
             ToolbarItem {
                 Button {
