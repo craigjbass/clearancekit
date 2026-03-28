@@ -18,28 +18,8 @@ struct JailView: View {
         store.userRules.isEmpty && store.managedRules.isEmpty
     }
 
-    private var jailDisabledBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
-            Text("App Jail is disabled. Enable it in Setup to enforce jail rules.")
-            Spacer()
-            Button("Go to Setup") {
-                NavigationState.shared.selection = .setup
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            if !store.isEnabled {
-                jailDisabledBanner
-                Divider()
-            }
             if isEmpty {
                 ContentUnavailableView(
                     "No Jail Rules",
