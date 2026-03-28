@@ -570,9 +570,9 @@
     cachedReleases   = releases;
     cachedAdvisories = advisories;
     if (!activeSha) {
-      renderPicker(allReleases.filter(r => !isBeta(r)));
+      renderPicker(releases.filter(r => !isBeta(r)));
     } else {
-      render(allReleases, advisories);
+      render(releases, advisories);
     }
   })
   .catch(err => renderError(err.message));
