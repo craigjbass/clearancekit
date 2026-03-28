@@ -36,6 +36,18 @@ struct RuleEditView: View {
         self.onCancel = onCancel
     }
 
+    init(prefilledFrom process: RunningProcessInfo, onSave: @escaping (FAARule) -> Void, onCancel: @escaping () -> Void) {
+        self.existingID = nil
+        let effectiveTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
+        let sig = "\(effectiveTeamID):\(process.signingID.isEmpty ? "*" : process.signingID)"
+        var draft = DraftRule()
+        if !process.path.isEmpty { draft.allowedProcessPaths = [process.path] }
+        if !process.signingID.isEmpty { draft.allowedSignatures = [sig] }
+        self._draft = State(initialValue: draft)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
     private var isValid: Bool {
         !draft.protectedPathPrefix.trimmingCharacters(in: .whitespaces).isEmpty
     }

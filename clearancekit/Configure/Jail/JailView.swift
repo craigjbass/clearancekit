@@ -165,10 +165,11 @@ private struct ManagedJailRuleRow: View {
 
 // MARK: - JailRuleEditView
 
-private struct JailRuleEditView: View {
+struct JailRuleEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     let onSave: (JailRule) -> Void
+    let onCancel: (() -> Void)?
 
     @State private var name: String
     @State private var signatureText: String
@@ -177,12 +178,23 @@ private struct JailRuleEditView: View {
 
     private let existingID: UUID?
 
-    init(existingRule: JailRule? = nil, onSave: @escaping (JailRule) -> Void) {
+    init(existingRule: JailRule? = nil, onSave: @escaping (JailRule) -> Void, onCancel: (() -> Void)? = nil) {
         self.onSave = onSave
+        self.onCancel = onCancel
         self.existingID = existingRule?.id
         _name = State(initialValue: existingRule?.name ?? "")
         _signatureText = State(initialValue: existingRule?.jailedSignature.description ?? "")
         _allowedPrefixes = State(initialValue: existingRule?.allowedPathPrefixes ?? [])
+    }
+
+    init(prefilledFrom process: RunningProcessInfo, onSave: @escaping (JailRule) -> Void, onCancel: (() -> Void)? = nil) {
+        self.onSave = onSave
+        self.onCancel = onCancel
+        self.existingID = nil
+        let effectiveTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
+        _name = State(initialValue: URL(fileURLWithPath: process.path).lastPathComponent)
+        _signatureText = State(initialValue: "\(effectiveTeamID):\(process.signingID)")
+        _allowedPrefixes = State(initialValue: [])
     }
 
     private var parsedSignature: ProcessSignature? {
@@ -260,7 +272,7 @@ private struct JailRuleEditView: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { if let onCancel { onCancel() } else { dismiss() } }
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
                     guard let sig = parsedSignature else { return }

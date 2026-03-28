@@ -66,6 +66,25 @@ final class AppProtectionStore: ObservableObject {
         save()
     }
 
+    func create(from draft: ProtectionDraft) async throws {
+        let rules = draft.toRules()
+        let info = draft.appInfo
+        let protection = AppProtection(
+            id: UUID(),
+            appName: info.appName,
+            appBundlePath: info.appPath,
+            bundleID: info.bundleID,
+            ruleIDs: rules.map(\.id),
+            isEnabled: !rules.isEmpty,
+            snapshotRules: rules.isEmpty ? nil : rules
+        )
+        if !rules.isEmpty {
+            try await PolicyStore.shared.addAll(rules, reason: "Protect \(info.appName)")
+        }
+        protections.append(protection)
+        save()
+    }
+
     func finalizeDiscovery(_ draft: ProtectionDraft, for session: DiscoverySession) async throws {
         let rules = draft.toRules()
         precondition(!rules.isEmpty, "finalizeDiscovery called with empty draft — button should be disabled")

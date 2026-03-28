@@ -14,9 +14,11 @@ struct ProcessTreeView: View {
     @State private var records: [RunningProcessInfo] = []
     @State private var isLoading = false
     @State private var sortOrder = [KeyPathComparator(\RunningProcessInfo.pid)]
+    @State private var selectedProcessID: RunningProcessInfo.ID?
+    @State private var wizardProcess: RunningProcessInfo?
 
     var body: some View {
-        Table(records.sorted(using: sortOrder), sortOrder: $sortOrder) {
+        Table(records.sorted(using: sortOrder), selection: $selectedProcessID, sortOrder: $sortOrder) {
             TableColumn("PID", value: \.pid) { r in
                 Text(String(r.pid)).font(.system(.body, design: .monospaced))
             }
@@ -71,6 +73,15 @@ struct ProcessTreeView: View {
             }
         }
         .task { await load() }
+        .onChange(of: selectedProcessID) { _, newID in
+            guard let id = newID,
+                  let process = records.first(where: { $0.id == id }) else { return }
+            wizardProcess = process
+            selectedProcessID = nil
+        }
+        .sheet(item: $wizardProcess) { process in
+            ProcessTreeWizardSheet(process: process)
+        }
     }
 
     private func load() async {
