@@ -68,7 +68,7 @@ struct clearancekitApp: App {
                 if let url = components?.url { NSWorkspace.shared.open(url) }
             }
             Divider()
-            Button("Quit") {
+            Button("Quit GUI") {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
