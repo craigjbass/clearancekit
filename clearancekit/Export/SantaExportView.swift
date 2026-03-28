@@ -173,12 +173,32 @@ struct SantaExportView: View {
 
             if selectedRulesHaveAncestry {
                 Divider()
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text("One or more selected rules use ancestry matching. Santa's FileAccessPolicy has no equivalent — ancestry criteria will be lost in the export.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("The following rules use ancestry matching. Santa's FileAccessPolicy has no equivalent — these criteria will be lost in the export.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(ancestryRules) { rule in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(rule.protectedPathPrefix)
+                                .font(.system(.caption, design: .monospaced))
+                                .fontWeight(.semibold)
+                            ForEach(rule.allowedAncestorProcessPaths, id: \.self) { path in
+                                Text(path)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            ForEach(rule.allowedAncestorSignatures.map(\.description), id: \.self) { sig in
+                                Text(sig)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.leading, 30)
+                    }
                 }
                 .padding()
             }
@@ -236,7 +256,11 @@ struct SantaExportView: View {
     }
 
     private var selectedRulesHaveAncestry: Bool {
-        selectedRules.contains { $0.requiresAncestry }
+        !ancestryRules.isEmpty
+    }
+
+    private var ancestryRules: [FAARule] {
+        selectedRules.filter { $0.requiresAncestry }
     }
 
     private var canAdvance: Bool {
