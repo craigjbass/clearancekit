@@ -21,6 +21,11 @@ struct ProtectionDraft {
         }
     }
 
+    init(appInfo: AppBundleInfo, entries: [PathEntry]) {
+        self.appInfo = appInfo
+        self.entries = entries
+    }
+
     init(prefilledFrom process: RunningProcessInfo) {
         let appName = URL(fileURLWithPath: process.path).lastPathComponent
         self.appInfo = AppBundleInfo(
