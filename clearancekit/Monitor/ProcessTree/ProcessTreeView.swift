@@ -21,6 +21,10 @@ struct ProcessTreeView: View {
     @State private var wizardProcess: RunningProcessInfo?
     @State private var searchText = ""
 
+    private var countLabel: String {
+        searchText.isEmpty ? "\(records.count) processes" : "\(filteredRecords.count) of \(records.count)"
+    }
+
     private var filteredRecords: [RunningProcessInfo] {
         guard !searchText.isEmpty else { return records }
         return records.filter { r in
@@ -89,7 +93,7 @@ struct ProcessTreeView: View {
         .navigationTitle("Process Tree")
         .toolbar {
             ToolbarItem {
-                Text(searchText.isEmpty ? "\(records.count) processes" : "\(filteredRecords.count) of \(records.count)")
+                Text(countLabel)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .contentMargins(.left, 4)
