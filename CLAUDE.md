@@ -112,6 +112,16 @@ Fake collaborators are private nested structs/classes inside the test file. They
 - No fallback defaults unless the requirement explicitly calls for one; extra branches hide intent.
 - Update every call site when changing an interface; no backwards-compatibility shims or deprecated aliases.
 
+## Protocol placement
+
+A protocol lives in the same folder as the type(s) that take it as a constructor parameter — the *users* of the abstraction, not the implementors. This keeps the dependency arrow pointing inward: the consumer defines what it needs, and implementors reach in to satisfy it.
+
+The only exception is when the protocol must be visible to both binary targets (clearancekit app and opfilter system extension). In that case `Shared/` is the right home, because it is compiled into both binaries.
+
+**Examples:**
+- `PolicyDatabaseProtocol` lives in `opfilter/Policy/` alongside `PolicyRepository`, which takes it in its `init`. ✓
+- A protocol consumed only by `opfilter/Filter/` types belongs in `opfilter/Filter/`, even if its concrete implementation lives in `Shared/`. The conformance (`extension ConcreteType: TheProtocol`) is declared in a file within `opfilter/Filter/`, keeping `Shared/` free of the dependency.
+
 ## Comments
 
 Code should explain itself through precise naming and small, focused units. Comments are not a substitute for clarity.
