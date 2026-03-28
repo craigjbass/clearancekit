@@ -30,52 +30,58 @@ struct ProcessTreeView: View {
         }
     }
 
+    @TableColumnBuilder<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>>
+    private var processColumns: some TableColumnContent<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>> {
+        TableColumn("PID", value: \.pid) { r in
+            Text(String(r.pid)).font(.system(.body, design: .monospaced))
+        }
+        .width(60)
+        TableColumn("PID Version", value: \.pidVersion) { r in
+            Text(String(r.pidVersion)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .width(40)
+        TableColumn("PPID", value: \.parentPID) { r in
+            Text(String(r.parentPID)).font(.system(.body, design: .monospaced))
+        }
+        .width(60)
+        TableColumn("PPID Version", value: \.parentPIDVersion) { r in
+            Text(String(r.parentPIDVersion)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .width(40)
+        TableColumn("Name") { r in
+            Text(URL(fileURLWithPath: r.path).lastPathComponent)
+        }
+        .width(min: 100, ideal: 160)
+    }
+
+    @TableColumnBuilder<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>>
+    private var identifierColumns: some TableColumnContent<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>> {
+        TableColumn("Path", value: \.path) { r in
+            Text(r.path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .width(min: 180, ideal: 300)
+        TableColumn("Signing ID", value: \.signingID) { r in
+            Text(r.signingID.isEmpty ? "—" : r.signingID).font(.system(.caption, design: .monospaced))
+        }
+        .width(min: 120, ideal: 200)
+        TableColumn("Team ID", value: \.teamID) { r in
+            Text(r.teamID.isEmpty ? "—" : r.teamID).font(.system(.caption, design: .monospaced))
+        }
+        .width(90)
+        TableColumn("UID", value: \.uid) { r in
+            Text(String(r.uid)).font(.system(.caption, design: .monospaced))
+        }
+        .width(40)
+        TableColumn("GID", value: \.gid) { r in
+            Text(String(r.gid)).font(.system(.caption, design: .monospaced))
+        }
+        .width(40)
+    }
+
     var body: some View {
         Table(filteredRecords.sorted(using: sortOrder), selection: $selectedProcessID, sortOrder: $sortOrder) {
-            Group {
-                TableColumn("PID", value: \.pid) { r in
-                    Text(String(r.pid)).font(.system(.body, design: .monospaced))
-                }
-                .width(60)
-                TableColumn("PID Version", value: \.pidVersion) { r in
-                    Text(String(r.pidVersion)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
-                }
-                .width(40)
-                TableColumn("PPID", value: \.parentPID) { r in
-                    Text(String(r.parentPID)).font(.system(.body, design: .monospaced))
-                }
-                .width(60)
-                TableColumn("PPID Version", value: \.parentPIDVersion) { r in
-                    Text(String(r.parentPIDVersion)).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
-                }
-                .width(40)
-                TableColumn("Name") { r in
-                    Text(URL(fileURLWithPath: r.path).lastPathComponent)
-                }
-                .width(min: 100, ideal: 160)
-            }
-            Group {
-                TableColumn("Path", value: \.path) { r in
-                    Text(r.path).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
-                }
-                .width(min: 180, ideal: 300)
-                TableColumn("Signing ID", value: \.signingID) { r in
-                    Text(r.signingID.isEmpty ? "—" : r.signingID).font(.system(.caption, design: .monospaced))
-                }
-                .width(min: 120, ideal: 200)
-                TableColumn("Team ID", value: \.teamID) { r in
-                    Text(r.teamID.isEmpty ? "—" : r.teamID).font(.system(.caption, design: .monospaced))
-                }
-                .width(90)
-                TableColumn("UID", value: \.uid) { r in
-                    Text(String(r.uid)).font(.system(.caption, design: .monospaced))
-                }
-                .width(40)
-                TableColumn("GID", value: \.gid) { r in
-                    Text(String(r.gid)).font(.system(.caption, design: .monospaced))
-                }
-                .width(40)
-            }
+            processColumns
+            identifierColumns
         }
         .navigationTitle("Process Tree")
         .toolbar {
