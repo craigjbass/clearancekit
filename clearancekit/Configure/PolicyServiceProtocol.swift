@@ -5,9 +5,6 @@
 
 import Foundation
 
-/// The subset of the XPC service interface that PolicyStore and AllowlistStore
-/// need to forward mutations to opfilter. Scoped to the main actor so callers
-/// on the main actor can invoke methods synchronously.
 @MainActor
 protocol PolicyServiceProtocol: AnyObject {
     func addRule(_ rule: FAARule)
@@ -23,6 +20,4 @@ protocol PolicyServiceProtocol: AnyObject {
     func setJailEnabled(_ enabled: Bool)
 }
 
-/// A function that authenticates the user before a sensitive mutation is applied.
-/// The `reason` string is shown in the Touch ID / password prompt.
 typealias Authenticate = @Sendable (String) async throws -> Void

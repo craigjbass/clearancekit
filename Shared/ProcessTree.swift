@@ -26,19 +26,9 @@ struct ProcessRecord {
     let gid: gid_t
 }
 
-// MARK: - ProcessTreeProtocol
-
-protocol ProcessTreeProtocol: AnyObject {
-    func insert(_ record: ProcessRecord)
-    func remove(identity: ProcessIdentity)
-    func contains(identity: ProcessIdentity) -> Bool
-    func ancestors(of identity: ProcessIdentity) -> [AncestorInfo]
-    func allRecords() -> [ProcessRecord]
-}
-
 // MARK: - ProcessTree
 
-final class ProcessTree: @unchecked Sendable, ProcessTreeProtocol {
+final class ProcessTree: @unchecked Sendable {
     private struct State {
         var records: [ProcessIdentity: ProcessRecord] = [:]
         var pidIndex: [pid_t: ProcessIdentity] = [:]
