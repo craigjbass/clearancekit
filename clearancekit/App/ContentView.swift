@@ -160,6 +160,9 @@ private enum ExtensionAction: String, Identifiable {
 struct SetupView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @StateObject private var extensionManager = SystemExtensionManager.shared
+    @StateObject private var jailStore = JailStore.shared
+    @State private var pendingExtensionAction: ExtensionAction?
+    @State private var activeJailedProcesses: [RunningProcessInfo] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -175,6 +178,17 @@ struct SetupView: View {
             versionRow
         }
         .navigationTitle("Setup")
+        .sheet(item: $pendingExtensionAction) { action in
+            JailBreakWarningView(
+                action: action,
+                activeJailedProcesses: activeJailedProcesses,
+                onProceed: {
+                    executeExtensionAction(action)
+                    pendingExtensionAction = nil
+                },
+                onCancel: { pendingExtensionAction = nil }
+            )
+        }
     }
 
     private var appBuildVersion: String { BuildInfo.gitHash.trimmingCharacters(in: CharacterSet(charactersIn: "+")) }
@@ -231,9 +245,9 @@ struct SetupView: View {
             if extensionManager.extensionStatus != .activated {
                 Button("Activate") { extensionManager.activateExtension() }
             } else if serviceIsOutOfDate {
-                Button("Update") { extensionManager.replaceExtension() }
+                Button("Update") { Task { await prepareExtensionAction(.update) } }
             } else {
-                Button("Deactivate") { extensionManager.deactivateExtension() }
+                Button("Deactivate") { Task { await prepareExtensionAction(.deactivate) } }
             }
         }
         .padding()
@@ -287,6 +301,88 @@ struct SetupView: View {
         xpcClient.isConnected ? "Connected" : "Disconnected"
     }
 
+    private func prepareExtensionAction(_ action: ExtensionAction) async {
+        guard !jailStore.userRules.isEmpty else {
+            executeExtensionAction(action)
+            return
+        }
+        activeJailedProcesses = await xpcClient.fetchActiveJailedProcesses()
+        pendingExtensionAction = action
+    }
+
+    private func executeExtensionAction(_ action: ExtensionAction) {
+        switch action {
+        case .deactivate: extensionManager.deactivateExtension()
+        case .update: extensionManager.replaceExtension()
+        }
+    }
+}
+
+// MARK: - JailBreakWarningView
+
+private struct JailBreakWarningView: View {
+    let action: ExtensionAction
+    let activeJailedProcesses: [RunningProcessInfo]
+    let onProceed: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Active Jails Will Be Paused", systemImage: "exclamationmark.triangle.fill")
+                .font(.title2.bold())
+                .foregroundStyle(.orange)
+
+            Text("\(actionLabel) will pause jail enforcement temporarily until clearancekit opfilter reloads.")
+
+            Divider()
+
+            if activeJailedProcesses.isEmpty {
+                Text("No jailed processes are currently running.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Currently running jailed processes:")
+                    .font(.headline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(activeJailedProcesses, id: \.pid) { process in
+                            HStack {
+                                Text(URL(fileURLWithPath: process.path).lastPathComponent)
+                                    .font(.body.monospaced())
+                                Spacer()
+                                Text("PID \(process.pid)")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 8)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(maxHeight: 180)
+                .background(Color(NSColor.textBackgroundColor).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(actionLabel, action: onProceed)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 440)
+    }
+
+    private var actionLabel: String {
+        switch action {
+        case .deactivate: return "Deactivate"
+        case .update: return "Update"
+        }
+    }
 }
 
 
