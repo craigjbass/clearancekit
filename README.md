@@ -85,11 +85,11 @@ flowchart TB
     ES -- "serialised callback<br/>(duplicate delivery)" --> CB_FAA["ESInboundAdapter<br/>callback"]
     ES -- "serialised callback<br/>(duplicate delivery)" --> CB_JAIL["ESJailAdapter<br/>callback"]
 
-    subgraph FAA["ESInboundAdapter — path-based policy enforcement"]
+    subgraph FAA["ESInboundAdapter + FAAFilterInteractor — path-based policy enforcement"]
         CB_FAA --> LIFE_FAA{"event type?"}
-        LIFE_FAA -- "NOTIFY_FORK / EXEC / EXIT" --> TREE_FAA["processTreeQueue<br/>(update ProcessTree)"]
+        LIFE_FAA -- "NOTIFY_FORK / EXEC / EXIT" --> TREE_FAA["FAAFilterInteractor<br/>→ processTreeQueue<br/>(update ProcessTree)"]
         LIFE_FAA -- "NOTIFY_WRITE / AUTH_RENAME / AUTH_UNLINK<br/>(XProtect path)" --> XPROTECT["allow + reload<br/>XProtect entries"]
-        LIFE_FAA -- "AUTH_OPEN / AUTH_RENAME / …<br/>(file auth)" --> SUBMIT["pipeline.submit()"]
+        LIFE_FAA -- "AUTH_OPEN / AUTH_RENAME / …<br/>(file auth)" --> SUBMIT["FAAFilterInteractor<br/>→ pipeline.submit()"]
 
         subgraph Pipeline["FileAuthPipeline — 2-stage queue model"]
             SUBMIT --> EB["eventBuffer<br/>BoundedQueue ≤ 1024"]
@@ -107,17 +107,17 @@ flowchart TB
         end
     end
 
-    subgraph JAIL["ESJailAdapter — process jail enforcement"]
+    subgraph JAIL["ESJailAdapter + JailFilterInteractor — process jail enforcement"]
         CB_JAIL --> LIFE_JAIL{"event type?"}
         LIFE_JAIL -- "NOTIFY_FORK" --> FORK_J["inherit parent jail<br/>or match signature<br/>→ update jailedProcesses"]
         LIFE_JAIL -- "NOTIFY_EXEC" --> EXEC_J["atomic key replace<br/>(pre→post exec token)<br/>→ update jailedProcesses"]
         LIFE_JAIL -- "NOTIFY_EXIT" --> EXIT_J["remove from<br/>jailedProcesses"]
         LIFE_JAIL -- "AUTH_OPEN / AUTH_RENAME / …<br/>(file auth)" --> JAIL_CHECK{"process jailed?"}
         JAIL_CHECK -- "no" --> ALLOW_NJ["respond allow<br/>(+ cache decision)"]
-        JAIL_CHECK -- "yes" --> JAIL_EVAL["check global allowlist<br/>→ checkJailPath<br/>→ respond inline"]
+        JAIL_CHECK -- "yes" --> JAIL_EVAL["JailFilterInteractor<br/>check global allowlist<br/>→ checkJailPath<br/>→ respond inline"]
     end
 
-    RESP_HOT --> POST["postRespondQueue"]
+    RESP_HOT --> POST["PostRespondHandler<br/>(postRespondQueue)"]
     EVAL_HOT --> POST
     EVAL_SLOW --> POST
     DROP_EB --> POST
