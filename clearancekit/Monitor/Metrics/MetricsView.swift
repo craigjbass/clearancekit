@@ -42,10 +42,10 @@ struct MetricsView: View {
         let s = seriesStats
         return HStack(spacing: 0) {
             rateGauge("Simple events / s",   s.simpleEvents,   .blue)
-            rateGauge("Ancestry events / s", s.ancestryEvents, .indigo)
-            rateGauge("Drops / s",           s.drops,          .red)
-            rateGauge("Jail events / s",     s.jailEvents,     .orange)
-            rateGauge("Jail denies / s",     s.jailDenies,     .pink)
+            rateGauge("Ancestry events / s", s.ancestryEvents, .green)
+            rateGauge("Drops / s",           s.drops,          .orange)
+            rateGauge("Jail events / s",     s.jailEvents,     .purple)
+            rateGauge("Jail denies / s",     s.jailDenies,     .red)
         }
     }
 
