@@ -70,6 +70,10 @@ struct ProcessTreeWizardSheet: View {
         dismiss()
     }
 
+    private var isInAppBundle: Bool {
+        appBundleURL(from: process.path) != nil
+    }
+
     private func appBundleURL(from processPath: String) -> URL? {
         var url = URL(fileURLWithPath: processPath).deletingLastPathComponent()
         while url.pathComponents.count > 1 {
@@ -138,7 +142,8 @@ struct ProcessTreeWizardSheet: View {
             WizardTypeCard(
                 systemImage: "shield.lefthalf.filled",
                 title: "App Protection",
-                description: "Protect this app's data directories from other processes."
+                description: "Protect this app's data directories from other processes.",
+                isEnabled: isInAppBundle
             ) { handleAppProtectionSelection() }
         }
         .padding()
@@ -151,6 +156,7 @@ private struct WizardTypeCard: View {
     let systemImage: String
     let title: String
     let description: String
+    var isEnabled: Bool = true
     let action: () -> Void
 
     @State private var isHovered = false
@@ -160,7 +166,7 @@ private struct WizardTypeCard: View {
             VStack(spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.system(size: 28))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
                 Text(title)
                     .font(.headline)
                 Text(description)
@@ -171,14 +177,16 @@ private struct WizardTypeCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 130)
-            .background(isHovered ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06))
+            .background(isEnabled && isHovered ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06))
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(isHovered ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1.5)
+                    .strokeBorder(isEnabled && isHovered ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1.5)
             )
+            .opacity(isEnabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
         .onHover { isHovered = $0 }
     }
 }
