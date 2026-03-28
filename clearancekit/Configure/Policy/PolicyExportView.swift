@@ -28,9 +28,6 @@ struct PolicyExportView: View {
             header
             Divider()
             ruleSelectionList
-            if selectedRulesHaveAncestry {
-                ancestryWarning
-            }
             if let error = exportError {
                 Text(error)
                     .foregroundStyle(.red)
@@ -99,22 +96,6 @@ struct PolicyExportView: View {
         )
     }
 
-    private var selectedRulesHaveAncestry: Bool {
-        selectedRules.contains { $0.requiresAncestry }
-    }
-
-    private var ancestryWarning: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text("One or more selected rules use ancestry matching. Santa's FileAccessPolicy has no equivalent — ancestry criteria will be lost in the mobileconfig export.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
-    }
-
     private var footer: some View {
         HStack {
             Button("Cancel", action: onDismiss)
@@ -123,30 +104,11 @@ struct PolicyExportView: View {
             Text("\(selectedRuleIDs.count) of \(availableRules.count) selected")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Export as Santa mobileconfig…") { saveSantaMobileconfig() }
-                .disabled(selectedRuleIDs.isEmpty)
             Button("Export…") { saveFile() }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedRuleIDs.isEmpty)
         }
         .padding()
-    }
-
-    private func saveSantaMobileconfig() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "clearancekit-santa-faa.mobileconfig"
-        panel.title = "Export as Santa mobileconfig"
-        panel.message = "Choose where to save the Santa FileAccessPolicy mobileconfig."
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            let result = try SantaMobileconfigExporter.export(rules: selectedRules)
-            try result.data.write(to: url)
-            onDismiss()
-        } catch {
-            exportError = "Export failed: \(error.localizedDescription)"
-        }
     }
 
     private func saveFile() {

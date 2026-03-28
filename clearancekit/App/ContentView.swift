@@ -18,6 +18,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case processTree = "Process Tree"
     case metrics     = "Metrics"
     case setup       = "Setup"
+    case exportSanta = "Santa"
 
     var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .processTree: return "list.bullet.indent"
         case .metrics:     return "chart.xyaxis.line"
         case .setup:       return "gearshape"
+        case .exportSanta: return "square.and.arrow.up"
         }
     }
 }
@@ -74,19 +76,24 @@ struct ContentView: View {
                         Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
                             .tag(SidebarItem.setup)
                     }
+                    Section("Export as\u{2026}") {
+                        Label(SidebarItem.exportSanta.rawValue, systemImage: SidebarItem.exportSanta.icon)
+                            .tag(SidebarItem.exportSanta)
+                    }
                 }
                 .navigationSplitViewColumnWidth(min: 160, ideal: 180)
             } detail: {
                 switch nav.selection {
-                case .events:    EventsWindowView()
-                case .policy:    PolicyView()
-                case .presets:   PresetsView()
-                case .jail:      JailView()
-                case .allowlist: AllowlistView()
+                case .events:      EventsWindowView()
+                case .policy:      PolicyView()
+                case .presets:     PresetsView()
+                case .jail:        JailView()
+                case .allowlist:   AllowlistView()
                 case .processes:   ProcessesView()
                 case .processTree: ProcessTreeView()
                 case .metrics:     MetricsView()
-                case .setup:     SetupView()
+                case .setup:       SetupView()
+                case .exportSanta: SantaExportView()
                 }
             }
         }
