@@ -11,6 +11,7 @@ struct ProcessTreeWizardSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var destination: WizardDestination?
+    @State private var appProtectionDraft: ProtectionDraft?
 
     private enum WizardDestination {
         case policyRule, jailRule, appProtection
@@ -35,16 +36,47 @@ struct ProcessTreeWizardSheet: View {
                 destination = nil
             })
         case .appProtection:
-            ProtectionFettleView(
-                initialDraft: ProtectionDraft(prefilledFrom: process),
-                saveLabel: "Create Protection"
-            ) { draft in
-                Task { try? await AppProtectionStore.shared.create(from: draft) }
-                dismiss()
-            } onCancel: {
-                destination = nil
+            if let draft = appProtectionDraft {
+                ProtectionFettleView(
+                    initialDraft: draft,
+                    saveLabel: "Create Protection"
+                ) { finalDraft in
+                    Task { try? await AppProtectionStore.shared.create(from: finalDraft) }
+                    dismiss()
+                } onCancel: {
+                    destination = nil
+                }
             }
         }
+    }
+
+    private func handleAppProtectionSelection() {
+        guard let bundleURL = appBundleURL(from: process.path),
+              let info = AppBundleIntrospector.inspect(appURL: bundleURL) else {
+            appProtectionDraft = ProtectionDraft(prefilledFrom: process)
+            destination = .appProtection
+            return
+        }
+
+        let rules = AppBundleIntrospector.generateRules(from: info)
+        guard rules.isEmpty else {
+            appProtectionDraft = ProtectionDraft.from(rules: rules, appInfo: info)
+            destination = .appProtection
+            return
+        }
+
+        // No auto-detectable paths — hand off to the normal discovery-session flow.
+        Task { try? await AppProtectionStore.shared.add(from: bundleURL) }
+        dismiss()
+    }
+
+    private func appBundleURL(from processPath: String) -> URL? {
+        var url = URL(fileURLWithPath: processPath).deletingLastPathComponent()
+        while url.pathComponents.count > 1 {
+            if url.pathExtension == "app" { return url }
+            url = url.deletingLastPathComponent()
+        }
+        return nil
     }
 
     private var typePicker: some View {
@@ -107,7 +139,7 @@ struct ProcessTreeWizardSheet: View {
                 systemImage: "shield.lefthalf.filled",
                 title: "App Protection",
                 description: "Protect this app's data directories from other processes."
-            ) { destination = .appProtection }
+            ) { handleAppProtectionSelection() }
         }
         .padding()
     }
