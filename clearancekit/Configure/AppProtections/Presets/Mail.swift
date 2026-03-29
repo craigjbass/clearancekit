@@ -14,21 +14,17 @@ private let mailCoreSignatures: [ProcessSignature] = [
     apple("com.apple.mail.XPCHelper"),
     apple("com.apple.exchange.exchangesyncd"),
     apple("com.apple.accountsd"),
-    apple("com.apple.cloudd"),
     apple("com.apple.IMCore"),
 ]
 
+// mds and mdworker_shared are covered by the global allowlist.
 private let mailSpotlightSignatures: [ProcessSignature] = [
-    apple("com.apple.mds"),
     apple("com.apple.mds_stores"),
-    apple("com.apple.mdworker_shared"),
 ]
 
+// secinitd, containermanagerd, and WebKit.Networking are covered by the global allowlist.
 private let mailSandboxSignatures: [ProcessSignature] = [
-    apple("com.apple.secinitd"),
-    apple("com.apple.containermanagerd"),
     apple("com.apple.syncdefaultsd"),
-    apple("com.apple.WebKit.Networking"),
 ]
 
 let mailPreset = AppPreset(
