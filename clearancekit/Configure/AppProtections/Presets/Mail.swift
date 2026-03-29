@@ -8,6 +8,7 @@ import Foundation
 private let mailCoreSignatures: [ProcessSignature] = [
     apple("com.apple.mail"),
     apple("com.apple.email.maild"),
+    apple("com.apple.MailCacheDelete"),
     apple("com.apple.MailServiceAgent"),
     apple("com.apple.MailTrafficAgent"),
     apple("com.apple.mail.XPCHelper"),
