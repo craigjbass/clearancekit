@@ -18,6 +18,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case processTree = "Process Tree"
     case metrics     = "Metrics"
     case setup       = "Setup"
+    case mcpAgents   = "MCP Agents"
     case exportSanta         = "Santa"
     case exportClearanceKit  = "ClearanceKit (.mobileconfig)"
 
@@ -34,6 +35,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .processTree: return "list.bullet.indent"
         case .metrics:     return "chart.xyaxis.line"
         case .setup:              return "gearshape"
+        case .mcpAgents:          return "person.badge.key"
         case .exportSanta:        return "square.and.arrow.up"
         case .exportClearanceKit: return "doc.richtext"
         }
@@ -77,6 +79,8 @@ struct ContentView: View {
                             .tag(SidebarItem.allowlist)
                         Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
                             .tag(SidebarItem.setup)
+                        Label(SidebarItem.mcpAgents.rawValue, systemImage: SidebarItem.mcpAgents.icon)
+                            .tag(SidebarItem.mcpAgents)
                     }
                     Section("Export as\u{2026}") {
                         Label(SidebarItem.exportSanta.rawValue, systemImage: SidebarItem.exportSanta.icon)
@@ -97,6 +101,7 @@ struct ContentView: View {
                 case .processTree: ProcessTreeView()
                 case .metrics:     MetricsView()
                 case .setup:       SetupView()
+                case .mcpAgents:   MCPAgentsView()
                 case .exportSanta:        SantaExportView()
                 case .exportClearanceKit: ClearanceKitExportView()
                 }
