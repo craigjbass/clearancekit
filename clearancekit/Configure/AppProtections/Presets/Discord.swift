@@ -9,7 +9,6 @@ private let discordSignatures: [ProcessSignature] = [
     sig("53Q6R32WPB", "com.hnc.Discord"),
     sig("53Q6R32WPB", "com.hnc.Discord.helper"),
     sig("53Q6R32WPB", "com.hnc.Discord.helper.Renderer"),
-    apple("com.apple.xpc.launchd"),
     sig("53Q6R32WPB", "chrome_crashpad_handler"),
 ]
 

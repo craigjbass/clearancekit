@@ -7,7 +7,6 @@ import Foundation
 
 private let safariSignatures: [ProcessSignature] = [
     apple("com.apple.Safari"),
-    apple("com.apple.cloudd"),
     apple("com.apple.WebKit.WebContent"),
     apple("com.apple.Safari.History"),
     apple("com.apple.Safari.SandboxBroker"),
