@@ -2,13 +2,13 @@
 //  MCPServer.swift
 //  clearancekit
 //
-//  MCP transport: Unix domain socket at socketPath.
+//  MCP transport: Unix domain socket at MCPServer.socketPath (inside the app sandbox container).
 //  Each connection reads/writes newline-delimited JSON-RPC (MCP stdio framing).
-//  Connect with: nc -U /tmp/clearancekit-mcp.sock
 //
 
 import Foundation
 import Darwin
+import os
 
 // MARK: - JSON-RPC Types
 
@@ -108,58 +108,114 @@ struct MCPRPCError: Encodable {
     let message: String
 }
 
+private let logger = Logger(subsystem: "uk.craigbass.clearancekit", category: "mcp-server")
+
 // MARK: - MCPServer
 
-final class MCPServer {
-    static let socketPath = "/tmp/clearancekit-mcp.sock"
+final class MCPServer: @unchecked Sendable {
+    static let socketPath: String = {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return "\(home)/.clearancekit/mcp.sock"
+    }()
 
+    private let queue: DispatchQueue
     private var serverFd: Int32 = -1
     private var acceptSource: DispatchSourceRead?
+    private var activeConnections: [Int32: MCPSocketConnection] = [:]
+
+    init(queue: DispatchQueue) {
+        self.queue = queue
+    }
 
     func start() {
+        guard serverFd < 0 else { return }
+
+        // sun_path has a fixed capacity; fail fast rather than silently truncating.
+        let maxPathLen = MemoryLayout<sockaddr_un>.size
+            - MemoryLayout<UInt8>.size        // sun_len
+            - MemoryLayout<sa_family_t>.size  // sun_family
+            - 1                               // null terminator
+        guard Self.socketPath.utf8.count <= maxPathLen else {
+            logger.error("MCPServer: socket path too long (\(Self.socketPath.utf8.count) bytes, max \(maxPathLen))")
+            return
+        }
+
+        let dir = (Self.socketPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
         serverFd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-        guard serverFd >= 0 else { return }
+        guard serverFd >= 0 else {
+            logger.error("MCPServer: socket() failed errno=\(errno) \(String(cString: strerror(errno)), privacy: .public)")
+            return
+        }
 
         Darwin.unlink(Self.socketPath)
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
-        addr.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-        Self.socketPath.withCString { cStr in
-            withUnsafeMutableBytes(of: &addr.sun_path) { dest in
-                _ = strlcpy(dest.baseAddress!.assumingMemoryBound(to: CChar.self), cStr, dest.count)
+        let pathLen = Self.socketPath.utf8.count
+        addr.sun_len = UInt8(MemoryLayout<UInt8>.size + MemoryLayout<sa_family_t>.size + pathLen + 1)
+
+        let pathBytes = Array(Self.socketPath.utf8) + [0]
+        withUnsafeMutableBytes(of: &addr.sun_path) { dest in
+            for (i, byte) in pathBytes.enumerated() where i < dest.count {
+                dest[i] = byte
             }
         }
 
+        let addrLen = socklen_t(MemoryLayout<sockaddr_un>.size)
         let bound = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(serverFd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                Darwin.bind(serverFd, $0, addrLen)
             }
         }
-        guard bound == 0 else { Darwin.close(serverFd); return }
+        guard bound == 0 else {
+            logger.error("MCPServer: bind() failed errno=\(errno) \(String(cString: strerror(errno)), privacy: .public)")
+            Darwin.close(serverFd)
+            serverFd = -1
+            return
+        }
 
         Darwin.chmod(Self.socketPath, 0o600)
-        guard Darwin.listen(serverFd, 8) == 0 else { Darwin.close(serverFd); return }
 
-        let source = DispatchSource.makeReadSource(fileDescriptor: serverFd, queue: .global(qos: .utility))
-        source.setEventHandler { [weak self] in self?.acceptConnection() }
-        source.setCancelHandler { [weak self] in
-            if let fd = self?.serverFd, fd >= 0 { Darwin.close(fd) }
+        guard Darwin.listen(serverFd, 8) == 0 else {
+            logger.error("MCPServer: listen() failed errno=\(errno) \(String(cString: strerror(errno)), privacy: .public)")
+            Darwin.close(serverFd)
+            serverFd = -1
+            return
         }
-        source.resume()
+
+        let source = DispatchSource.makeReadSource(fileDescriptor: serverFd, queue: queue)
+        source.setEventHandler { [weak self] in self?.acceptConnection() }
+        source.setCancelHandler { logger.info("MCPServer: Listener closed") }
         acceptSource = source
+        source.activate()
+        logger.info("MCPServer: Listening on \(Self.socketPath, privacy: .public)")
     }
 
     func stop() {
+        guard serverFd >= 0 else { return }
         acceptSource?.cancel()
         acceptSource = nil
+        Darwin.close(serverFd)
+        serverFd = -1
         Darwin.unlink(Self.socketPath)
+        for conn in activeConnections.values { conn.closeOnce() }
+        activeConnections.removeAll()
     }
 
     private func acceptConnection() {
         let clientFd = Darwin.accept(serverFd, nil, nil)
-        guard clientFd >= 0 else { return }
-        MCPSocketConnection(fd: clientFd).start()
+        guard clientFd >= 0 else {
+            logger.error("MCPServer: accept() failed errno=\(errno) \(String(cString: strerror(errno)), privacy: .public)")
+            return
+        }
+        logger.debug("MCPServer: New connection fd=\(clientFd)")
+        let conn = MCPSocketConnection(fd: clientFd, queue: queue) { [weak self] closedFd in
+            self?.queue.async { self?.activeConnections.removeValue(forKey: closedFd) }
+        }
+        activeConnections[clientFd] = conn
+        conn.start()
     }
 }
 
@@ -167,14 +223,32 @@ final class MCPServer {
 
 private final class MCPSocketConnection: @unchecked Sendable {
     private let fd: Int32
+    private let queue: DispatchQueue
     private var sessionID: UUID?
+    private let closeLock = OSAllocatedUnfairLock(initialState: false)
+    private let onClosed: @Sendable (Int32) -> Void
 
-    init(fd: Int32) { self.fd = fd }
+    init(fd: Int32, queue: DispatchQueue, onClosed: @escaping @Sendable (Int32) -> Void) {
+        self.fd = fd
+        self.queue = queue
+        self.onClosed = onClosed
+    }
 
     func start() {
         Task.detached(priority: .utility) { [weak self] in
             await self?.run()
         }
+    }
+
+    func closeOnce() {
+        let alreadyClosed = closeLock.withLock { (state: inout Bool) -> Bool in
+            if state { return true }
+            state = true
+            return false
+        }
+        guard !alreadyClosed else { return }
+        Darwin.close(fd)
+        onClosed(fd)
     }
 
     private func run() async {
@@ -191,22 +265,26 @@ private final class MCPSocketConnection: @unchecked Sendable {
             }
         }
 
-        // Remote end closed — clean up the session.
         if let id = sessionID {
             await MCPSessionStore.shared.connectionClosed(id)
         }
-        Darwin.close(fd)
+        closeOnce()
     }
 
     private func readStream() -> AsyncStream<Data> {
         let capFd = fd
         return AsyncStream { continuation in
-            let source = DispatchSource.makeReadSource(fileDescriptor: capFd, queue: .global(qos: .utility))
+            let source = DispatchSource.makeReadSource(fileDescriptor: capFd, queue: queue)
             source.setEventHandler {
                 var buf = [UInt8](repeating: 0, count: 4096)
                 let n = Darwin.read(capFd, &buf, buf.count)
                 if n > 0 {
                     continuation.yield(Data(buf[0..<n]))
+                } else if n == 0 {
+                    continuation.finish()
+                    source.cancel()
+                } else if errno == EINTR || errno == EAGAIN {
+                    return  // transient — wait for next readiness notification
                 } else {
                     continuation.finish()
                     source.cancel()
@@ -219,15 +297,16 @@ private final class MCPSocketConnection: @unchecked Sendable {
     }
 
     private func handleLine(_ data: Data) async {
-        guard let request = try? JSONDecoder().decode(MCPRequest.self, from: data) else { return }
+        guard let request = try? JSONDecoder().decode(MCPRequest.self, from: data) else {
+            logger.warning("MCPSocketConnection: malformed JSON-RPC on fd=\(self.fd)")
+            sendParseError()
+            return
+        }
 
         let (response, newSessionID) = await MCPDispatcher.dispatch(
             request,
             sessionID: sessionID,
-            closeFn: { [weak self] in
-                guard let self else { return }
-                Darwin.close(self.fd)
-            }
+            closeFn: { [weak self] in self?.closeOnce() }
         )
 
         if let ns = newSessionID { sessionID = ns }
@@ -235,8 +314,33 @@ private final class MCPSocketConnection: @unchecked Sendable {
         guard let responseData = try? JSONEncoder().encode(response) else { return }
         var line = responseData
         line.append(UInt8(ascii: "\n"))
-        line.withUnsafeBytes { ptr in
-            _ = Darwin.write(fd, ptr.baseAddress!, ptr.count)
+        writeAll(line)
+    }
+
+    private func sendParseError() {
+        let parseError = MCPResponse(error: MCPRPCError(code: -32700, message: "Parse error"), id: nil)
+        guard let responseData = try? JSONEncoder().encode(parseError) else { return }
+        var line = responseData
+        line.append(UInt8(ascii: "\n"))
+        writeAll(line)
+    }
+
+    private func writeAll(_ data: Data) {
+        data.withUnsafeBytes { ptr in
+            guard let base = ptr.baseAddress else { return }
+            var offset = 0
+            while offset < ptr.count {
+                let n = Darwin.write(fd, base.advanced(by: offset), ptr.count - offset)
+                if n > 0 {
+                    offset += n
+                } else if n < 0 && errno == EINTR {
+                    continue
+                } else {
+                    // EPIPE or other write error — peer closed or broken pipe
+                    closeOnce()
+                    return
+                }
+            }
         }
     }
 }

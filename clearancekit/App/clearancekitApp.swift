@@ -10,7 +10,8 @@ import AppKit
 import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private let mcpServer = MCPServer()
+    private let mcpQueue = DispatchQueue(label: "uk.craigbass.clearancekit.mcp", qos: .utility)
+    private lazy var mcpServer = MCPServer(queue: mcpQueue)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)

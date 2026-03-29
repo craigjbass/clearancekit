@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "clearancekit": {
-      "command": "nc",
-      "args": ["-U", "/tmp/clearancekit-mcp.sock"]
+      "command": "sh",
+      "args": ["-c", "nc -U \"/Users/craigjbass/Library/Containers/uk.craigbass.clearancekit/Data/.clearancekit/mcp.sock\""]
     }
   }
 }

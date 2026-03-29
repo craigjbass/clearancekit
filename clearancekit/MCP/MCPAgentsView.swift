@@ -25,7 +25,7 @@ struct MCPAgentsView: View {
         .navigationTitle("MCP Agents")
         .toolbar {
             ToolbarItem(placement: .status) {
-                Text("Listening on \(MCPServer.socketPath)")
+                Text(MCPServer.socketPath)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
