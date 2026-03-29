@@ -46,6 +46,18 @@ indirect enum JSONValue: Codable, Equatable {
         return o
     }
 
+    var typeName: String {
+        switch self {
+        case .null:    return "null"
+        case .bool:    return "bool"
+        case .int:     return "int"
+        case .double:  return "double"
+        case .string:  return "string"
+        case .array:   return "array"
+        case .object:  return "object"
+        }
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { self = .null; return }

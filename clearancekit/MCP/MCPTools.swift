@@ -267,13 +267,27 @@ enum MCPDispatcher {
     // MARK: - Helpers
 
     private static func parseSignatures(from value: JSONValue?) throws -> [ProcessSignature] {
-        guard let array = value?.arrayValue else { return [] }
+        guard let value else { return [] }
+        let array = try resolveArray(from: value)
         return try array.map { item in
             guard let s = item.stringValue, let sig = parseSignature(s) else {
                 throw MCPToolError.invalidParameter("Invalid signature \"\(item.stringValue ?? "?")\". Expected \"teamID:signingID\".")
             }
             return sig
         }
+    }
+
+    /// Resolves a JSONValue to an array, handling the case where the MCP client
+    /// serializes array parameters as a JSON-encoded string instead of a native array.
+    private static func resolveArray(from value: JSONValue) throws -> [JSONValue] {
+        if let array = value.arrayValue { return array }
+        if let encoded = value.stringValue,
+           let data = encoded.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(JSONValue.self, from: data),
+           let array = decoded.arrayValue {
+            return array
+        }
+        throw MCPToolError.invalidParameter("Expected a JSON array, got: \(value.typeName)")
     }
 
     private static func parseSignature(_ s: String) -> ProcessSignature? {
