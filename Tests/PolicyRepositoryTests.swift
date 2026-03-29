@@ -13,20 +13,24 @@ private final class FakeDatabase: PolicyDatabaseProtocol {
     var userAllowlistResult: DatabaseLoadResult<AllowlistEntry> = .ok([])
     var userAncestorAllowlistResult: DatabaseLoadResult<AncestorAllowlistEntry> = .ok([])
     var userJailRulesResult: DatabaseLoadResult<JailRule> = .ok([])
+    var featureFlagsResult: DatabaseLoadResult<FeatureFlag> = .ok([])
 
     private(set) var savedRules: [FAARule] = []
     private(set) var savedAllowlist: [AllowlistEntry] = []
     private(set) var savedAncestorAllowlist: [AncestorAllowlistEntry] = []
     private(set) var savedJailRules: [JailRule] = []
+    private(set) var savedFeatureFlags: [FeatureFlag] = []
 
     func loadUserRulesResult() -> DatabaseLoadResult<FAARule> { userRulesResult }
     func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry> { userAllowlistResult }
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry> { userAncestorAllowlistResult }
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> { userJailRulesResult }
+    func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag> { featureFlagsResult }
     func saveUserRules(_ rules: [FAARule]) { savedRules = rules }
     func saveUserAllowlist(_ entries: [AllowlistEntry]) { savedAllowlist = entries }
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) { savedAncestorAllowlist = entries }
     func saveUserJailRules(_ rules: [JailRule]) { savedJailRules = rules }
+    func saveFeatureFlags(_ flags: [FeatureFlag]) { savedFeatureFlags = flags }
 }
 
 // MARK: - Factories
