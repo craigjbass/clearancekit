@@ -65,7 +65,12 @@ Known process candidates (to verify empirically):
 - `com.apple.mds` / `com.apple.mds_stores` — Spotlight indexers
 - `com.apple.IMCore` — unified accounts layer
 
-**Status:** [ ] paths verified  [ ] signing IDs verified  [ ] preset written  [ ] tested
+**Status:** [x] paths verified  [x] signing IDs verified  [x] preset written  [x] tested
+
+Baked as `mailPreset` in `clearancekit/Configure/AppProtections/Presets/Mail.swift`.
+Empirically validated via discovery session. Global allowlist entries removed (`mds`,
+`mdworker_shared`, `secinitd`, `containermanagerd`, `WebKit.Networking`). Redundant
+`com.apple.cloudd` and `syncdefaultsd` entries cleaned up post-audit.
 
 ---
 
