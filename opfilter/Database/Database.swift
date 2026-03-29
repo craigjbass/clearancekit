@@ -425,6 +425,69 @@ final class Database {
         return encoded
     }
 
+    // MARK: - Feature Flags
+
+    func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag> {
+        var flags: [FeatureFlag] = []
+        query("SELECT id, name, enabled FROM feature_flags ORDER BY rowid") { stmt in
+            if let flag = featureFlagFromRow(stmt) {
+                flags.append(flag)
+            }
+        }
+        switch checkSignature(table: "feature_flags", content: canonicalFeatureFlagsJSON(flags)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d feature flag(s)", flags.count)
+            return .ok(flags)
+        case .suspect:
+            NSLog("Database: Signature verification failed for feature_flags — %d suspect flag(s)", flags.count)
+            return .suspect(flags)
+        }
+    }
+
+    func saveFeatureFlags(_ flags: [FeatureFlag]) {
+        inTransaction {
+            execute("DELETE FROM feature_flags")
+            for flag in flags {
+                insertFeatureFlag(flag)
+            }
+            updateSignature(table: "feature_flags", content: canonicalFeatureFlagsJSON(flags))
+        }
+    }
+
+    private func insertFeatureFlag(_ flag: FeatureFlag) {
+        execute("""
+            INSERT INTO feature_flags (id, name, enabled)
+            VALUES (?, ?, ?)
+        """, bindings: [
+            .text(flag.id.uuidString),
+            .text(flag.name),
+            .int(flag.enabled ? 1 : 0),
+        ])
+    }
+
+    private func featureFlagFromRow(_ stmt: OpaquePointer) -> FeatureFlag? {
+        let uuidString = columnText(stmt, 0)
+        guard let id = UUID(uuidString: uuidString) else {
+            NSLog("Database: Skipping feature flag row with invalid UUID '%@'", uuidString)
+            return nil
+        }
+        return FeatureFlag(
+            id: id,
+            name: columnText(stmt, 1),
+            enabled: sqlite3_column_int(stmt, 2) != 0
+        )
+    }
+
+    private func canonicalFeatureFlagsJSON(_ flags: [FeatureFlag]) -> Data {
+        let sorted = flags.sorted { $0.id.uuidString < $1.id.uuidString }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode feature flags for signature — [FeatureFlag] must always be encodable")
+        }
+        return encoded
+    }
+
     // MARK: - Signature verification
 
     private enum SignatureCheckResult {
@@ -450,6 +513,7 @@ final class Database {
         case "user_allowlist":          break
         case "user_ancestor_allowlist": break
         case "user_jail_rules":         break
+        case "feature_flags":           break
         default: preconditionFailure("Unexpected table name: \(table)")
         }
         var found = false

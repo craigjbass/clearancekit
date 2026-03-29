@@ -298,6 +298,10 @@ public protocol ServiceProtocol {
     // Jail feature toggle. When enabled, opfilter creates the jail ES client;
     // when disabled, it tears it down. Default is disabled.
     func setJailEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
+
+    // MCP server toggle. Persisted in the feature_flags table with tamper-resistant
+    // signature. On signature failure the flag defaults to disabled.
+    func setMCPEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
 }
 
 // MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
@@ -318,6 +322,9 @@ public protocol ClientProtocol {
     // Opfilter pushes the current jail-enabled state on connect and whenever it
     // changes. The GUI uses this to show/hide jail UI accordingly.
     func jailEnabledUpdated(_ enabled: Bool)
+    // Opfilter pushes the current MCP-enabled feature flag on connect and whenever
+    // it changes. The GUI starts or stops the MCP server accordingly.
+    func mcpEnabledUpdated(_ enabled: Bool)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)

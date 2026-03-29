@@ -35,6 +35,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var events: [FolderOpenEvent] = []
     @Published private(set) var pendingSignatureIssue: PendingSignatureIssue? = nil
     @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
+    @Published private(set) var mcpEnabled = false
 
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
@@ -350,6 +351,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setMCPEnabled(_ enabled: Bool) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setMCPEnabled error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setMCPEnabled(enabled) { success in
+            if !success { logger.error("XPCClient: setMCPEnabled rejected by service") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -614,6 +624,12 @@ extension XPCClient: ClientProtocol {
     nonisolated func jailEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             JailStore.shared.receivedJailEnabled(enabled)
+        }
+    }
+
+    nonisolated func mcpEnabledUpdated(_ enabled: Bool) {
+        Task { @MainActor in
+            self.mcpEnabled = enabled
         }
     }
 

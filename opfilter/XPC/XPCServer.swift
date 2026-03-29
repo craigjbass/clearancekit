@@ -121,6 +121,11 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.jailEnabledUpdated(enabled) }
     }
 
+    fileprivate func setMCPEnabled(_ enabled: Bool) {
+        policyRepository.setMCPEnabled(enabled)
+        broadcaster.broadcastToAllClients { $0.mcpEnabledUpdated(enabled) }
+    }
+
     // MARK: - Filter application
 
     func applyPolicyToFilter() {
@@ -307,6 +312,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy?.managedJailRulesUpdated(policyRepository.encodedManagedJailRules())
         proxy?.userJailRulesUpdated(policyRepository.encodedUserJailRules())
         proxy?.jailEnabledUpdated(isJailEnabled)
+        proxy?.mcpEnabledUpdated(policyRepository.mcpEnabled)
     }
 }
 
@@ -584,6 +590,14 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply(false); return }
         server.serverQueue.async {
             server.setJailEnabled(enabled)
+            reply(true)
+        }
+    }
+
+    func setMCPEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.serverQueue.async {
+            server.setMCPEnabled(enabled)
             reply(true)
         }
     }

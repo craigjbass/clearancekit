@@ -22,6 +22,7 @@ let allMigrations: [Migration] = [
     Migration(version: 2, name: "Replace separate team/signing ID columns with combined signatures", up: migration002CombineSignatures),
     Migration(version: 3, name: "Create user ancestor allowlist table", up: migration003CreateAncestorAllowlist),
     Migration(version: 4, name: "Create user jail rules table", up: migration004CreateJailRules),
+    Migration(version: 5, name: "Create feature flags table", up: migration005CreateFeatureFlags),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -234,4 +235,25 @@ private func migration004CreateJailRules(_ db: Database) {
         )
     """)
     NSLog("Migration 004: Created user_jail_rules table")
+}
+
+// MARK: - Migration 005: Create feature flags table
+
+private func migration005CreateFeatureFlags(_ db: Database) {
+    db.execute("""
+        CREATE TABLE feature_flags (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    db.execute(
+        "INSERT INTO feature_flags (id, name, enabled) VALUES (?, ?, ?)",
+        bindings: [
+            .text(FeatureFlagID.mcpServerEnabled.uuidString),
+            .text("mcp_server_enabled"),
+            .int(0),
+        ]
+    )
+    NSLog("Migration 005: Created feature_flags table with mcp_server_enabled=false")
 }

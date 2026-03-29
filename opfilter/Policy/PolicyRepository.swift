@@ -25,10 +25,12 @@ protocol PolicyDatabaseProtocol: AnyObject {
     func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry>
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry>
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule>
+    func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag>
     func saveUserRules(_ rules: [FAARule])
     func saveUserAllowlist(_ entries: [AllowlistEntry])
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry])
     func saveUserJailRules(_ rules: [JailRule])
+    func saveFeatureFlags(_ flags: [FeatureFlag])
 }
 
 // MARK: - PolicyRepository
@@ -46,6 +48,8 @@ final class PolicyRepository: @unchecked Sendable {
         var userJailRules: [JailRule] = []
         var pendingSuspectUserRules: [FAARule]?
         var pendingSuspectUserAllowlist: [AllowlistEntry]?
+        var featureFlags: [FeatureFlag] = []
+        var mcpEnabled: Bool = false
     }
 
     private let storage: OSAllocatedUnfairLock<State>
@@ -95,6 +99,17 @@ final class PolicyRepository: @unchecked Sendable {
             initialState.userJailRules = rules
         case .suspect(let rules):
             logger.warning("PolicyRepository: Signature issue for user_jail_rules — discarding \(rules.count) suspect rule(s)")
+        }
+
+        switch database.loadFeatureFlagsResult() {
+        case .ok(let flags):
+            initialState.featureFlags = flags
+            initialState.mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
+        case .suspect:
+            // Signature failure on feature flags: disable MCP (safe default)
+            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server")
+            initialState.featureFlags = [FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false)]
+            initialState.mcpEnabled = false
         }
 
         self.storage = OSAllocatedUnfairLock(initialState: initialState)
@@ -242,6 +257,25 @@ final class PolicyRepository: @unchecked Sendable {
             return state.userJailRules
         }
         database.saveUserJailRules(rules)
+    }
+
+    // MARK: - Feature flags
+
+    var mcpEnabled: Bool {
+        storage.withLock { $0.mcpEnabled }
+    }
+
+    func setMCPEnabled(_ enabled: Bool) {
+        let flags = storage.withLock { state -> [FeatureFlag] in
+            state.mcpEnabled = enabled
+            if let index = state.featureFlags.firstIndex(where: { $0.id == FeatureFlagID.mcpServerEnabled }) {
+                state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: enabled)
+            } else {
+                state.featureFlags.append(FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: enabled))
+            }
+            return state.featureFlags
+        }
+        database.saveFeatureFlags(flags)
     }
 
     // MARK: - Signature issue

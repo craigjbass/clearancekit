@@ -8,17 +8,28 @@
 import SwiftUI
 import AppKit
 import UserNotifications
+import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let mcpQueue = DispatchQueue(label: "uk.craigbass.clearancekit.mcp", qos: .utility)
     private lazy var mcpServer = MCPServer(queue: mcpQueue)
+    private var mcpEnabledCancellable: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        mcpServer.start()
+
+        mcpEnabledCancellable = XPCClient.shared.$mcpEnabled
+            .receive(on: mcpQueue)
+            .sink { [weak self] enabled in
+                if enabled {
+                    self?.mcpServer.start()
+                } else {
+                    self?.mcpServer.stop()
+                }
+            }
     }
 
     func userNotificationCenter(

@@ -7,18 +7,32 @@ import SwiftUI
 
 struct MCPAgentsView: View {
     @ObservedObject private var store = MCPSessionStore.shared
+    @ObservedObject private var xpcClient = XPCClient.shared
 
     var body: some View {
-        Group {
-            if store.activeSessions.isEmpty {
-                ContentUnavailableView(
-                    "No Connected Agents",
-                    systemImage: "person.badge.key",
-                    description: Text("MCP agents authenticate via Touch ID and appear here once connected.")
-                )
-            } else {
-                List(store.activeSessions) { session in
-                    MCPAgentRow(session: session)
+        VStack(spacing: 0) {
+            MCPSecurityWarningView()
+                .padding()
+
+            Divider()
+
+            Group {
+                if !xpcClient.mcpEnabled {
+                    ContentUnavailableView(
+                        "MCP Server Disabled",
+                        systemImage: "network.slash",
+                        description: Text("Enable the MCP server above to allow AI agents to connect.")
+                    )
+                } else if store.activeSessions.isEmpty {
+                    ContentUnavailableView(
+                        "No Connected Agents",
+                        systemImage: "person.badge.key",
+                        description: Text("MCP agents authenticate via Touch ID and appear here once connected.")
+                    )
+                } else {
+                    List(store.activeSessions) { session in
+                        MCPAgentRow(session: session)
+                    }
                 }
             }
         }
@@ -28,6 +42,39 @@ struct MCPAgentsView: View {
                 Text(MCPServer.socketPath)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - MCPSecurityWarningView
+
+private struct MCPSecurityWarningView: View {
+    @ObservedObject private var xpcClient = XPCClient.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(
+                get: { xpcClient.mcpEnabled },
+                set: { xpcClient.setMCPEnabled($0) }
+            )) {
+                Label("Enable MCP Server", systemImage: "network")
+                    .font(.headline)
+            }
+            .toggleStyle(.switch)
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Security Warning")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.orange)
+                    Text("The MCP server increases the attack surface of ClearanceKit by exposing policy management over a local socket. Disable it when not in use.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
