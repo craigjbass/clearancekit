@@ -12,4 +12,5 @@ let builtInPresets: [AppPreset] = [
     discordPreset,
     signalPreset,
     chromePreset,
+    slackPreset,
 ]
