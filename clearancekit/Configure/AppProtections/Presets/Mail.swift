@@ -15,6 +15,7 @@ private let mailCoreSignatures: [ProcessSignature] = [
     apple("com.apple.exchange.exchangesyncd"),
     apple("com.apple.accountsd"),
     apple("com.apple.IMCore"),
+    apple("com.apple.textunderstandingd"),
 ]
 
 // mds and mdworker_shared are covered by the global allowlist.
