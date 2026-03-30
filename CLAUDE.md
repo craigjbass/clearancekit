@@ -28,7 +28,7 @@ ClearanceKit uses hexagonal architecture. Three distinct layers must stay separa
 
 ```bash
 # Build and test via xcodebuild
-xcodebuild test -scheme clearancekit -destination 'platform=macOS'
+xcodebuild test -scheme clearancekitTests -destination 'platform=macOS'
 ```
 
 Tests live in `Tests/` and use the Swift Testing framework (`@Suite`, `@Test`, `#expect`).

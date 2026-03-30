@@ -78,6 +78,7 @@
 				Configure/AppProtections/Presets/Notes.swift,
 				Configure/AppProtections/Presets/Safari.swift,
 				Configure/AppProtections/Presets/Signal.swift,
+				Configure/AppProtections/Presets/Slack.swift,
 				Configure/AppProtections/PresetsView.swift,
 				Configure/AppProtections/ProtectionDraft.swift,
 				Configure/AppProtections/ProtectionFettleView.swift,
