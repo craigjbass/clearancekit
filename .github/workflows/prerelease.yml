@@ -166,4 +166,5 @@ jobs:
             "build/clearancekit-${{ steps.version.outputs.name }}.dmg" \
             --prerelease \
             --generate-notes \
+            --make-latest legacy \
             --title "${{ steps.version.outputs.name }}"
