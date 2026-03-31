@@ -151,5 +151,4 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             "build/clearancekit-${{ github.ref_name }}.dmg" \
             --generate-notes \
-            --make-latest legacy \
             --title "${{ github.ref_name }}"
