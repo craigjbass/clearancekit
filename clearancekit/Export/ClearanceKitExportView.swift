@@ -36,7 +36,8 @@ struct ClearanceKitExportView: View {
     // Enforcement step toggles
     @State private var includeUserJailRules      = true
     @State private var includeManagedJailRules   = false
-    @State private var includeUserAllowlist      = true
+    @State private var includeUserAllowlist              = true
+    @State private var includeUserAncestorAllowlist      = true
 
     @State private var step: ClearanceKitExportStep = .policy
     @State private var exportError: String?
@@ -120,6 +121,8 @@ struct ClearanceKitExportView: View {
             sourceRow(label: "Managed Jail Rules", count: jailStore.managedRules.count, isOn: $includeManagedJailRules)
             sectionHeader("Allowlist")
             sourceRow(label: "User Allowlist Entries", count: allowlistStore.userEntries.count, isOn: $includeUserAllowlist)
+            Divider().padding(.leading)
+            sourceRow(label: "User Ancestor Allowlist Entries", count: allowlistStore.userAncestorEntries.count, isOn: $includeUserAncestorAllowlist)
             Spacer()
         }
     }
@@ -140,7 +143,8 @@ struct ClearanceKitExportView: View {
                 reviewRow(label: "Policy Rules",    count: exportedRules.count,           icon: "shield")
                 reviewRow(label: "App Protections", count: exportedProtections.count,      icon: "lock.app.dashed")
                 reviewRow(label: "Jail Rules",       count: exportedJailRules.count,       icon: "lock.rectangle.on.rectangle")
-                reviewRow(label: "Allowlist",        count: exportedAllowlistEntries.count, icon: "checkmark.shield")
+                reviewRow(label: "Allowlist",                 count: exportedAllowlistEntries.count,         icon: "checkmark.shield")
+                reviewRow(label: "Ancestor Allowlist",          count: exportedAncestorAllowlistEntries.count, icon: "person.2.badge.gearshape")
             }
             .padding()
 
@@ -261,8 +265,13 @@ struct ClearanceKitExportView: View {
         includeUserAllowlist ? allowlistStore.userEntries : []
     }
 
+    private var exportedAncestorAllowlistEntries: [AncestorAllowlistEntry] {
+        includeUserAncestorAllowlist ? allowlistStore.userAncestorEntries : []
+    }
+
     private var totalItems: Int {
-        exportedRules.count + exportedProtections.count + exportedJailRules.count + exportedAllowlistEntries.count
+        exportedRules.count + exportedProtections.count + exportedJailRules.count
+            + exportedAllowlistEntries.count + exportedAncestorAllowlistEntries.count
     }
 
     /// Number of exported AppProtections that reference at least one ruleID not present in exportedRules.
@@ -307,7 +316,8 @@ struct ClearanceKitExportView: View {
                 rules: exportedRules,
                 protections: exportedProtections,
                 jailRules: exportedJailRules,
-                allowlistEntries: exportedAllowlistEntries
+                allowlistEntries: exportedAllowlistEntries,
+                ancestorAllowlistEntries: exportedAncestorAllowlistEntries
             )
             try data.write(to: url)
         } catch {

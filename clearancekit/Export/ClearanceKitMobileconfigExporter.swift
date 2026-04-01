@@ -18,7 +18,8 @@ enum ClearanceKitMobileconfigExporter {
         rules: [FAARule],
         protections: [AppProtection],
         jailRules: [JailRule],
-        allowlistEntries: [AllowlistEntry]
+        allowlistEntries: [AllowlistEntry],
+        ancestorAllowlistEntries: [AncestorAllowlistEntry] = []
     ) throws -> Data {
         var settings: [String: Any] = [:]
 
@@ -33,6 +34,9 @@ enum ClearanceKitMobileconfigExporter {
         }
         if !allowlistEntries.isEmpty {
             settings["GlobalAllowlist"] = allowlistEntries.map(allowlistEntryDict)
+        }
+        if !ancestorAllowlistEntries.isEmpty {
+            settings["GlobalAncestorAllowlist"] = ancestorAllowlistEntries.map(ancestorAllowlistEntryDict)
         }
 
         let innerPayload: [String: Any] = [
@@ -112,6 +116,18 @@ enum ClearanceKitMobileconfigExporter {
     }
 
     private static func allowlistEntryDict(_ entry: AllowlistEntry) -> [String: Any] {
+        var dict: [String: Any] = ["ID": entry.id.uuidString]
+        if !entry.signingID.isEmpty  { dict["SigningID"]   = entry.signingID }
+        if !entry.processPath.isEmpty { dict["ProcessPath"] = entry.processPath }
+        if entry.platformBinary {
+            dict["PlatformBinary"] = true
+        } else if !entry.teamID.isEmpty {
+            dict["TeamID"] = entry.teamID
+        }
+        return dict
+    }
+
+    private static func ancestorAllowlistEntryDict(_ entry: AncestorAllowlistEntry) -> [String: Any] {
         var dict: [String: Any] = ["ID": entry.id.uuidString]
         if !entry.signingID.isEmpty  { dict["SigningID"]   = entry.signingID }
         if !entry.processPath.isEmpty { dict["ProcessPath"] = entry.processPath }
