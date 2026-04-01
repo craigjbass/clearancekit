@@ -196,10 +196,19 @@ public struct SantaMobileconfigExporter {
     }
 
     private static func santaPath(from pattern: String) -> (path: String, isPrefix: Bool) {
-        if pattern.hasSuffix("/**") {
-            let trimmed = String(pattern.dropLast(3))
-            return (trimmed, true)
+        let segments = pattern.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        var converted: [String] = []
+        var isPrefix = false
+
+        for segment in segments {
+            if segment == "**" {
+                isPrefix = true
+                break
+            }
+            converted.append(segment.replacingOccurrences(of: "***", with: "*"))
         }
-        return (pattern, false)
+
+        let path = "/" + converted.joined(separator: "/")
+        return (path, isPrefix)
     }
 }

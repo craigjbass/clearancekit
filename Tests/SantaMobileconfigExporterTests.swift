@@ -369,6 +369,70 @@ struct SantaMobileconfigExporterTests {
         #expect(paths.first?["IsPrefix"] as? Bool == false)
     }
 
+    @Test("triple-star wildcard within component is converted to glob star")
+    func tripleStarConvertedToGlobStar() throws {
+        let jailRule = JailRule(
+            name: "Test",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/Users/*/Library/Group Containers/group.***slack/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/Users/*/Library/Group Containers/group.*slack")
+        #expect(paths.first?["IsPrefix"] as? Bool == true)
+    }
+
+    @Test("double-star mid-pattern truncates path and sets prefix true")
+    func doubleStarMidPatternTruncates() throws {
+        let jailRule = JailRule(
+            name: "Test",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/Users/**/Library"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/Users")
+        #expect(paths.first?["IsPrefix"] as? Bool == true)
+    }
+
+    @Test("single star segment is preserved as valid glob")
+    func singleStarSegmentPreserved() throws {
+        let jailRule = JailRule(
+            name: "Test",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/Users/*/Documents"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/Users/*/Documents")
+        #expect(paths.first?["IsPrefix"] as? Bool == false)
+    }
+
+    @Test("bare double-star pattern produces root prefix")
+    func bareDoubleStarProducesRootPrefix() throws {
+        let jailRule = JailRule(
+            name: "Test",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/")
+        #expect(paths.first?["IsPrefix"] as? Bool == true)
+    }
+
     @Test("jail rules and FAA rules coexist in same WatchItems")
     func jailAndFAARulesCoexist() throws {
         let faaRule = FAARule(
