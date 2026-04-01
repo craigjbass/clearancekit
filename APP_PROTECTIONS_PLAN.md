@@ -152,7 +152,13 @@ More complex process surfaces or platform constraints that need extra care.
 continuity daemons. Expect a large signing ID list. Needs thorough discovery session
 before coding.
 
-**Status:** [ ] paths verified  [ ] signing IDs verified  [ ] preset written  [ ] tested
+**Status:** [x] paths verified  [x] signing IDs verified  [x] preset written  [x] tested
+
+Baked as `messagesPreset` in `clearancekit/Configure/AppProtections/Presets/Messages.swift`.
+Empirically validated via discovery session. Container path (`com.apple.iChat`)
+produced no events during testing — omitted. Discovered signing IDs: MobileSMS,
+imagent, IMDPersistenceAgent, IMTransferAgent, IMTranscoderAgent,
+MessagesBlastDoorService, AddressBook (contact resolution), mdwrite (Spotlight).
 
 ---
 
