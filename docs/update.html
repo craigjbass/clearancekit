@@ -567,6 +567,7 @@
     fetch(ADVISORIES_API, { headers: GH_HEADERS }).then(r => r.ok ? r.json() : []),
   ])
   .then(([releases, advisories]) => {
+    releases.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
     cachedReleases   = releases;
     cachedAdvisories = advisories;
     if (!activeSha) {
