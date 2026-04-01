@@ -259,6 +259,31 @@ struct SantaMobileconfigExporterTests {
         #expect(termEntry == nil)
     }
 
+    // MARK: - Jail rules subprocess warning
+
+    @Test("hasJailRules is false when no jail rules are exported")
+    func noJailRulesFlag() throws {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Documents",
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [rule], allowlist: [])
+
+        #expect(result.hasJailRules == false)
+    }
+
+    @Test("hasJailRules is true when jail rules are exported")
+    func jailRulesSetsFlag() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+
+        #expect(result.hasJailRules == true)
+    }
+
     // MARK: - Jail rule export
 
     @Test("jail rule produces watch item with ProcessesWithAllowedPaths rule type")

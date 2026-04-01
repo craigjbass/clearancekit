@@ -22,10 +22,13 @@ private enum SantaExportStep: Int, CaseIterable {
 
 struct SantaExportView: View {
     @StateObject private var policyStore = PolicyStore.shared
+    @StateObject private var jailStore = JailStore.shared
     @State private var step: SantaExportStep = .selectSources
     @State private var includeUserRules     = true
     @State private var includeManagedRules  = false
     @State private var includeBaselineRules = false
+    @State private var includeUserJailRules    = false
+    @State private var includeManagedJailRules = false
     @State private var selectedRuleIDs: Set<UUID> = []
     @State private var exportError: String?
 
@@ -96,6 +99,10 @@ struct SantaExportView: View {
             sourceRow(label: "Managed Profile Rules", count: policyStore.managedRules.count, isOn: $includeManagedRules)
             Divider().padding(.leading)
             sourceRow(label: "Baseline Rules", count: policyStore.baselineRules.count, isOn: $includeBaselineRules)
+            Divider().padding(.leading)
+            sourceRow(label: "User Jail Rules", count: jailStore.userRules.count, isOn: $includeUserJailRules)
+            Divider().padding(.leading)
+            sourceRow(label: "Managed Jail Rules", count: jailStore.managedRules.count, isOn: $includeManagedJailRules)
             Spacer()
         }
     }
@@ -117,7 +124,7 @@ struct SantaExportView: View {
     // Step 2 — Select individual rules
     @ViewBuilder
     private var rulesStep: some View {
-        if candidateRules.isEmpty {
+        if candidateRules.isEmpty && candidateJailRules.isEmpty {
             VStack {
                 Spacer()
                 Text("No rules in the selected groups.")
@@ -148,6 +155,29 @@ struct SantaExportView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                ForEach(candidateJailRules) { rule in
+                    HStack(alignment: .top, spacing: 10) {
+                        Toggle(isOn: ruleSelectionBinding(for: rule.id)) { EmptyView() }
+                            .labelsHidden()
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text(rule.name)
+                                    .font(.system(.body, design: .monospaced))
+                                    .fontWeight(.semibold)
+                                Text("Jail")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(.orange.opacity(0.2))
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                            }
+                            Text("\(rule.jailedSignature)")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
             .listStyle(.inset)
         }
@@ -159,7 +189,7 @@ struct SantaExportView: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Text("\(selectedRules.count) rule\(selectedRules.count == 1 ? "" : "s") ready to export")
+                Text("\(totalSelectedCount) rule\(totalSelectedCount == 1 ? "" : "s") ready to export")
                     .font(.headline)
             }
             .padding()
@@ -203,6 +233,18 @@ struct SantaExportView: View {
                 .padding()
             }
 
+            if !selectedJailRules.isEmpty {
+                Divider()
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Jail rules exported as Santa ProcessesWithAllowedPaths apply only to the matched process. Unlike ClearanceKit, subprocesses spawned by a jailed process will not be confined.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+            }
+
             if let error = exportError {
                 Divider()
                 HStack(alignment: .top, spacing: 8) {
@@ -230,7 +272,7 @@ struct SantaExportView: View {
             if step == .review {
                 Button("Export…") { export() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(selectedRules.isEmpty)
+                    .disabled(totalSelectedCount == 0)
             } else {
                 Button("Next") { advance() }
                     .buttonStyle(.borderedProminent)
@@ -251,8 +293,23 @@ struct SantaExportView: View {
         return rules
     }
 
+    private var candidateJailRules: [JailRule] {
+        var rules: [JailRule] = []
+        if includeUserJailRules    { rules += jailStore.userRules }
+        if includeManagedJailRules { rules += jailStore.managedRules }
+        return rules
+    }
+
     private var selectedRules: [FAARule] {
         candidateRules.filter { selectedRuleIDs.contains($0.id) }
+    }
+
+    private var selectedJailRules: [JailRule] {
+        candidateJailRules.filter { selectedRuleIDs.contains($0.id) }
+    }
+
+    private var totalSelectedCount: Int {
+        selectedRules.count + selectedJailRules.count
     }
 
     private var selectedRulesHaveAncestry: Bool {
@@ -265,7 +322,7 @@ struct SantaExportView: View {
 
     private var canAdvance: Bool {
         switch step {
-        case .selectSources: return !candidateRules.isEmpty
+        case .selectSources: return !candidateRules.isEmpty || !candidateJailRules.isEmpty
         case .selectRules:   return !selectedRuleIDs.isEmpty
         case .review:        return true
         }
@@ -274,7 +331,7 @@ struct SantaExportView: View {
     private func advance() {
         switch step {
         case .selectSources:
-            selectedRuleIDs = Set(candidateRules.map(\.id))
+            selectedRuleIDs = Set(candidateRules.map(\.id) + candidateJailRules.map(\.id))
             step = .selectRules
         case .selectRules:
             step = .review
@@ -311,7 +368,10 @@ struct SantaExportView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let result = try SantaMobileconfigExporter.export(rules: selectedRules)
+            let result = try SantaMobileconfigExporter.export(
+                rules: selectedRules,
+                jailRules: selectedJailRules
+            )
             try result.data.write(to: url)
         } catch {
             exportError = "Export failed: \(error.localizedDescription)"

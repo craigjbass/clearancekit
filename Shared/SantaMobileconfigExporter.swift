@@ -23,6 +23,9 @@ public struct SantaMobileconfigExporter {
         /// True when at least one exported rule relied on ancestor-based criteria
         /// that cannot be represented in Santa's FileAccessPolicy.
         public let hasAncestryRules: Bool
+        /// True when the export includes jail rules. Santa's ProcessesWithAllowedPaths
+        /// applies only to the matched process itself — subprocesses are not confined.
+        public let hasJailRules: Bool
     }
 
     public static func export(
@@ -79,7 +82,7 @@ public struct SantaMobileconfigExporter {
             options: 0
         )
 
-        return ExportResult(data: data, hasAncestryRules: hasAncestryRules)
+        return ExportResult(data: data, hasAncestryRules: hasAncestryRules, hasJailRules: !jailRules.isEmpty)
     }
 
     // MARK: - Watch item construction
