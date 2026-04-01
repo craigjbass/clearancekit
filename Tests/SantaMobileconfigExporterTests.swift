@@ -81,6 +81,21 @@ struct SantaMobileconfigExporterTests {
         #expect(paths.first?["IsPrefix"] as? Bool == true)
     }
 
+    @Test("FAA rule path with triple-star is converted to glob star")
+    func faaRuleTripleStarConverted() throws {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Library/Group Containers/group.***slack",
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [rule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/Users/*/Library/Group Containers/group.*slack")
+        #expect(paths.first?["IsPrefix"] as? Bool == true)
+    }
+
     @Test("watch item includes required Options keys")
     func watchItemOptionsKeys() throws {
         let rule = FAARule(

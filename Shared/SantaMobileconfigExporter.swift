@@ -120,7 +120,7 @@ public struct SantaMobileconfigExporter {
         }
 
         var item: [String: Any] = [
-            "Paths": [["Path": rule.protectedPathPrefix, "IsPrefix": true]],
+            "Paths": [santaPathEntry(from: rule.protectedPathPrefix, forcePrefixMatch: true)],
             "Options": [
                 "AllowReadAccess": false,
                 "AuditOnly": false,
@@ -179,8 +179,7 @@ public struct SantaMobileconfigExporter {
 
     private static func jailWatchItem(for rule: JailRule) -> [String: Any] {
         let paths: [[String: Any]] = rule.allowedPathPrefixes.map { prefix in
-            let (path, isPrefix) = santaPath(from: prefix)
-            return ["Path": path, "IsPrefix": isPrefix]
+            santaPathEntry(from: prefix)
         }
 
         return [
@@ -193,6 +192,11 @@ public struct SantaMobileconfigExporter {
                 "BlockMessage": "Access outside allowed paths is restricted by ClearanceKit jail policy",
             ] as [String: Any],
         ]
+    }
+
+    private static func santaPathEntry(from pattern: String, forcePrefixMatch: Bool = false) -> [String: Any] {
+        let (path, isPrefix) = santaPath(from: pattern)
+        return ["Path": path, "IsPrefix": forcePrefixMatch || isPrefix]
     }
 
     private static func santaPath(from pattern: String) -> (path: String, isPrefix: Bool) {
