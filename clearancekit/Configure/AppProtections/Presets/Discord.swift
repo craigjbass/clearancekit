@@ -35,6 +35,7 @@ let discordPreset = AppPreset(
             protectedPathPrefix: "/Users/*/Library/Caches/com.hnc.Discord.ShipIt",
             allowedSignatures: [
                 sig("53Q6R32WPB", "com.hnc.Discord"),
+                sig(appleTeamID, "com.apple.ditto"),
             ]
         ),
     ]
