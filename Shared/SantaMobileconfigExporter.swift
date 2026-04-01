@@ -25,21 +25,26 @@ public struct SantaMobileconfigExporter {
         public let hasAncestryRules: Bool
     }
 
-    /// Converts FAA rules and a baseline allowlist into a Santa mobileconfig.
-    ///
-    /// - Parameters:
-    ///   - rules:   The FAA rules to export.
-    ///   - allowlist: Entries that should be permitted to access every protected
-    ///     path. Pass `baselineAllowlist` (the default) to mirror the baseline
-    ///     built-in to ClearanceKit.
     public static func export(
         rules: [FAARule],
         allowlist: [AllowlistEntry] = baselineAllowlist
     ) throws -> ExportResult {
+        try export(rules: rules, jailRules: [], allowlist: allowlist)
+    }
+
+    public static func export(
+        rules: [FAARule],
+        jailRules: [JailRule],
+        allowlist: [AllowlistEntry] = baselineAllowlist
+    ) throws -> ExportResult {
         let hasAncestryRules = rules.contains { $0.requiresAncestry }
 
-        let watchItems: [String: Any] = rules.reduce(into: [:]) { dict, rule in
+        var watchItems: [String: Any] = rules.reduce(into: [:]) { dict, rule in
             dict[watchItemKey(for: rule)] = watchItem(for: rule, allowlist: allowlist)
+        }
+
+        for jailRule in jailRules {
+            watchItems[jailWatchItemKey(for: jailRule)] = jailWatchItem(for: jailRule)
         }
 
         let fileAccessPolicy: [String: Any] = [
@@ -155,5 +160,43 @@ public struct SantaMobileconfigExporter {
         }
 
         return dict
+    }
+
+    // MARK: - Jail rule watch items
+
+    private static func jailWatchItemKey(for rule: JailRule) -> String {
+        let sanitized = rule.name
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "_")
+        let shortened = String(sanitized.prefix(watchItemKeyPathLimit))
+        let suffix = String(rule.id.uuidString.prefix(watchItemKeyUUIDSuffixLength))
+        return shortened.isEmpty ? suffix : "\(shortened)_\(suffix)"
+    }
+
+    private static func jailWatchItem(for rule: JailRule) -> [String: Any] {
+        let paths: [[String: Any]] = rule.allowedPathPrefixes.map { prefix in
+            let (path, isPrefix) = santaPath(from: prefix)
+            return ["Path": path, "IsPrefix": isPrefix]
+        }
+
+        return [
+            "Paths": paths,
+            "Processes": [processEntry(from: rule.jailedSignature)],
+            "Options": [
+                "AllowReadAccess": false,
+                "AuditOnly": false,
+                "RuleType": "ProcessesWithAllowedPaths",
+                "BlockMessage": "Access outside allowed paths is restricted by ClearanceKit jail policy",
+            ] as [String: Any],
+        ]
+    }
+
+    private static func santaPath(from pattern: String) -> (path: String, isPrefix: Bool) {
+        if pattern.hasSuffix("/**") {
+            let trimmed = String(pattern.dropLast(3))
+            return (trimmed, true)
+        }
+        return (pattern, false)
     }
 }

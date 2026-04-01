@@ -258,4 +258,194 @@ struct SantaMobileconfigExporterTests {
         #expect(shEntry == nil)
         #expect(termEntry == nil)
     }
+
+    // MARK: - Jail rule export
+
+    @Test("jail rule produces watch item with ProcessesWithAllowedPaths rule type")
+    func jailRuleUsesProcessesWithAllowedPaths() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/Users/*/Library/Application Support/Slack/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+
+        let watchItem = items.values.first as? [String: Any]
+        let options = watchItem?["Options"] as? [String: Any] ?? [:]
+
+        #expect(options["RuleType"] as? String == "ProcessesWithAllowedPaths")
+    }
+
+    @Test("jail rule process signature appears in Processes array")
+    func jailRuleProcessSignature() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let processes = watchItem?["Processes"] as? [[String: Any]] ?? []
+
+        let slackEntry = processes.first { $0["SigningID"] as? String == "com.tinyspeck.slackmacgap" }
+        #expect(slackEntry != nil)
+        #expect(slackEntry?["TeamID"] as? String == "BQR82RBBHL")
+    }
+
+    @Test("jail rule apple platform binary uses PlatformBinary flag")
+    func jailRuleApplePlatformBinary() throws {
+        let jailRule = JailRule(
+            name: "Safari",
+            jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Safari"),
+            allowedPathPrefixes: ["/Users/*/Library/Safari/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let processes = watchItem?["Processes"] as? [[String: Any]] ?? []
+
+        let safariEntry = processes.first { $0["SigningID"] as? String == "com.apple.Safari" }
+        #expect(safariEntry?["PlatformBinary"] as? Bool == true)
+        #expect(safariEntry?["TeamID"] == nil)
+    }
+
+    @Test("jail rule allowed path prefixes appear as Paths with double-star suffix stripped")
+    func jailRuleAllowedPaths() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/Users/*/Library/Application Support/Slack/**", "/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        let sortedPaths = paths.compactMap { $0["Path"] as? String }.sorted()
+        #expect(sortedPaths == ["/Users/*/Library/Application Support/Slack", "/tmp"])
+        #expect(paths.allSatisfy { $0["IsPrefix"] as? Bool == true })
+    }
+
+    @Test("jail rule path without double-star suffix uses exact match")
+    func jailRuleExactPath() throws {
+        let jailRule = JailRule(
+            name: "Test",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+            allowedPathPrefixes: ["/etc/hosts"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let paths = watchItem?["Paths"] as? [[String: Any]] ?? []
+
+        #expect(paths.first?["Path"] as? String == "/etc/hosts")
+        #expect(paths.first?["IsPrefix"] as? Bool == false)
+    }
+
+    @Test("jail rules and FAA rules coexist in same WatchItems")
+    func jailAndFAARulesCoexist() throws {
+        let faaRule = FAARule(
+            protectedPathPrefix: "/Users/*/Documents",
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [faaRule], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+
+        #expect(items.count == 2)
+
+        let ruleTypes = items.values.compactMap { ($0 as? [String: Any])?["Options"] as? [String: Any] }
+            .compactMap { $0["RuleType"] as? String }
+        #expect(ruleTypes.contains("PathsWithAllowedProcesses"))
+        #expect(ruleTypes.contains("ProcessesWithAllowedPaths"))
+    }
+
+    @Test("jail rule watch item key is derived from rule name")
+    func jailRuleWatchItemKey() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [])
+        let items = try watchItems(from: result)
+
+        let key = items.keys.first
+        #expect(key?.contains("Slack") == true)
+    }
+
+    @Test("baseline allowlist is not inlined into jail rule watch items")
+    func allowlistNotInlinedIntoJailRules() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true)
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule], allowlist: [allowlistEntry])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let processes = watchItem?["Processes"] as? [[String: Any]] ?? []
+
+        #expect(processes.count == 1)
+        #expect(processes.first?["SigningID"] as? String == "com.tinyspeck.slackmacgap")
+    }
+
+    @Test("default baseline allowlist does not leak into jail rule Processes")
+    func defaultBaselineAllowlistExcludedFromJailRules() throws {
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [], jailRules: [jailRule])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let processes = watchItem?["Processes"] as? [[String: Any]] ?? []
+
+        #expect(processes.count == 1)
+        #expect(processes.first?["SigningID"] as? String == "com.tinyspeck.slackmacgap")
+    }
+
+    @Test("allowlist inlined into FAA watch item but not jail watch item in mixed export")
+    func allowlistOnlyInFAARulesWhenMixedWithJail() throws {
+        let faaRule = FAARule(
+            protectedPathPrefix: "/Users/*/Documents",
+            allowedSignatures: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.app")]
+        )
+        let jailRule = JailRule(
+            name: "Slack",
+            jailedSignature: ProcessSignature(teamID: "BQR82RBBHL", signingID: "com.tinyspeck.slackmacgap"),
+            allowedPathPrefixes: ["/tmp/**"]
+        )
+        let allowlistEntry = AllowlistEntry(signingID: "com.apple.mdworker", platformBinary: true)
+        let result = try SantaMobileconfigExporter.export(
+            rules: [faaRule],
+            jailRules: [jailRule],
+            allowlist: [allowlistEntry]
+        )
+        let items = try watchItems(from: result)
+
+        for (_, value) in items {
+            let item = value as? [String: Any] ?? [:]
+            let options = item["Options"] as? [String: Any] ?? [:]
+            let ruleType = options["RuleType"] as? String ?? ""
+            let processes = item["Processes"] as? [[String: Any]] ?? []
+
+            if ruleType == "ProcessesWithAllowedPaths" {
+                let signingIDs = processes.compactMap { $0["SigningID"] as? String }
+                #expect(!signingIDs.contains("com.apple.mdworker"))
+                #expect(processes.count == 1)
+            } else {
+                let signingIDs = processes.compactMap { $0["SigningID"] as? String }
+                #expect(signingIDs.contains("com.apple.mdworker"))
+            }
+        }
+    }
 }
