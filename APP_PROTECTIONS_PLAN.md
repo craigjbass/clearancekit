@@ -89,7 +89,13 @@ Known process candidates:
 - `com.apple.cloudd`
 - `com.apple.mds` — Spotlight
 
-**Status:** [ ] paths verified  [ ] signing IDs verified  [ ] preset written  [ ] tested
+**Status:** [x] paths verified  [x] signing IDs verified  [x] preset written  [x] tested
+
+Baked as `contactsPreset` in `clearancekit/Configure/AppProtections/Presets/Contacts.swift`.
+Empirically validated via discovery session. Group container path
+(`group.com.apple.AddressBook`) does not exist on tested system — omitted.
+Container path only requires `com.apple.AddressBook` (remaining access from
+`secinitd`, `containermanagerd`, `mds` covered by global allowlist).
 
 ---
 

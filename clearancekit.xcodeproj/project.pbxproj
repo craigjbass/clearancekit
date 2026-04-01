@@ -70,6 +70,7 @@
 				Configure/AppProtections/AppProtectionStore.swift,
 				Configure/AppProtections/ManagedAppProtectionLoader.swift,
 				Configure/AppProtections/Presets/Chrome.swift,
+				Configure/AppProtections/Presets/Contacts.swift,
 				Configure/AppProtections/Presets/Discord.swift,
 				Configure/AppProtections/Presets/HEY.swift,
 				Configure/AppProtections/Presets/index.swift,

@@ -7,6 +7,7 @@ let builtInPresets: [AppPreset] = [
     notesPreset,
     safariPreset,
     mailPreset,
+    contactsPreset,
     mullvadPreset,
     heyPreset,
     discordPreset,
