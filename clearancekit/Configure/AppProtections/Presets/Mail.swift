@@ -21,6 +21,7 @@ private let mailCoreSignatures: [ProcessSignature] = [
 // mds and mdworker_shared are covered by the global allowlist.
 private let mailSpotlightSignatures: [ProcessSignature] = [
     apple("com.apple.mds_stores"),
+    apple("com.apple.Spotlight"),
 ]
 
 // secinitd, containermanagerd, and WebKit.Networking are covered by the global allowlist.

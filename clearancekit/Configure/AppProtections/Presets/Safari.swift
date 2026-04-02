@@ -33,6 +33,7 @@ let safariPreset = AppPreset(
                 apple("com.apple.UserEventAgent"),
                 apple("com.apple.SafariNotificationAgent"),
                 apple("com.apple.Passwords"),
+                apple("com.apple.Safari.SafariWidgetExtension"),
             ]
         ),
         FAARule(
