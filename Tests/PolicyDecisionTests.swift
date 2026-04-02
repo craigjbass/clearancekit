@@ -219,6 +219,28 @@ struct AllowlistEntryTests {
         let entry = AllowlistEntry()
         #expect(!entry.matches(processPath: "/anything", signingID: "anything", teamID: "anything"))
     }
+
+    // MARK: Wildcard signing ID
+
+    @Test("wildcard signing ID matches any signing ID with matching team")
+    func wildcardSigningIDMatchesAnyWithTeam() {
+        let entry = AllowlistEntry(signingID: "*", teamID: "ACME99")
+        #expect(entry.matches(processPath: "/anything", signingID: "com.acme.tool", teamID: "ACME99"))
+        #expect(entry.matches(processPath: "/anything", signingID: "com.acme.other", teamID: "ACME99"))
+    }
+
+    @Test("wildcard signing ID rejects wrong team")
+    func wildcardSigningIDRejectsWrongTeam() {
+        let entry = AllowlistEntry(signingID: "*", teamID: "ACME99")
+        #expect(!entry.matches(processPath: "/anything", signingID: "com.acme.tool", teamID: "EVIL77"))
+    }
+
+    @Test("wildcard signing ID with platform binary matches any apple process")
+    func wildcardSigningIDPlatformBinary() {
+        let entry = AllowlistEntry(signingID: "*", platformBinary: true)
+        #expect(entry.matches(processPath: "/anything", signingID: "com.apple.anything", teamID: "apple"))
+        #expect(!entry.matches(processPath: "/anything", signingID: "com.acme.tool", teamID: "ACME99"))
+    }
 }
 
 // MARK: - evaluateAccess

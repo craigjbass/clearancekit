@@ -47,7 +47,7 @@ public struct AllowlistEntry: Identifiable, Codable {
         } else if !self.teamID.isEmpty {
             guard teamID == self.teamID else { return false }
         }
-        if !self.signingID.isEmpty { return signingID == self.signingID }
+        if !self.signingID.isEmpty { return self.signingID == "*" || signingID == self.signingID }
         if !self.processPath.isEmpty { return processPath == self.processPath }
         return false
     }
@@ -92,7 +92,7 @@ public struct AncestorAllowlistEntry: Identifiable, Codable {
         } else if !self.teamID.isEmpty {
             guard teamID == self.teamID else { return false }
         }
-        if !self.signingID.isEmpty { return signingID == self.signingID }
+        if !self.signingID.isEmpty { return self.signingID == "*" || signingID == self.signingID }
         if !self.processPath.isEmpty { return path == self.processPath }
         return false
     }
