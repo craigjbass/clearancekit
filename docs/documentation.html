@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-F0WEQYXKXN"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-F0WEQYXKXN');
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ClearanceKit documentation — complete guide to file access policies, app protections, jail rules, wildcarding, process ancestry, allowlists, and MDM deployment." />
+  <title>Documentation — ClearanceKit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --surface: #f5f3ff;
+      --surface-2: #ede9fe;
+      --border: rgba(109,40,217,0.12);
+      --border-glow: rgba(109,40,217,0.4);
+      --text: #1e1030;
+      --text-muted: #5a4b78;
+      --text-faint: #9e8fb5;
+      --accent: #7c3aed;
+      --accent-bright: #8b5cf6;
+      --accent-glow: rgba(124,58,237,0.25);
+      --danger: #ef4444;
+      --green: #16a34a;
+      --orange: #ea580c;
+      --radius: 14px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-logo img { flex-shrink: 0; border-radius: 6px; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); }
+
+    /* ── LAYOUT ── */
+    .docs-layout {
+      display: flex;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding-top: 65px;
+    }
+
+    /* ── SIDEBAR ── */
+    .docs-sidebar {
+      position: sticky;
+      top: 65px;
+      width: 260px;
+      flex-shrink: 0;
+      height: calc(100vh - 65px);
+      overflow-y: auto;
+      padding: 32px 24px 48px 32px;
+      border-right: 1px solid var(--border);
+    }
+
+    .docs-sidebar::-webkit-scrollbar { width: 4px; }
+    .docs-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .sidebar-group { margin-bottom: 28px; }
+
+    .sidebar-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-faint);
+      margin-bottom: 10px;
+    }
+
+    .sidebar-group ul { list-style: none; }
+
+    .sidebar-group li a {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 450;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 4px 0;
+      transition: color 0.15s;
+    }
+
+    .sidebar-group li a:hover { color: var(--text); }
+
+    /* ── MAIN CONTENT ── */
+    .docs-content {
+      flex: 1;
+      min-width: 0;
+      padding: 48px 56px 120px;
+    }
+
+    .docs-content h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+
+    .docs-content > .lead {
+      font-size: 17px;
+      color: var(--text-muted);
+      margin-bottom: 48px;
+      line-height: 1.65;
+      max-width: 640px;
+    }
+
+    .docs-content h2 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 64px;
+      margin-bottom: 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .docs-content h2:first-of-type { margin-top: 0; border-top: none; padding-top: 0; }
+
+    .docs-content h3 {
+      font-size: 18px;
+      font-weight: 650;
+      margin-top: 40px;
+      margin-bottom: 12px;
+    }
+
+    .docs-content h4 {
+      font-size: 15px;
+      font-weight: 650;
+      margin-top: 28px;
+      margin-bottom: 8px;
+    }
+
+    .docs-content p {
+      margin-bottom: 16px;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .docs-content ul, .docs-content ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    .docs-content li {
+      margin-bottom: 6px;
+      line-height: 1.65;
+    }
+
+    .docs-content code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88em;
+      background: var(--surface);
+      padding: 2px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+
+    .docs-content pre {
+      background: #1e1030;
+      color: #e8e0f0;
+      padding: 20px 24px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin-bottom: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      line-height: 1.65;
+    }
+
+    .docs-content pre code {
+      background: none;
+      padding: 0;
+      border: none;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    .docs-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .docs-content th {
+      text-align: left;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .docs-content td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .docs-content td code {
+      font-size: 12.5px;
+    }
+
+    .docs-content tr:last-child td { border-bottom: none; }
+
+    .callout {
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+
+    .callout p { margin-bottom: 0; }
+    .callout p + p { margin-top: 8px; }
+
+    .callout-info {
+      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(124,58,237,0.2);
+    }
+
+    .callout-warning {
+      background: rgba(234,88,12,0.08);
+      border: 1px solid rgba(234,88,12,0.2);
+    }
+
+    .callout-title {
+      font-weight: 650;
+      margin-bottom: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 100px;
+      vertical-align: middle;
+    }
+
+    .badge-purple {
+      background: rgba(124,58,237,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(124,58,237,0.25);
+    }
+
+    .badge-green {
+      background: rgba(22,163,74,0.10);
+      color: var(--green);
+      border: 1px solid rgba(22,163,74,0.25);
+    }
+
+    .badge-orange {
+      background: rgba(234,88,12,0.10);
+      color: var(--orange);
+      border: 1px solid rgba(234,88,12,0.25);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 24px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 13px;
+      color: var(--text-faint);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--text-muted); }
+
+    .footer-copy {
+      font-size: 13px;
+      color: var(--text-faint);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      .docs-sidebar { display: none; }
+      .docs-content { padding: 32px 20px 80px; }
+      .docs-content h1 { font-size: 28px; }
+      footer { padding: 32px 20px; }
+      .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="./" class="nav-logo">
+    <img src="logo.png" width="22" height="22" alt="ClearanceKit logo" />
+    ClearanceKit
+  </a>
+  <ul class="nav-links">
+    <li><a href="./#features">Features</a></li>
+    <li><a href="./documentation.html" class="active">Docs</a></li>
+    <li><a href="./#download">Download</a></li>
+    <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
+  </ul>
+</nav>
+
+<div class="docs-layout">
+
+<!-- SIDEBAR -->
+<aside class="docs-sidebar">
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Getting started</div>
+    <ul>
+      <li><a href="#setup">Setup</a></li>
+      <li><a href="#typical-workflow">Typical workflow</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Monitor</div>
+    <ul>
+      <li><a href="#events">Events</a></li>
+      <li><a href="#processes">Processes</a></li>
+      <li><a href="#process-tree">Process Tree</a></li>
+      <li><a href="#metrics">Metrics</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Configure</div>
+    <ul>
+      <li><a href="#policy-rules">Policy rules</a></li>
+      <li><a href="#app-protections">App Protections</a></li>
+      <li><a href="#built-in-presets">Built-in presets</a></li>
+      <li><a href="#jail-rules">Jail rules</a></li>
+      <li><a href="#allowlist">Allowlist</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Reference</div>
+    <ul>
+      <li><a href="#wildcards">Wildcard patterns</a></li>
+      <li><a href="#signatures">Code signatures</a></li>
+      <li><a href="#process-ancestry">Process ancestry</a></li>
+      <li><a href="#policy-evaluation">Policy evaluation order</a></li>
+      <li><a href="#touch-id">Touch ID</a></li>
+    </ul>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-title">Enterprise</div>
+    <ul>
+      <li><a href="#mdm">MDM deployment</a></li>
+      <li><a href="#export">Exporting policies</a></li>
+      <li><a href="#mcp">MCP agents</a></li>
+    </ul>
+  </div>
+</aside>
+
+<!-- CONTENT -->
+<main class="docs-content">
+
+<h1>Documentation</h1>
+<p class="lead">
+  Complete guide to configuring ClearanceKit's file access policies, app protections, jail rules,
+  process ancestry, allowlists, and MDM deployment.
+</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="setup">Setup</h2>
+
+<p>After dragging ClearanceKit to your Applications folder, open it and navigate to the <strong>Setup</strong> tab in the sidebar. Two steps are required:</p>
+
+<ol>
+  <li><strong>Activate the system extension</strong> — click <strong>Activate Extension</strong>. macOS will prompt you to allow the extension in System Settings. This is a one-time approval.</li>
+  <li><strong>Grant Full Disk Access</strong> — Endpoint Security requires Full Disk Access for the <code>opfilter</code> system extension. Click the link in the Setup tab to open System Settings &rarr; Privacy &amp; Security &rarr; Full Disk Access, and enable <code>opfilter</code>.</li>
+</ol>
+
+<p>The Setup tab shows real-time connection status. A green indicator means the GUI is connected to the system extension via XPC. If it shows red, click <strong>Resync</strong>.</p>
+
+<h3>Extension lifecycle</h3>
+
+<p>The system extension runs independently of the GUI app. Closing the GUI does not stop enforcement. To update the extension after installing a new version of ClearanceKit, open Setup and click <strong>Update Extension</strong>. If jail rules are active, a warning dialog lists all currently jailed processes and explains that enforcement will pause briefly during the update.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="typical-workflow">Typical workflow</h2>
+
+<p>A typical workflow for protecting an application's data:</p>
+
+<ol>
+  <li><strong>Enable a built-in preset</strong> — navigate to <strong>App Protections</strong> and toggle on a preset such as Safari, Signal, or Messages. This immediately protects that app's data directories with curated rules.</li>
+  <li><strong>Monitor denied events</strong> — switch to the <strong>Events</strong> tab. Any process denied access to a protected path appears here in real time. Denied events also appear as inline notifications in your terminal.</li>
+  <li><strong>Refine policy</strong> — if a legitimate process is denied, expand the event row and click its code signature to add it to the allowlist, or create a more specific policy rule.</li>
+  <li><strong>Add custom protections</strong> — for apps without a built-in preset, click <strong>Add Application</strong> in App Protections. ClearanceKit auto-detects sandbox containers or runs a 60-second discovery session to capture the paths the app accesses.</li>
+  <li><strong>Confine risky processes</strong> — use <strong>Jail rules</strong> to restrict processes like package managers to a specific set of path prefixes. Any access outside the allowed set is denied regardless of other policy.</li>
+</ol>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="events">Events</h2>
+
+<p>The Events tab shows a live feed of file access events processed by the system extension.</p>
+
+<h3>Toolbar controls</h3>
+<ul>
+  <li><strong>Filter</strong> — toggle between All, Allow, and Deny to focus on the events you care about.</li>
+  <li><strong>Show default allows</strong> — when off (the default), events that matched no rule and were allowed by default are hidden. Turn this on to see all traffic.</li>
+  <li><strong>Load History</strong> — fetch buffered events from the system extension. Useful if the GUI was closed and you want to review what happened.</li>
+  <li><strong>Clear</strong> — clear all events from the list.</li>
+</ul>
+
+<h3>Event details</h3>
+<p>Each event row shows the file path, the decision (allowed or denied), a timestamp, and the operation type if it is not a file open (rename, unlink, create, truncate, copy, readdir, link, exchangedata, or clone). Click a row to expand it and see:</p>
+<ul>
+  <li><strong>Source app</strong> — the app protection or rule that evaluated this event, with its protected path prefix.</li>
+  <li><strong>Process details</strong> — PID, executable path, Team ID, and Signing ID of the process that triggered the access.</li>
+  <li><strong>Ancestor chain</strong> — the full process ancestry tree, showing each ancestor's path and code signature. This lets you trace exactly how the process was launched.</li>
+</ul>
+
+<h3>Inline allowlisting</h3>
+<p>When viewing an expanded denied event, code signatures for the process and its ancestors appear as clickable links. Clicking a signature opens a dialog to add it to the global allowlist or as an allowed process for the relevant rule. This is the fastest way to build policy from observed behaviour.</p>
+
+<div class="callout callout-info">
+  <p class="callout-title">Baseline and managed events</p>
+  <p>Events matched by baseline (built-in Apple process) or managed (MDM-delivered) rules are collapsed into compact rows with a <span class="badge badge-green">baseline</span> or <span class="badge badge-purple">managed</span> badge. Expand them to see the full decision context.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="processes">Processes</h2>
+
+<p>The Processes tab provides two views of active enforcement:</p>
+
+<h3>Jailed Processes</h3>
+<p>A hierarchical tree of all processes currently confined by jail rules. Each entry shows:</p>
+<ul>
+  <li>A green dot for active processes, grey for inactive.</li>
+  <li>The process name, executable path, and the jail rule it matched.</li>
+  <li>Child processes that inherited the jail from their parent.</li>
+  <li>A count of denied accesses, expandable to see the specific paths. Click the <strong>+</strong> button on a denied path to add it to the jail rule's allowed paths.</li>
+</ul>
+
+<h3>Denied Processes</h3>
+<p>Processes grouped by signing identity that have been denied file access by policy rules. Each group shows the process name, Team ID, Signing ID, and event count. Expand a group to see individual denied events. Click the <strong>+</strong> button to add the process to the global allowlist.</p>
+
+<p>Use <strong>Clear Inactive</strong> in the toolbar to remove entries for processes that have exited.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="process-tree">Process Tree</h2>
+
+<p>A searchable, sortable table of every running process known to the system extension. Columns include PID, PPID, process name, executable path, Signing ID, Team ID, UID, and GID. Search by any of these fields.</p>
+
+<h3>Creating rules from the Process Tree</h3>
+<p>Click any process row to open a wizard sheet with three options:</p>
+<ul>
+  <li><strong>Policy Rule</strong> — create a file access policy rule using this process's code signature.</li>
+  <li><strong>Jail Rule</strong> — create a jail rule confining this process to specific path prefixes.</li>
+  <li><strong>App Protection</strong> — if the process belongs to an app bundle, create an app protection with auto-detected paths. If no paths can be auto-detected, a discovery session starts.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="metrics">Metrics</h2>
+
+<p>Real-time performance dashboard for the system extension's event pipeline.</p>
+
+<h3>Gauges</h3>
+<p>Five gauges show 10-second rolling averages and peak rates:</p>
+<ul>
+  <li><strong>Simple events/sec</strong> — events resolved on the fast path (no ancestry needed).</li>
+  <li><strong>Ancestry events/sec</strong> — events that required process ancestry lookup.</li>
+  <li><strong>Drops/sec</strong> — events dropped due to queue pressure (auto-allowed to meet kernel deadline).</li>
+  <li><strong>Jail events/sec</strong> — events evaluated against jail rules.</li>
+  <li><strong>Jail denies/sec</strong> — jail events that were denied.</li>
+</ul>
+
+<h3>Time series chart</h3>
+<p>A 60-second rolling chart plots events per second for each category, letting you correlate spikes in file access with specific activity on your machine.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="policy-rules">Policy rules</h2>
+
+<p>Policy rules are the core building block of ClearanceKit. Each rule protects a path prefix and specifies which processes are allowed to access files under it.</p>
+
+<h3>Rule tiers</h3>
+<table>
+  <tr><th>Tier</th><th>Source</th><th>Editable</th></tr>
+  <tr><td><span class="badge badge-green">baseline</span></td><td>Compiled into the app</td><td>No</td></tr>
+  <tr><td><span class="badge badge-purple">managed</span></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
+  <tr><td>User</td><td>Created in the GUI</td><td>Yes</td></tr>
+</table>
+
+<p>All tiers are active simultaneously. Rules are evaluated in merged order; the first matching rule determines the outcome.</p>
+
+<h3>Rule fields</h3>
+
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td><code>protectedPathPrefix</code></td><td>The path pattern to protect. Supports <a href="#wildcards">wildcards</a>. Any file access under this prefix triggers policy evaluation.</td></tr>
+  <tr><td><code>allowedProcessPaths</code></td><td>Exact executable paths that are allowed. No wildcards.</td></tr>
+  <tr><td><code>allowedSignatures</code></td><td><a href="#signatures">Code signatures</a> (Team ID + Signing ID) that are allowed.</td></tr>
+  <tr><td><code>allowedAncestorProcessPaths</code></td><td>If any <a href="#process-ancestry">ancestor</a> in the process chain has this exact executable path, access is allowed.</td></tr>
+  <tr><td><code>allowedAncestorSignatures</code></td><td>If any ancestor has a matching code signature, access is allowed.</td></tr>
+</table>
+
+<p>At least one <code>allowed*</code> field must be non-empty. If a file matches the protected path but no criterion matches the process, access is <strong>denied</strong>.</p>
+
+<h3>Creating a rule</h3>
+<ol>
+  <li>Navigate to <strong>Policy</strong> in the sidebar.</li>
+  <li>Click <strong>Add Rule</strong>.</li>
+  <li>Enter the protected path prefix (e.g. <code>/Users/*/Library/Safari</code>).</li>
+  <li>Add allowed processes by typing signatures manually or clicking <strong>Pick from running processes</strong> to select from the live process list.</li>
+  <li>Optionally add ancestor criteria (see <a href="#process-ancestry">process ancestry</a>).</li>
+  <li>Click <strong>Save</strong>. Touch ID is required.</li>
+</ol>
+
+<h3>Importing and exporting rules</h3>
+<p>The Policy tab toolbar has <strong>Import Rules</strong> and <strong>Export Rules</strong> buttons. Rules are serialised as JSON. This lets you share rule sets between machines without MDM, or back up your configuration.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="app-protections">App Protections</h2>
+
+<p>App Protections group related policy rules under a named application. Instead of managing individual rules, you enable or disable protection for an entire app with a single toggle.</p>
+
+<h3>Enabling a preset</h3>
+<p>Navigate to <strong>App Protections</strong>. The Built-in section lists all <a href="#built-in-presets">presets</a>. Toggle any preset on to immediately protect that app's data. Touch ID is required.</p>
+
+<p>If a preset shows <span class="badge badge-orange">update available</span>, it means the built-in definition has been updated in a newer version of ClearanceKit. Click <strong>Update</strong> to apply the latest rule set, or use <strong>Update All</strong> in the toolbar.</p>
+
+<h3>Adding a custom app protection</h3>
+<ol>
+  <li>Click <strong>Add Application</strong> (or drag an <code>.app</code> from Finder onto the list).</li>
+  <li>Select the application from the picker.</li>
+  <li>If ClearanceKit can auto-detect the app's data paths (via sandbox containers and app groups), rules are generated immediately.</li>
+  <li>If not, a <strong>discovery session</strong> starts.</li>
+</ol>
+
+<h3>Discovery sessions</h3>
+<p>When ClearanceKit cannot auto-detect an app's file paths, a 60-second discovery session begins. During this session:</p>
+<ol>
+  <li>Close and reopen the target application.</li>
+  <li>ClearanceKit captures every directory path the app accesses.</li>
+  <li>Captured paths appear in real time in the discovery panel.</li>
+  <li>Click <strong>Review</strong> to inspect the captured paths.</li>
+</ol>
+
+<p>In the review screen, you can remove paths that should not be protected and add allowed processes for each path. Click <strong>Create Protection</strong> to save.</p>
+
+<h3>Editing an app protection</h3>
+<p>Click the edit button on any custom app protection to modify its protected paths, add or remove allowed process signatures, or delete individual path entries.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="built-in-presets">Built-in presets</h2>
+
+<p>ClearanceKit ships with curated presets for popular applications. Each preset protects the app's local data directories and allows only the app's own processes (identified by code signature) to access them.</p>
+
+<table>
+  <tr><th>Preset</th><th>Protected paths</th><th>Rules</th></tr>
+  <tr>
+    <td><strong>Safari</strong></td>
+    <td>
+      <code>~/Library/Safari</code><br/>
+      <code>~/Library/Containers/com.apple.Safari</code><br/>
+      <code>~/Library/Group Containers/group.com.apple.safari</code>
+    </td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>Mail</strong></td>
+    <td>
+      <code>~/Library/Mail</code><br/>
+      <code>~/Library/Containers/com.apple.mail</code><br/>
+      <code>~/Library/Group Containers/group.com.apple.mail.shared</code>
+    </td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>Messages</strong></td>
+    <td><code>~/Library/Messages</code></td>
+    <td>1</td>
+  </tr>
+  <tr>
+    <td><strong>Contacts</strong></td>
+    <td>
+      <code>~/Library/Application Support/AddressBook</code><br/>
+      <code>~/Library/Containers/com.apple.AddressBook</code>
+    </td>
+    <td>2</td>
+  </tr>
+  <tr>
+    <td><strong>Notes</strong></td>
+    <td><code>~/Library/Group Containers/group.com.apple.notes</code></td>
+    <td>1</td>
+  </tr>
+  <tr>
+    <td><strong>Signal</strong></td>
+    <td><code>~/Library/Application Support/Signal</code></td>
+    <td>1</td>
+  </tr>
+  <tr>
+    <td><strong>Slack</strong></td>
+    <td>
+      <code>~/Library/Application Support/Slack</code><br/>
+      <code>~/Library/Caches/com.tinyspeck.slackmacgap</code>
+    </td>
+    <td>2</td>
+  </tr>
+  <tr>
+    <td><strong>Discord</strong></td>
+    <td>
+      <code>~/Library/Application Support/discord</code><br/>
+      <code>~/Library/Caches/com.hnc.Discord</code><br/>
+      <code>~/Library/Caches/com.hnc.Discord.ShipIt</code>
+    </td>
+    <td>3</td>
+  </tr>
+  <tr>
+    <td><strong>Chrome</strong></td>
+    <td>
+      <code>~/Library/Application Support/Google</code><br/>
+      <code>~/Library/Caches/Google</code>
+    </td>
+    <td>2</td>
+  </tr>
+  <tr>
+    <td><strong>HEY</strong></td>
+    <td><code>~/Library/Application Support/HEY</code></td>
+    <td>1</td>
+  </tr>
+  <tr>
+    <td><strong>Mullvad VPN</strong></td>
+    <td><code>~/Library/Application Support/Mullvad VPN</code></td>
+    <td>1</td>
+  </tr>
+</table>
+
+<div class="callout callout-info">
+  <p class="callout-title">Path notation</p>
+  <p>Paths shown as <code>~/Library/...</code> are stored as <code>/Users/*/Library/...</code> in the actual rules, using the <code>*</code> wildcard to match any username.</p>
+</div>
+
+<p>Each preset allows access only to processes signed by the app's developer. For example, the Safari preset allows <code>apple:com.apple.Safari</code>, <code>apple:com.apple.WebKit.WebContent</code>, <code>apple:com.apple.Safari.History</code>, and other Apple-signed Safari components. A trojanised binary or unrelated process attempting to read Safari's cookies will be denied.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="jail-rules">Jail rules</h2>
+
+<p>Jail rules confine a process to a specific set of path prefixes. Unlike policy rules (which protect specific paths from unauthorised processes), jail rules restrict <em>where</em> a jailed process can access <em>anything at all</em>. Any file access outside the allowed set is denied, regardless of other policy rules.</p>
+
+<h3>How jails work</h3>
+<ul>
+  <li>A jail rule matches a process by its exact code signature (Team ID + Signing ID).</li>
+  <li>When a matched process attempts to access a file, the path is checked against the rule's allowed path prefixes.</li>
+  <li>If the path matches any allowed prefix, access is granted. Otherwise it is denied.</li>
+  <li><strong>Child processes inherit their parent's jail.</strong> If a jailed process spawns a child, the child is also confined to the same allowed paths.</li>
+</ul>
+
+<div class="callout callout-warning">
+  <p class="callout-title">Wildcards are not supported in jail signatures</p>
+  <p>The jailed process signature must be exact. You cannot use <code>*</code> as the Signing ID in a jail rule. Wildcards are supported in the allowed path prefixes.</p>
+</div>
+
+<h3>Creating a jail rule</h3>
+<ol>
+  <li>Navigate to <strong>Jail</strong> in the sidebar.</li>
+  <li>Click <strong>Add Jail Rule</strong>.</li>
+  <li>Enter a name for the rule.</li>
+  <li>Enter the jailed process signature, or click <strong>Pick</strong> to select from running processes.</li>
+  <li>Add allowed path prefixes. See <a href="#jail-wildcards">jail wildcard patterns</a> for supported syntax.</li>
+  <li>Click <strong>Save</strong>. Touch ID is required.</li>
+</ol>
+
+<h3 id="jail-wildcards">Jail wildcard patterns</h3>
+<p>Allowed path prefixes in jail rules support three wildcard patterns:</p>
+
+<table>
+  <tr><th>Pattern</th><th>Meaning</th><th>Example</th></tr>
+  <tr>
+    <td><code>*</code></td>
+    <td>Matches any single path component (does not cross <code>/</code>)</td>
+    <td><code>/Users/*/Documents</code> matches <code>/Users/alice/Documents</code></td>
+  </tr>
+  <tr>
+    <td><code>**</code></td>
+    <td>Matches zero or more path components at any depth</td>
+    <td><code>/tmp/**</code> matches <code>/tmp/foo/bar/baz</code></td>
+  </tr>
+  <tr>
+    <td><code>***</code></td>
+    <td>Matches any characters within a single path component (suffix/prefix matching)</td>
+    <td><code>/dev/ttys***</code> matches <code>/dev/ttys001</code>, <code>/dev/ttysA</code></td>
+  </tr>
+</table>
+
+<h3>Importing and exporting jail rules</h3>
+<p>The Jail tab has an <strong>Import / Export</strong> button. Select which rules to export, then save as JSON. Import rules from a JSON file on another machine.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="allowlist">Allowlist</h2>
+
+<p>The global allowlist is a list of processes that bypass all policy rules entirely. Any process matching an allowlist entry is allowed to access any file, regardless of policy rules or jail rules.</p>
+
+<h3>Allowlist tiers</h3>
+
+<table>
+  <tr><th>Tier</th><th>Source</th><th>Editable</th></tr>
+  <tr><td><span class="badge badge-green">baseline</span></td><td>34 essential Apple system processes (Finder, Spotlight, apfsd, etc.) compiled into the app</td><td>No</td></tr>
+  <tr><td><span class="badge badge-purple">managed</span></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
+  <tr><td>User</td><td>Created in the GUI</td><td>Yes</td></tr>
+</table>
+
+<p>In addition to the compiled baseline, ClearanceKit automatically discovers XProtect remediator executables at startup and adds them to the allowlist.</p>
+
+<h3>Entry types</h3>
+<p>Each allowlist entry matches by one of two criteria:</p>
+<ul>
+  <li><strong>Signing ID</strong> — matches any process with that code signature. Optionally constrained by Team ID. Supports <code>*</code> as the Signing ID to match any app from a specific team.</li>
+  <li><strong>Process path</strong> — matches only the exact executable path. No wildcards, no prefix matching.</li>
+</ul>
+
+<p>An entry can also be marked as <strong>Platform Binary</strong>, which restricts it to Apple-signed binaries only.</p>
+
+<h3>Ancestor allowlist</h3>
+<p>In addition to the regular allowlist, ClearanceKit supports <strong>ancestor allowlist entries</strong>. These match against any process in the calling chain, not just the immediate process. If any ancestor matches, the immediate process bypasses all policy rules.</p>
+
+<p>This is useful for:</p>
+<ul>
+  <li>MDM agents that spawn helper tools</li>
+  <li>Security products that launch remediation binaries</li>
+  <li>CI runners that invoke build tools</li>
+</ul>
+
+<p>Add ancestor entries via the <strong>Add Ancestor Entry</strong> button in the Allowlist toolbar.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="wildcards">Wildcard patterns</h2>
+
+<p>Different parts of ClearanceKit support different wildcard syntax. This table summarises what is available where.</p>
+
+<h3>Policy rule protected paths</h3>
+<p>The <code>protectedPathPrefix</code> field supports glob-style wildcards:</p>
+
+<table>
+  <tr><th>Pattern</th><th>Meaning</th><th>Example</th></tr>
+  <tr>
+    <td><code>*</code></td>
+    <td>Any characters within a single path component</td>
+    <td><code>/Users/*/Library/Safari</code> matches <code>/Users/alice/Library/Safari/Cookies.db</code></td>
+  </tr>
+  <tr>
+    <td><code>**</code></td>
+    <td>Zero or more path components at any depth</td>
+    <td><code>/Users/**/secrets</code> matches <code>/Users/alice/projects/secrets</code></td>
+  </tr>
+  <tr>
+    <td><code>?</code></td>
+    <td>Any single character within a component</td>
+    <td><code>/data/v?/file</code> matches <code>/data/v1/file</code> but not <code>/data/v12/file</code></td>
+  </tr>
+</table>
+
+<div class="callout callout-info">
+  <p class="callout-title">Component-boundary matching</p>
+  <p>Paths without wildcards are matched as prefixes at component boundaries. <code>/Library/App/clearancekit</code> matches <code>/Library/App/clearancekit/store.db</code> but does <strong>not</strong> match <code>/Library/App/clearancekit-extra/file</code>. The match stops at the <code>/</code> separator.</p>
+</div>
+
+<h3>Allowed process paths</h3>
+<p>The <code>allowedProcessPaths</code> and <code>allowedAncestorProcessPaths</code> fields require <strong>exact matches</strong>. No wildcards or prefix matching is supported.</p>
+
+<h3>Code signatures</h3>
+<p>The <code>allowedSignatures</code> and <code>allowedAncestorSignatures</code> fields support a single wildcard:</p>
+<ul>
+  <li><code>*</code> as the Signing ID matches any app from the specified Team ID. For example, <code>EQHXZ8M8AV:*</code> matches any Google-signed binary.</li>
+  <li>No partial wildcarding (e.g. <code>com.example.*</code>) is supported; it would be treated as a literal string.</li>
+  <li>Team ID must always be exact.</li>
+</ul>
+
+<h3>Jail allowed paths</h3>
+<p>See <a href="#jail-wildcards">jail wildcard patterns</a> above. Jail rules support <code>*</code>, <code>**</code>, and the additional <code>***</code> (intra-component match).</p>
+
+<h3>Allowlist process paths</h3>
+<p>Allowlist entries that match by process path require an <strong>exact match</strong>. No wildcards.</p>
+
+<h3>Allowlist signing IDs</h3>
+<p>Allowlist entries that match by Signing ID support <code>*</code> to match any Signing ID from a given Team ID, identical to policy rule signatures.</p>
+
+<h3>Summary table</h3>
+<table>
+  <tr><th>Context</th><th><code>*</code></th><th><code>**</code></th><th><code>?</code></th><th><code>***</code></th><th>Prefix</th><th>Exact</th></tr>
+  <tr><td>Policy protected path</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Policy allowed process path</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Policy signature (Signing ID)</td><td>Yes (<code>*</code> only)</td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Jail allowed path</td><td>Yes</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Jail signature</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Allowlist process path</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Allowlist Signing ID</td><td>Yes (<code>*</code> only)</td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="signatures">Code signatures</h2>
+
+<p>ClearanceKit identifies processes by their macOS code signature, which consists of two parts:</p>
+
+<ul>
+  <li><strong>Team ID</strong> — the Apple Developer ID certificate used to sign the binary (e.g. <code>EQHXZ8M8AV</code> for Google, <code>U68MSDN6DR</code> for Signal). Apple platform binaries use <code>apple</code> as their Team ID.</li>
+  <li><strong>Signing ID</strong> — the bundle identifier or binary name embedded in the signature (e.g. <code>com.apple.Safari</code>, <code>org.whispersystems.signal-desktop</code>).</li>
+</ul>
+
+<p>Signatures are written in <code>teamID:signingID</code> format. For example:</p>
+
+<pre><code>apple:com.apple.Safari                          # Safari
+EQHXZ8M8AV:com.google.Chrome                    # Google Chrome
+U68MSDN6DR:org.whispersystems.signal-desktop     # Signal
+53Q6R32WPB:com.hnc.Discord                       # Discord
+EQHXZ8M8AV:*                                    # Any Google-signed binary</code></pre>
+
+<p>Code signatures cannot be spoofed without access to the developer's private signing key. A trojanised replacement binary carries a different signature (or no valid signature at all) and is immediately denied. Unlike file hashes, signatures remain valid across all future updates from the same developer.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="process-ancestry">Process ancestry</h2>
+
+<p>ClearanceKit maintains a live, in-memory tree of every running process with cached ancestor chains. This lets policy rules make decisions based not just on <em>who</em> is accessing a file, but on <em>who launched them</em>.</p>
+
+<h3>Why ancestry matters</h3>
+<p>A process like <code>/bin/sh</code> or <code>/usr/bin/python3</code> can be invoked by your terminal emulator, by a CI runner, or by a malicious npm postinstall script. Without ancestry, you would need to either allow or deny all instances uniformly. With ancestry, you can write rules like:</p>
+
+<ul>
+  <li>Allow <code>git</code> to read <code>~/.ssh</code> only when launched from a process signed by your trusted terminal emulator.</li>
+  <li>Allow build tools to read source files only when their ancestor chain includes your CI runner's signing identity.</li>
+  <li>Deny all access to credentials when the ancestor chain includes an unsigned process.</li>
+</ul>
+
+<h3>How ancestry is evaluated</h3>
+<p>When a policy rule has <code>allowedAncestorProcessPaths</code> or <code>allowedAncestorSignatures</code> set, ClearanceKit walks the process's ancestor chain (parent, grandparent, and so on) looking for a match. If any ancestor matches, the access is allowed.</p>
+
+<p>Ancestry evaluation is <strong>lazy</strong>. The system extension classifies each event into one of three categories:</p>
+<ol>
+  <li><strong>No rule applies</strong> — the path is not protected. No ancestry needed. Immediate allow.</li>
+  <li><strong>Process-level only</strong> — a rule matches but has no ancestor criteria. Evaluate using only the immediate process's identity.</li>
+  <li><strong>Ancestry required</strong> — a rule has ancestor criteria. Fetch the ancestor chain and evaluate.</li>
+</ol>
+
+<p>This means ancestry lookup (which is more expensive) only happens when a rule actually requires it.</p>
+
+<div class="callout callout-warning">
+  <p class="callout-title">Performance note</p>
+  <p>Rules with ancestor criteria require the system extension to look up the process tree and may add latency compared to process-level-only rules. The GUI warns you about this when adding ancestor criteria to a rule. For most workloads this is imperceptible, but avoid adding ancestry criteria to rules that match very high-frequency paths.</p>
+</div>
+
+<h3>Ancestor information</h3>
+<p>Each ancestor record includes:</p>
+<ul>
+  <li>Executable path</li>
+  <li>Team ID and Signing ID</li>
+  <li>User ID (UID) and Group ID (GID)</li>
+</ul>
+
+<p>The ancestor chain is visible in the Events tab when you expand an event row, shown as a tree structure from the immediate parent up to the root process.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="policy-evaluation">Policy evaluation order</h2>
+
+<p>When a process attempts to access a file, ClearanceKit evaluates policy in this order. The first match wins.</p>
+
+<ol>
+  <li><strong>Global allowlist</strong> — if the process matches any allowlist entry (baseline, managed, or user), access is allowed immediately. All policy rules are bypassed.</li>
+  <li><strong>Ancestor allowlist</strong> — if any ancestor of the process matches an ancestor allowlist entry, access is allowed immediately.</li>
+  <li><strong>Policy rules</strong> (merged: baseline + managed + user) — the file path is checked against each rule's protected path prefix. For the first matching rule:
+    <ol type="a">
+      <li>Check the process's executable path against <code>allowedProcessPaths</code>.</li>
+      <li>Check the process's code signature against <code>allowedSignatures</code>.</li>
+      <li>Check ancestor executable paths against <code>allowedAncestorProcessPaths</code>.</li>
+      <li>Check ancestor code signatures against <code>allowedAncestorSignatures</code>.</li>
+      <li>If any criterion matches: <strong>allowed</strong>.</li>
+      <li>If no criterion matches: <strong>denied</strong>.</li>
+    </ol>
+  </li>
+  <li><strong>No rule applies</strong> — if no rule's protected path prefix matches the file, access is allowed by default.</li>
+</ol>
+
+<p>Jail rules are evaluated by a separate, dedicated Endpoint Security client and operate independently of the above. A process confined by a jail rule is denied access to any path outside the jail's allowed set, regardless of policy rules.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="touch-id">Touch ID</h2>
+
+<p>All policy mutations — creating, editing, or deleting rules, allowlist entries, jail rules, and app protections — require Touch ID authentication. This prevents malware from programmatically modifying your policy to grant itself access.</p>
+
+<p>The user policy database is also cryptographically signed. If the signature is invalid on load (indicating potential tampering), ClearanceKit shows a dialog listing the suspect entries. You can choose to:</p>
+<ul>
+  <li><strong>Approve &amp; Sign</strong> — accept the current data and re-sign it (requires Touch ID).</li>
+  <li><strong>Clear Database</strong> — delete all user-created rules and allowlist entries and start fresh.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="mdm">MDM deployment</h2>
+
+<p>ClearanceKit supports enterprise deployment via Apple Configuration Profiles (mobileconfig). Managed policies are read from the <code>uk.craigbass.clearancekit</code> preferences domain and can be delivered by any MDM that supports managed preferences (Jamf, Kandji, Mosyle, etc.).</p>
+
+<h3>Preference keys</h3>
+
+<table>
+  <tr><th>Key</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>FAAPolicy</code></td><td>Array</td><td>File access policy rules</td></tr>
+  <tr><td><code>GlobalAllowlist</code></td><td>Array</td><td>Global allowlist entries</td></tr>
+  <tr><td><code>JailRules</code></td><td>Array</td><td>Jail rules</td></tr>
+  <tr><td><code>AppProtections</code></td><td>Array</td><td>App protection groupings (for GUI display)</td></tr>
+</table>
+
+<h3>FAAPolicy schema</h3>
+<p>Each entry in the <code>FAAPolicy</code> array:</p>
+<pre><code>{
+    "ID": "optional-uuid-string",
+    "ProtectedPathPrefix": "/Users/*/Library/Safari",
+    "AllowedProcessPaths": ["/usr/bin/example"],
+    "AllowedSignatures": ["apple:com.apple.Safari", "TEAM:*"],
+    "AllowedAncestorProcessPaths": ["/usr/bin/parent"],
+    "AllowedAncestorSignatures": ["TEAM:com.example.runner"]
+}</code></pre>
+
+<p>If <code>ID</code> is omitted, it is derived deterministically from the <code>ProtectedPathPrefix</code>.</p>
+
+<h3>GlobalAllowlist schema</h3>
+<pre><code>{
+    "ID": "optional-uuid-string",
+    "SigningID": "com.example.app",
+    "ProcessPath": "",
+    "PlatformBinary": false,
+    "TeamID": "EQHXZ8M8AV"
+}</code></pre>
+
+<p>Match by <code>SigningID</code> or <code>ProcessPath</code> (not both). If <code>PlatformBinary</code> is <code>true</code>, only Apple-signed binaries match.</p>
+
+<h3>JailRules schema</h3>
+<pre><code>{
+    "ID": "optional-uuid-string",
+    "Name": "Confine Node.js",
+    "JailedSignature": "TEAM:com.nodejs.node",
+    "AllowedPathPrefixes": ["/tmp/**", "/Users/*/Projects/**"]
+}</code></pre>
+
+<p>The <code>JailedSignature</code> must be exact (no wildcards). <code>Name</code> is required and displayed in the GUI.</p>
+
+<h3>AppProtections schema</h3>
+<pre><code>{
+    "ID": "optional-uuid-string",
+    "AppName": "Safari",
+    "BundleID": "com.apple.Safari",
+    "RuleIDs": ["uuid-of-rule-1", "uuid-of-rule-2"]
+}</code></pre>
+
+<p><code>RuleIDs</code> must reference IDs of rules defined in the <code>FAAPolicy</code> array.</p>
+
+<h3>Profile structure</h3>
+<p>The preferences must be delivered inside a <code>com.apple.ManagedClient.preferences</code> payload targeting the <code>uk.craigbass.clearancekit</code> domain. See the <a href="https://github.com/craigjbass/clearancekit">GitHub repository</a> for a complete example mobileconfig file.</p>
+
+<p>Managed rules appear in the GUI with a <span class="badge badge-purple">managed</span> badge and cannot be edited or deleted by the end user.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="export">Exporting policies</h2>
+
+<p>ClearanceKit can export policies as Apple Configuration Profiles for deployment to other machines.</p>
+
+<h3>Export as ClearanceKit mobileconfig</h3>
+<p>Navigate to the <strong>ClearanceKit (.mobileconfig)</strong> export tab. A three-step wizard lets you select:</p>
+<ol>
+  <li><strong>Policy</strong> — which rule tiers and app protections to include.</li>
+  <li><strong>Enforcement</strong> — which jail rules and allowlist entries to include.</li>
+  <li><strong>Review</strong> — summary of the export with warnings if protections reference rules not included in the export.</li>
+</ol>
+
+<h3>Export as Santa FileAccessPolicy</h3>
+<p>Navigate to the <strong>Santa</strong> export tab. This generates a Santa-compatible mobileconfig from your ClearanceKit rules. The wizard warns you about two limitations:</p>
+<ul>
+  <li><strong>Ancestry rules</strong> — Santa has no equivalent of process ancestry. Rules with ancestor criteria are flagged.</li>
+  <li><strong>Jail rules</strong> — Santa does not confine subprocesses. Jail rules are exported as file access rules, but child-process confinement is lost.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="mcp">MCP agents</h2>
+
+<p>ClearanceKit includes an optional Model Context Protocol (MCP) server that allows AI coding agents to query policy state. This is disabled by default.</p>
+
+<h3>Enabling MCP</h3>
+<p>Navigate to <strong>MCP Agents</strong> in the sidebar and toggle the server on. A security warning explains that this increases the attack surface. Disable the server when not in use.</p>
+
+<h3>Connected agents</h3>
+<p>The MCP Agents tab shows all connected agents with their client name, version, connection time, and tool call count. Click <strong>Revoke</strong> to disconnect an agent.</p>
+
+<p>The MCP socket path is displayed in the toolbar for configuring your AI agent's connection.</p>
+
+</main>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <span class="footer-copy">&copy; 2026 Craig J. Bass &mdash; MIT License</span>
+    <ul class="footer-links">
+      <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
+      <li><a href="https://github.com/craigjbass/clearancekit/releases">Releases</a></li>
+      <li><a href="https://github.com/craigjbass/clearancekit/blob/main/SECURITY.md">Security</a></li>
+      <li><a href="https://ko-fi.com/craigjbass">Support</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>
