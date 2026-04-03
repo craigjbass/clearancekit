@@ -576,7 +576,7 @@
   <tr><td><code>allowedAncestorSignatures</code></td><td>If any ancestor has a matching code signature, access is allowed.</td></tr>
 </table>
 
-<p>At least one <code>allowed*</code> field must be non-empty. If a file matches the protected path but no criterion matches the process, access is <strong>denied</strong>.</p>
+<p>If all <code>allowed*</code> fields are empty, only processes on the <a href="#allowlist">global allowlist</a> can access files under the protected path — every other process is denied. If a file matches the protected path and at least one criterion is defined, but no criterion matches the process, access is <strong>denied</strong>.</p>
 
 <h3>Creating a rule</h3>
 <ol>
