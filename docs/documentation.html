@@ -411,6 +411,7 @@
       <li><a href="#built-in-presets">Built-in presets</a></li>
       <li><a href="#jail-rules">Jail rules</a></li>
       <li><a href="#allowlist">Allowlist</a></li>
+      <li><a href="#security-products">Security products</a></li>
     </ul>
   </div>
   <div class="sidebar-group">
@@ -804,6 +805,24 @@
 </ul>
 
 <p>Add ancestor entries via the <strong>Add Ancestor Entry</strong> button in the Allowlist toolbar.</p>
+
+<h3 id="security-products">Security products and network monitors</h3>
+<p>If you run other endpoint security or network monitoring tools alongside ClearanceKit, add them to the global allowlist. These products need to inspect files across the entire file system to function correctly, and ClearanceKit's policy rules will otherwise block them from reading protected paths.</p>
+
+<div class="callout callout-warning">
+  <p class="callout-title">Add your security tools to the allowlist</p>
+  <p>Without an allowlist entry, security products will be denied access to files in protected directories, which may prevent them from detecting threats or monitoring network connections associated with those files.</p>
+</div>
+
+<p>Common examples:</p>
+
+<table>
+  <tr><th>Product</th><th>Signing ID</th><th>Team ID</th></tr>
+  <tr><td>BlockBlock</td><td><code>com.objective-see.blockblock</code></td><td><code>VBG97UB4TA</code></td></tr>
+  <tr><td>Little Snitch Network Monitor</td><td><code>at.obdev.littlesnitch.networkmonitor</code></td><td><code>MLZF7K7B5R</code></td></tr>
+</table>
+
+<p>To add one of these, navigate to <strong>Allowlist</strong>, click <strong>Add Entry</strong>, select <strong>Signing ID</strong>, enter the Signing ID and Team ID from the table above, and save. You can also use the <strong>Pick from running processes</strong> button to find other security products running on your machine and add them directly.</p>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="wildcards">Wildcard patterns</h2>
