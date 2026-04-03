@@ -684,7 +684,8 @@
     /* ── RESPONSIVE ── */
     @media (max-width: 768px) {
       nav { padding: 14px 20px; }
-      .nav-links { display: none; }
+      .nav-links li { display: none; }
+      .nav-links li.nav-docs { display: block; }
       section { padding: 64px 20px; }
       .comparison-grid { grid-template-columns: 1fr; }
       .grid-2 { grid-template-columns: 1fr; }
@@ -708,7 +709,7 @@
     <li><a href="#how-it-works">How it works</a></li>
     <li><a href="#features">Features</a></li>
     <li><a href="#threats">Threats</a></li>
-    <li><a href="documentation.html">Docs</a></li>
+    <li class="nav-docs"><a href="documentation.html">Docs</a></li>
     <li><a href="#download">Download</a></li>
     <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
   </ul>
