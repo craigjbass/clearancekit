@@ -895,11 +895,14 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
 <p>ClearanceKit maintains a live, in-memory tree of every running process with cached ancestor chains. This lets policy rules make decisions based not just on <em>who</em> is accessing a file, but on <em>who launched them</em>.</p>
 
 <h3>Why ancestry matters</h3>
-<p>A process like <code>/bin/sh</code> or <code>/usr/bin/python3</code> can be invoked by your terminal emulator, by a CI runner, or by a malicious npm postinstall script. Without ancestry, you would need to either allow or deny all instances uniformly. With ancestry, you can write rules like:</p>
+<p>Many legitimate workflows involve generic system tools — <code>cp</code>, <code>ditto</code>, <code>shove</code> — that access protected paths on behalf of a trusted parent process. App updaters use these tools to replace application bundles. Anti-malware software and MDM agents spawn them to perform remediation or policy enforcement. Without ancestry, you would need to globally allowlist these tools (weakening your policy) or ask every vendor to change their update mechanism.</p>
+
+<p>With ancestry, you can allow these tools to work only when launched by a trusted parent, without any changes from the vendor:</p>
 
 <ul>
-  <li>Allow <code>git</code> to read <code>~/.ssh</code> only when launched from a process signed by your trusted terminal emulator.</li>
-  <li>Allow build tools to read source files only when their ancestor chain includes your CI runner's signing identity.</li>
+  <li>Allow <code>ditto</code> and <code>cp</code> to write to a protected app's data directory only when their ancestor chain includes the app's own updater, signed by the app vendor.</li>
+  <li>Allow MDM agent helper tools to access protected paths only when spawned by the MDM agent itself.</li>
+  <li>Allow anti-malware remediation tools to access any protected path only when launched by the security product's signed parent process.</li>
 </ul>
 
 <h3>How ancestry is evaluated</h3>
