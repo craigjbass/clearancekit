@@ -193,7 +193,7 @@ jobs:
     needs: build-and-notarize
     permissions:
       id-token: write
-      contents: read
+      contents: write
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
