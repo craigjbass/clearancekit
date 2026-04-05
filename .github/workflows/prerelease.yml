@@ -228,6 +228,7 @@ jobs:
             "artifacts/clearancekit-${VERSION_NAME}.dmg" \
             "artifacts/clearancekit-${VERSION_NAME}.dmg.sigstore" \
             "artifacts/clearancekit-${VERSION_NAME}.dmg.intoto.jsonl" \
+            --repo "$GITHUB_REPOSITORY" \
             --prerelease \
             --generate-notes \
             --title "$VERSION_NAME"

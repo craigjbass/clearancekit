@@ -211,5 +211,6 @@ jobs:
             "artifacts/clearancekit-${TAG_NAME}.dmg" \
             "artifacts/clearancekit-${TAG_NAME}.dmg.sigstore" \
             "artifacts/clearancekit-${TAG_NAME}.dmg.intoto.jsonl" \
+            --repo "$GITHUB_REPOSITORY" \
             --generate-notes \
             --title "$TAG_NAME"
