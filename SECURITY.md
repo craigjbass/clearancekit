@@ -6,7 +6,11 @@ The latest one (as in current build). I might introduce a better release version
 
 ## Reporting a Vulnerability
 
-Report the vulnerability through the GitHub Security tab "Report a vulnerability" and I will liaise.
+Report vulnerabilities privately via GitHub's private vulnerability reporting:
+https://github.com/craigjbass/clearancekit/security/advisories/new
+
+You can also use the "Report a vulnerability" button under the repository's
+[Security tab](https://github.com/craigjbass/clearancekit/security). I will liaise from there.
 
 ## Security Disclosure Guide
 
