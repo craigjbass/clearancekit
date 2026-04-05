@@ -23,24 +23,24 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
       - name: Copy screenshots into site
         run: cp Screenshots/recording.gif Screenshots/app-protections.png docs/
 
       - name: Convert app icon for site
         run: |
-          pip install Pillow -q
+          pip install --require-hashes --no-deps -r .github/workflows/pages-requirements.txt
           python3 -c "from PIL import Image; img = Image.open('clearancekit/clearancekit.icon/Assets/ChatGPT Image Jan 26, 2026 at 11_46_59 PM.png'); img.resize((512, 512), Image.LANCZOS).save('docs/logo.png', 'PNG', optimize=True)"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: docs/
 
       - name: Deploy to GitHub Pages
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

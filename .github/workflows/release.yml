@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Test
         run: |
@@ -146,7 +146,7 @@ jobs:
 
       - name: Attest build provenance
         id: attest
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: build/clearancekit-${{ github.ref_name }}.dmg
 
@@ -163,7 +163,7 @@ jobs:
           echo "hashes=${HASHES}" >> "$GITHUB_OUTPUT"
 
       - name: Upload DMG and Sigstore bundle as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-assets
           path: |
@@ -192,13 +192,13 @@ jobs:
       TAG_NAME: ${{ github.ref_name }}
     steps:
       - name: Download DMG and Sigstore bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-assets
           path: artifacts
 
       - name: Download SLSA provenance
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ${{ needs.build-and-notarize.outputs.provenance_name }}
           path: artifacts
