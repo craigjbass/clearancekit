@@ -1,4 +1,4 @@
-# ClearanceKit [![Join the chat at https://matrix.to/#/%23clearancekit:gitter.im](https://img.shields.io/badge/chat-clearancekit%3Agitter.im-46bc99)](https://matrix.to/#/%23clearancekit:gitter.im)
+# ClearanceKit [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/craigjbass/clearancekit/badge)](https://scorecard.dev/viewer/?uri=github.com/craigjbass/clearancekit)  [![Join the chat at https://matrix.to/#/%23clearancekit:gitter.im](https://img.shields.io/badge/chat-clearancekit%3Agitter.im-46bc99)](https://matrix.to/#/%23clearancekit:gitter.im)
 
 Every `npm install`, `pip install`, and `brew upgrade` executes arbitrary native code with your full file system permissions. One compromised package can silently read your SSH keys, AWS credentials, iMessages, and browser cookies. You will not know until it is too late.
 
