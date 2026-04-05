@@ -603,6 +603,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -655,6 +656,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -690,6 +692,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.opfilter;
 				PRODUCT_NAME = "$(inherited)";
@@ -726,6 +729,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.opfilter;
 				PRODUCT_NAME = "$(inherited)";
@@ -750,6 +754,7 @@
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -769,6 +774,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.craigbass.clearancekit.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
