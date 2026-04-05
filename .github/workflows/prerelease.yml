@@ -15,6 +15,7 @@ jobs:
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
       release_name: ${{ steps.version.outputs.name }}
+      provenance_name: clearancekit-${{ steps.version.outputs.name }}.dmg.intoto.jsonl
 
     steps:
       - name: Checkout
@@ -178,27 +179,55 @@ jobs:
           HASHES=$(shasum -a 256 "clearancekit-${VERSION_NAME}.dmg" | base64 | tr -d '\n')
           echo "hashes=${HASHES}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub pre-release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION_NAME: ${{ steps.version.outputs.name }}
-        run: |
-          gh release create "$VERSION_NAME" \
-            "build/clearancekit-${VERSION_NAME}.dmg" \
-            "build/clearancekit-${VERSION_NAME}.dmg.sigstore" \
-            --prerelease \
-            --generate-notes \
-            --title "$VERSION_NAME"
+      - name: Upload DMG and Sigstore bundle as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            build/clearancekit-${{ steps.version.outputs.name }}.dmg
+            build/clearancekit-${{ steps.version.outputs.name }}.dmg.sigstore
+          if-no-files-found: error
+          retention-days: 1
 
   provenance:
     needs: build-and-notarize
     permissions:
       id-token: write
-      contents: write
+      contents: read
       actions: read
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: ${{ needs.build-and-notarize.outputs.hashes }}
-      upload-assets: true
-      upload-tag-name: ${{ needs.build-and-notarize.outputs.release_name }}
-      provenance-name: clearancekit-${{ needs.build-and-notarize.outputs.release_name }}.dmg.intoto.jsonl
+      provenance-name: ${{ needs.build-and-notarize.outputs.provenance_name }}
+
+  publish:
+    needs: [build-and-notarize, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION_NAME: ${{ needs.build-and-notarize.outputs.release_name }}
+    steps:
+      - name: Download DMG and Sigstore bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: artifacts
+
+      - name: Download SLSA provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-and-notarize.outputs.provenance_name }}
+          path: artifacts
+
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$VERSION_NAME" \
+            "artifacts/clearancekit-${VERSION_NAME}.dmg" \
+            "artifacts/clearancekit-${VERSION_NAME}.dmg.sigstore" \
+            "artifacts/clearancekit-${VERSION_NAME}.dmg.intoto.jsonl" \
+            --prerelease \
+            --generate-notes \
+            --title "$VERSION_NAME"
