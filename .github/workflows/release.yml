@@ -12,6 +12,8 @@ jobs:
       id-token: write      # required for GitHub attestation
       contents: write      # required to upload release assets
       attestations: write  # required for attest-build-provenance
+    env:
+      TAG_NAME: ${{ github.ref_name }}
 
     steps:
       - name: Checkout
@@ -119,7 +121,7 @@ jobs:
           # Convert to a compressed, read-only final image
           hdiutil convert build/clearancekit-staging.dmg \
             -format UDZO \
-            -o "build/clearancekit-${{ github.ref_name }}.dmg"
+            -o "build/clearancekit-${TAG_NAME}.dmg"
           rm build/clearancekit-staging.dmg
 
       - name: Notarize DMG
@@ -130,14 +132,14 @@ jobs:
         run: |
           echo "$ASC_PRIVATE_KEY" > AuthKey.p8
           xcrun notarytool submit \
-            "build/clearancekit-${{ github.ref_name }}.dmg" \
+            "build/clearancekit-${TAG_NAME}.dmg" \
             --key AuthKey.p8 \
             --key-id "$ASC_KEY_ID" \
             --issuer "$ASC_ISSUER_ID" \
             --wait \
             --timeout 30m
           rm AuthKey.p8
-          xcrun stapler staple "build/clearancekit-${{ github.ref_name }}.dmg"
+          xcrun stapler staple "build/clearancekit-${TAG_NAME}.dmg"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
@@ -148,7 +150,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            "build/clearancekit-${{ github.ref_name }}.dmg" \
+          gh release create "$TAG_NAME" \
+            "build/clearancekit-${TAG_NAME}.dmg" \
             --generate-notes \
-            --title "${{ github.ref_name }}"
+            --title "$TAG_NAME"
