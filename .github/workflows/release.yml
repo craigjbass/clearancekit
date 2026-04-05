@@ -14,6 +14,8 @@ jobs:
       attestations: write  # required for attest-build-provenance
     env:
       TAG_NAME: ${{ github.ref_name }}
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
 
     steps:
       - name: Checkout
@@ -142,9 +144,22 @@ jobs:
           xcrun stapler staple "build/clearancekit-${TAG_NAME}.dmg"
 
       - name: Attest build provenance
+        id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: build/clearancekit-${{ github.ref_name }}.dmg
+
+      - name: Stage Sigstore bundle as release asset
+        run: |
+          cp "${{ steps.attest.outputs.bundle-path }}" \
+             "build/clearancekit-${TAG_NAME}.dmg.sigstore"
+
+      - name: Compute artifact hashes for SLSA provenance
+        id: hash
+        run: |
+          cd build
+          HASHES=$(shasum -a 256 "clearancekit-${TAG_NAME}.dmg" | base64 | tr -d '\n')
+          echo "hashes=${HASHES}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         env:
@@ -152,5 +167,19 @@ jobs:
         run: |
           gh release create "$TAG_NAME" \
             "build/clearancekit-${TAG_NAME}.dmg" \
+            "build/clearancekit-${TAG_NAME}.dmg.sigstore" \
             --generate-notes \
             --title "$TAG_NAME"
+
+  provenance:
+    needs: build-and-notarize
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.build-and-notarize.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ github.ref_name }}
+      provenance-name: clearancekit-${{ github.ref_name }}.dmg.intoto.jsonl
