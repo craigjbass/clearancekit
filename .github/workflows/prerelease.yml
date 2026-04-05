@@ -12,6 +12,9 @@ jobs:
       id-token: write
       contents: write
       attestations: write
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      release_name: ${{ steps.version.outputs.name }}
 
     steps:
       - name: Checkout
@@ -154,16 +157,48 @@ jobs:
           xcrun stapler staple "build/clearancekit-${{ steps.version.outputs.name }}.dmg"
 
       - name: Attest build provenance
+        id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: build/clearancekit-${{ steps.version.outputs.name }}.dmg
 
+      - name: Stage Sigstore bundle as release asset
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          cp "${{ steps.attest.outputs.bundle-path }}" \
+             "build/clearancekit-${VERSION_NAME}.dmg.sigstore"
+
+      - name: Compute artifact hashes for SLSA provenance
+        id: hash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          cd build
+          HASHES=$(shasum -a 256 "clearancekit-${VERSION_NAME}.dmg" | base64 | tr -d '\n')
+          echo "hashes=${HASHES}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
-          gh release create "${{ steps.version.outputs.name }}" \
-            "build/clearancekit-${{ steps.version.outputs.name }}.dmg" \
+          gh release create "$VERSION_NAME" \
+            "build/clearancekit-${VERSION_NAME}.dmg" \
+            "build/clearancekit-${VERSION_NAME}.dmg.sigstore" \
             --prerelease \
             --generate-notes \
-            --title "${{ steps.version.outputs.name }}"
+            --title "$VERSION_NAME"
+
+  provenance:
+    needs: build-and-notarize
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.build-and-notarize.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ needs.build-and-notarize.outputs.release_name }}
+      provenance-name: clearancekit-${{ needs.build-and-notarize.outputs.release_name }}.dmg.intoto.jsonl
