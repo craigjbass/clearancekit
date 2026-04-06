@@ -24,7 +24,7 @@ final class MCPSessionStore: ObservableObject {
 
     @Published private(set) var activeSessions: [MCPSession] = []
 
-    /// Prompts for Touch ID, then registers the connection as an active session.
+    /// Prompts for authentication, then registers the connection as an active session.
     /// Throws if authentication is cancelled or fails.
     func issueSession(
         clientName: String,

@@ -9,11 +9,11 @@ enum BiometricAuth {
     static func authenticate(reason: String) async throws {
         let context = LAContext()
         var canError: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &canError) else {
-            throw canError ?? LAError(.biometryNotAvailable)
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &canError) else {
+            throw canError ?? LAError(.passcodeNotSet)
         }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, error in
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
                 if success {
                     continuation.resume()
                 } else {
@@ -21,5 +21,10 @@ enum BiometricAuth {
                 }
             }
         }
+    }
+
+    static func isUserCancellation(_ error: Error) -> Bool {
+        guard let laError = error as? LAError else { return false }
+        return laError.code == .userCancel || laError.code == .systemCancel
     }
 }

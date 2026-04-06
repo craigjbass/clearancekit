@@ -11,6 +11,7 @@ struct AllowlistView: View {
     @State private var isAddingAncestorEntry = false
     @State private var editingEntry: AllowlistEntry? = nil
     @State private var editingAncestorEntry: AncestorAllowlistEntry? = nil
+    @State private var authError: Error? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +25,9 @@ struct AllowlistView: View {
                     do {
                         try await allowlistStore.add(entry)
                         isAddingEntry = false
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 isAddingEntry = false
@@ -36,7 +39,9 @@ struct AllowlistView: View {
                     do {
                         try await allowlistStore.addAncestor(entry)
                         isAddingAncestorEntry = false
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 isAddingAncestorEntry = false
@@ -48,7 +53,9 @@ struct AllowlistView: View {
                     do {
                         try await allowlistStore.update(updated)
                         editingEntry = nil
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 editingEntry = nil
@@ -60,10 +67,22 @@ struct AllowlistView: View {
                     do {
                         try await allowlistStore.updateAncestor(updated)
                         editingAncestorEntry = nil
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 editingAncestorEntry = nil
+            }
+        }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
             }
         }
     }
@@ -103,7 +122,13 @@ struct AllowlistView: View {
                         AllowlistEntryRow(entry: entry, source: .user, isEditable: true, onEdit: {
                             editingEntry = entry
                         }, onDelete: {
-                            Task { try? await allowlistStore.remove(entry) }
+                            Task {
+                                do {
+                                    try await allowlistStore.remove(entry)
+                                } catch {
+                                    if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                }
+                            }
                         })
                         .padding(.vertical, 4)
                     }
@@ -123,7 +148,13 @@ struct AllowlistView: View {
                         AncestorAllowlistEntryRow(entry: entry, isEditable: true, onEdit: {
                             editingAncestorEntry = entry
                         }, onDelete: {
-                            Task { try? await allowlistStore.removeAncestor(entry) }
+                            Task {
+                                do {
+                                    try await allowlistStore.removeAncestor(entry)
+                                } catch {
+                                    if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                }
+                            }
                         })
                         .padding(.vertical, 4)
                     }

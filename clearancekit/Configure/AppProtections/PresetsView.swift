@@ -78,7 +78,7 @@ struct PresetsView: View {
                 let allRules = driftedPresets.flatMap(\.rules)
                 try await PolicyStore.shared.updateAll(allRules, reason: "Update all app protections to latest definitions")
             } catch {
-                // Touch ID cancelled — no state change needed.
+                if !BiometricAuth.isUserCancellation(error) { errorMessage = error.localizedDescription }
             }
         }
     }
@@ -252,6 +252,7 @@ private struct CustomProtectionRow: View {
     @State private var isToggling = false
     @State private var isUpdating = false
     @State private var showFettle = false
+    @State private var authError: Error? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -277,7 +278,13 @@ private struct CustomProtectionRow: View {
             .buttonStyle(.borderless)
 
             Button {
-                Task { try? await AppProtectionStore.shared.remove(protection) }
+                Task {
+                    do {
+                        try await AppProtectionStore.shared.remove(protection)
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
+                }
             } label: {
                 Image(systemName: "trash")
                     .foregroundColor(.red)
@@ -297,10 +304,24 @@ private struct CustomProtectionRow: View {
                 isUpdating = true
                 Task {
                     defer { isUpdating = false }
-                    try? await AppProtectionStore.shared.update(protection, from: updatedDraft)
+                    do {
+                        try await AppProtectionStore.shared.update(protection, from: updatedDraft)
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 showFettle = false
+            }
+        }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
             }
         }
     }
@@ -338,8 +359,7 @@ private struct CustomProtectionRow: View {
                     try await AppProtectionStore.shared.disable(protection)
                 }
             } catch {
-                // Touch ID cancelled or failed — no state change needed since
-                // stores only update on success.
+                if !BiometricAuth.isUserCancellation(error) { authError = error }
             }
         }
     }
@@ -395,6 +415,7 @@ private struct PresetRow: View {
 
     @State private var isToggling = false
     @State private var isUpdating = false
+    @State private var authError: Error? = nil
 
     private var enabledState: AppPreset.EnabledState {
         preset.enabledState(in: userRules)
@@ -446,6 +467,16 @@ private struct PresetRow: View {
             .labelsHidden()
             .disabled(isToggling)
         }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
+            }
+        }
     }
 
     private func badge(_ label: String, color: Color) -> some View {
@@ -469,8 +500,7 @@ private struct PresetRow: View {
                     try await PolicyStore.shared.removeAll(preset.rules, reason: "Disable \(preset.appName) data protection")
                 }
             } catch {
-                // Touch ID cancelled or failed — no state change needed since
-                // PolicyStore only updates on success.
+                if !BiometricAuth.isUserCancellation(error) { authError = error }
             }
         }
     }
@@ -482,7 +512,7 @@ private struct PresetRow: View {
             do {
                 try await PolicyStore.shared.updateAll(preset.rules, reason: "Update \(preset.appName) data protection to latest definition")
             } catch {
-                // Touch ID cancelled — no state change needed.
+                if !BiometricAuth.isUserCancellation(error) { authError = error }
             }
         }
     }

@@ -13,6 +13,7 @@ struct JailView: View {
     @State private var editingRule: JailRule?
     @State private var showAddSheet = false
     @State private var showImportExport = false
+    @State private var authError: Error? = nil
 
     private var isEmpty: Bool {
         store.userRules.isEmpty && store.managedRules.isEmpty
@@ -39,7 +40,13 @@ struct JailView: View {
                         Section("User Jail Rules") {
                             ForEach(store.userRules) { rule in
                                 JailRuleRow(rule: rule, onEdit: { editingRule = rule }, onDelete: {
-                                    Task { try? await store.remove(rule) }
+                                    Task {
+                                        do {
+                                            try await store.remove(rule)
+                                        } catch {
+                                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                        }
+                                    }
                                 })
                             }
                         }
@@ -69,12 +76,34 @@ struct JailView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             JailRuleEditView { rule in
-                Task { try? await store.add(rule) }
+                Task {
+                    do {
+                        try await store.add(rule)
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
+                }
             }
         }
         .sheet(item: $editingRule) { rule in
             JailRuleEditView(existingRule: rule) { updated in
-                Task { try? await store.update(updated) }
+                Task {
+                    do {
+                        try await store.update(updated)
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
+                }
+            }
+        }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
             }
         }
     }
@@ -388,7 +417,11 @@ private struct JailImportExportPopover: View {
                         ? "No new rules (all already present)"
                         : "\(count) rule(s) imported"
                 } catch {
-                    importStatusMessage = "Import cancelled"
+                    if BiometricAuth.isUserCancellation(error) {
+                        importStatusMessage = "Import cancelled"
+                    } else {
+                        importStatusMessage = "Authentication failed: \(error.localizedDescription)"
+                    }
                 }
             }
         }
