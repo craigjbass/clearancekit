@@ -41,6 +41,8 @@ let safariPreset = AppPreset(
             protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
             allowedSignatures: safariSignatures + [
                 apple("com.apple.Passwords"),
+                apple("com.apple.quicklook.ThumbnailsAgent"),
+                apple("com.apple.quicklook.thumbnail.TextExtension"),
             ]
         ),
         FAARule(
