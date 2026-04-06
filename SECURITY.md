@@ -20,7 +20,7 @@ The following areas are considered in-scope security vulnerabilities. Please rep
 
 - **Living off the land vulnerabilities in preset global allow list entries** — if a process included in the built-in global allowlist can be abused to exfiltrate data or bypass protections without modification, that is a security issue.
 - **XPC service manipulation and Touch ID / auth flow circumvention** — attacks that subvert the XPC communication between the app and the system extension, or that bypass the Touch ID / authorisation prompts to gain elevated access.
-- **Policy database manipulation** — techniques that allow an unprivileged process to alter stored policies in a way that is not reflected in the GUI or is not authorised by the user.
+- **Policy database manipulation** — techniques that allow a process not code signed by `37KMK6XFTT` to alter stored policies in a way that is not reflected in the GUI or is not authorised by the user.
 
 ### Out of scope
 
