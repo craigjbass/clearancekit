@@ -57,7 +57,7 @@ struct DatabaseSignatureIssueView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Database Signature Issue Detected")
                     .font(.headline)
-                Text("The stored data cannot be cryptographically verified and may have been tampered with. Review the policies below that would become active if you approve, then use Touch ID to sign them — or clear the database to discard all suspect data.")
+                Text("The stored data cannot be cryptographically verified and may have been tampered with. Review the policies below that would become active if you approve, then authenticate to sign them — or clear the database to discard all suspect data.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

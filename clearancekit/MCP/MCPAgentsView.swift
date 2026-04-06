@@ -27,7 +27,7 @@ struct MCPAgentsView: View {
                     ContentUnavailableView(
                         "No Connected Agents",
                         systemImage: "person.badge.key",
-                        description: Text("MCP agents authenticate via Touch ID and appear here once connected.")
+                        description: Text("MCP agents authenticate and appear here once connected.")
                     )
                 } else {
                     List(store.activeSessions) { session in

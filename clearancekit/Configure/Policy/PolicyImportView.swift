@@ -34,7 +34,7 @@ struct PolicyImportView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Import Policy Rules")
                 .font(.headline)
-            Text("The following \(rules.count) rule\(rules.count == 1 ? "" : "s") will be added to your policy. Touch ID is required to confirm.")
+            Text("The following \(rules.count) rule\(rules.count == 1 ? "" : "s") will be added to your policy. Authentication is required to confirm.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

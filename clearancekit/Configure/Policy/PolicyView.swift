@@ -15,6 +15,7 @@ struct PolicyView: View {
     @State private var isExporting = false
     @State private var importPreview: ImportPreviewItem? = nil
     @State private var importError: String? = nil
+    @State private var authError: Error? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +29,9 @@ struct PolicyView: View {
                     do {
                         try await policyStore.update(updated)
                         editingRule = nil
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 editingRule = nil
@@ -40,7 +43,9 @@ struct PolicyView: View {
                     do {
                         try await policyStore.add(rule)
                         isAddingRule = false
-                    } catch {}
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
                 }
             } onCancel: {
                 isAddingRule = false
@@ -66,6 +71,16 @@ struct PolicyView: View {
             Button("OK") { importError = nil }
         } message: {
             Text(importError ?? "")
+        }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
+            }
         }
     }
 
@@ -147,7 +162,13 @@ struct PolicyView: View {
                             RuleRow(rule: rule, source: source(for: rule), isEditable: true) {
                                 editingRule = rule
                             } onDelete: {
-                                Task { try? await policyStore.remove(rule) }
+                                Task {
+                                    do {
+                                        try await policyStore.remove(rule)
+                                    } catch {
+                                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                    }
+                                }
                             }
                             .padding(.vertical, 4)
                         }
