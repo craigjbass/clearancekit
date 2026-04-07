@@ -677,7 +677,8 @@
   }
 
   function render(allReleases, advisories) {
-    const current = allReleases.find(r => shaFromTag(r.tag_name) === activeSha);
+    const candidates = allReleases.filter(r => shaFromTag(r.tag_name) === activeSha);
+    const current = candidates.find(r => !isBeta(r)) || candidates[0];
     const releases = (current && isBeta(current)) ? allReleases : allReleases.filter(r => !isBeta(r));
     if (!releases.length) { renderError('No releases found.'); return; }
 
