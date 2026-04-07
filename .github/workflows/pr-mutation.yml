@@ -20,7 +20,7 @@ jobs:
         run: brew install muter-mutation-testing/formulae/muter
 
       - name: Run mutation tests
-        run: muter run --format json
+        run: muter run --skip-coverage --format json
 
       - name: Upload mutation test report
         if: always()
