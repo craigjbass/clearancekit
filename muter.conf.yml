@@ -1,0 +1,9 @@
+buildSystem:
+  kind: xcode
+  projectPath: clearancekit.xcodeproj
+  scheme: clearancekitTests
+  destination: "platform=macOS"
+filesToExclude:
+  - clearancekit
+  - opfilter
+  - Tests
