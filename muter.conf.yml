@@ -5,5 +5,4 @@ buildSystem:
   destination: "platform=macOS"
 filesToExclude:
   - clearancekit
-  - opfilter
   - Tests
