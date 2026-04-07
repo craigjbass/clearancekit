@@ -20,12 +20,12 @@ jobs:
         run: brew install muter-mutation-testing/formulae/muter
 
       - name: Run mutation tests
-        run: muter run --output-json muter-report.json
+        run: muter run --format json
 
       - name: Upload mutation test report
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: muter-report
-          path: muter-report.json
+          path: muterReport.json
           if-no-files-found: warn
