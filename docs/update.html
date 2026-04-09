@@ -733,6 +733,10 @@
 
     const currentTagForAdvisories = current ? current.tag_name : querySha;
 
+    const currentNotesHtml = (current && isBeta(current) && current.body) ? `
+      <div class="section-heading">Release notes</div>
+      ${releaseCard(current)}` : '';
+
     const advisoriesHtml = published.length ? `
       <div class="section-heading">Security advisories</div>
       ${published.map(a => advisoryCard(a, currentTagForAdvisories)).join('')}` : '';
@@ -741,7 +745,7 @@
       <div class="section-heading">${current && current.tag_name !== (releases[0] || {}).tag_name ? "What's new" : 'Latest release'}</div>
       ${newerReleases.map(r => releaseCard(r)).join('')}` : '';
 
-    app.innerHTML = statusHtml + advisoriesHtml + releasesHtml;
+    app.innerHTML = statusHtml + currentNotesHtml + advisoriesHtml + releasesHtml;
     wireAccordions();
   }
 
