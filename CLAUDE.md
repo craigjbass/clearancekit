@@ -1,5 +1,9 @@
 # ClearanceKit — Developer Guide
 
+## Releases
+
+**Never create GitHub releases or draft releases.** The build pipeline creates immutable releases automatically. Creating releases manually (including drafts) interferes with this process.
+
 ## Architecture
 
 ClearanceKit uses hexagonal architecture. Three distinct layers must stay separate:
