@@ -120,6 +120,11 @@ struct EventRow: View {
         return Self.baselineRuleIDs.contains(ruleID)
     }
 
+    private var displayPath: String {
+        guard let secondaryPath = event.secondaryPath else { return event.path }
+        return "\(event.path) \u{2192} \(secondaryPath)"
+    }
+
     private var isManagedEvent: Bool {
         guard let ruleID = event.matchedRuleID else { return false }
         return PolicyStore.shared.managedRules.contains { $0.id == ruleID }
@@ -192,7 +197,7 @@ struct EventRow: View {
                 HStack {
                     Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
                         .foregroundColor(event.accessAllowed ? .green : .red)
-                    Text(event.path)
+                    Text(displayPath)
                         .font(.system(.caption, design: .monospaced))
                         .lineLimit(1)
                     if event.operation != "open" {
@@ -255,7 +260,7 @@ struct EventRow: View {
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(1)
                 } else {
-                    Text(event.path)
+                    Text(displayPath)
                         .font(.system(.body, design: .monospaced))
                         .lineLimit(1)
                 }
