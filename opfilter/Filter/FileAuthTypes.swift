@@ -26,6 +26,7 @@ struct FileAuthEvent: Sendable {
     let correlationID: UUID
     let operation: FileOperation
     let path: String
+    let secondaryPath: String?
     let processIdentity: ProcessIdentity
     let processID: pid_t
     let parentPID: pid_t

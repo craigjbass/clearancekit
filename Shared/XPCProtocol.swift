@@ -65,6 +65,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let eventID: UUID
     @objc public let operation: String
     @objc public let path: String
+    @objc public let secondaryPath: String?
     @objc public let timestamp: Date
     @objc public let processID: Int32
     @objc public let processPath: String
@@ -79,6 +80,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     public init(
         operation: String = "open",
         path: String,
+        secondaryPath: String? = nil,
         timestamp: Date,
         processID: Int32,
         processPath: String,
@@ -94,6 +96,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.eventID = eventID
         self.operation = operation
         self.path = path
+        self.secondaryPath = secondaryPath
         self.timestamp = timestamp
         self.processID = processID
         self.processPath = processPath
@@ -116,6 +119,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.eventID = (coder.decodeObject(of: NSUUID.self, forKey: "eventID") as UUID?) ?? UUID()
         self.operation = (coder.decodeObject(of: NSString.self, forKey: "operation") as String?) ?? "open"
         self.path = path
+        self.secondaryPath = coder.decodeObject(of: NSString.self, forKey: "secondaryPath") as String?
         self.timestamp = timestamp
         self.processID = coder.decodeInt32(forKey: "processID")
         self.processPath = processPath
@@ -134,6 +138,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(eventID as NSUUID, forKey: "eventID")
         coder.encode(operation as NSString, forKey: "operation")
         coder.encode(path as NSString, forKey: "path")
+        if let secondaryPath { coder.encode(secondaryPath as NSString, forKey: "secondaryPath") }
         coder.encode(timestamp as NSDate, forKey: "timestamp")
         coder.encode(processID, forKey: "processID")
         coder.encode(processPath as NSString, forKey: "processPath")

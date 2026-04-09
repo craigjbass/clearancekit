@@ -26,6 +26,7 @@ struct AuditLoggerTests {
             correlationID: UUID(),
             operation: operation,
             path: path,
+            secondaryPath: nil,
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),
             processID: processID,
             parentPID: parentPID,

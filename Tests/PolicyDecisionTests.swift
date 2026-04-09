@@ -887,3 +887,118 @@ struct ClassifyPathTests {
         }
     }
 }
+
+// MARK: - classifyPaths (dual-path)
+
+@Suite("classifyPaths")
+struct ClassifyPathsTests {
+    @Test("nil secondary path delegates to single-path classifyPath")
+    func nilSecondaryPath() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/safe"])]
+        guard case .noRuleApplies = classifyPaths("/unrelated/file", secondaryPath: nil, rules: rules) else {
+            Issue.record("Expected .noRuleApplies")
+            return
+        }
+    }
+
+    @Test("returns ancestryRequired when only secondary path is protected by ancestry rule")
+    func secondaryPathProtectedByAncestryRule() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])]
+        guard case .ancestryRequired = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", rules: rules) else {
+            Issue.record("Expected .ancestryRequired")
+            return
+        }
+    }
+
+    @Test("returns most restrictive classification when both paths are protected")
+    func mostRestrictiveClassification() {
+        let rules = [
+            FAARule(protectedPathPrefix: "/simple", allowedProcessPaths: ["/safe"]),
+            FAARule(protectedPathPrefix: "/complex", allowedAncestorProcessPaths: ["/usr/bin/parent"]),
+        ]
+        guard case .ancestryRequired = classifyPaths("/simple/file", secondaryPath: "/complex/dest", rules: rules) else {
+            Issue.record("Expected .ancestryRequired from more restrictive secondary path")
+            return
+        }
+    }
+
+    @Test("returns processLevelOnly when secondary path is protected by process-level rule")
+    func secondaryPathProcessLevelOnly() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedSignatures: [ProcessSignature(teamID: "T", signingID: "*")])]
+        guard case .processLevelOnly = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", rules: rules) else {
+            Issue.record("Expected .processLevelOnly")
+            return
+        }
+    }
+}
+
+// MARK: - checkFAAPolicy (dual-path)
+
+@Suite("checkFAAPolicy dual-path")
+struct CheckFAAPolicyDualPathTests {
+    @Test("denies when only secondary path is protected and process is not allowed")
+    func deniesWhenSecondaryPathProtected() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/allowed"])]
+        let decision = checkFAAPolicy(
+            rules: rules,
+            path: "/unprotected/source",
+            secondaryPath: "/protected/dest",
+            processPath: "/unauthorized",
+            teamID: "",
+            signingID: "",
+            ancestors: []
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("allows when secondary path is protected and process is allowed")
+    func allowsWhenProcessAllowed() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/allowed"])]
+        let decision = checkFAAPolicy(
+            rules: rules,
+            path: "/unprotected/source",
+            secondaryPath: "/protected/dest",
+            processPath: "/allowed",
+            teamID: "",
+            signingID: "",
+            ancestors: []
+        )
+        #expect(decision.isAllowed)
+    }
+
+    @Test("denies when both paths are protected and process is not allowed for either")
+    func deniesBothProtected() {
+        let rules = [
+            FAARule(protectedPathPrefix: "/src", allowedProcessPaths: ["/allowed"]),
+            FAARule(protectedPathPrefix: "/dst", allowedProcessPaths: ["/allowed"]),
+        ]
+        let decision = checkFAAPolicy(
+            rules: rules,
+            path: "/src/file",
+            secondaryPath: "/dst/file",
+            processPath: "/unauthorized",
+            teamID: "",
+            signingID: "",
+            ancestors: []
+        )
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("nil secondary path behaves like single-path check")
+    func nilSecondaryPath() {
+        let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/allowed"])]
+        let decision = checkFAAPolicy(
+            rules: rules,
+            path: "/unprotected/file",
+            secondaryPath: nil,
+            processPath: "/unauthorized",
+            teamID: "",
+            signingID: "",
+            ancestors: []
+        )
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies")
+            return
+        }
+    }
+}

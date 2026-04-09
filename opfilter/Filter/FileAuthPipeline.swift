@@ -126,7 +126,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         }
 
         let rules = rulesProvider()
-        let classification = classifyPath(event.path, rules: rules)
+        let classification = classifyPaths(event.path, secondaryPath: event.secondaryPath, rules: rules)
 
         switch classification {
         case .noRuleApplies:
@@ -138,7 +138,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         case .processLevelOnly where ancestorAllowlist.isEmpty:
             let decision = evaluateAccess(
                 rules: rules, allowlist: allowlist, ancestorAllowlist: [],
-                path: event.path, processPath: event.processPath,
+                path: event.path, secondaryPath: event.secondaryPath, processPath: event.processPath,
                 teamID: event.teamID, signingID: event.signingID,
                 ancestors: []
             )
@@ -199,6 +199,7 @@ final class FileAuthPipeline: @unchecked Sendable {
             allowlist: workItem.allowlist,
             ancestorAllowlist: workItem.ancestorAllowlist,
             path: event.path,
+            secondaryPath: event.secondaryPath,
             processPath: event.processPath,
             teamID: event.teamID,
             signingID: event.signingID,

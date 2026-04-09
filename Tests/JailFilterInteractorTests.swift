@@ -48,6 +48,7 @@ private func openFileEvent(
         correlationID: UUID(),
         operation: .open,
         path: path,
+        secondaryPath: nil,
         processIdentity: identity(pid: 100),
         processID: 100,
         parentPID: 1,
@@ -72,6 +73,7 @@ private func openFileEventCapturingCache(
         correlationID: UUID(),
         operation: .open,
         path: path,
+        secondaryPath: nil,
         processIdentity: identity(pid: 100),
         processID: 100,
         parentPID: 1,
@@ -201,5 +203,37 @@ struct JailFilterInteractorTests {
         let metrics = interactor.jailMetrics()
         #expect(metrics.jailEvaluatedCount == 2)
         #expect(metrics.jailDenyCount == 1)
+    }
+
+    @Test("denies when secondary path is outside jail allowed prefixes")
+    func deniesSecondaryPathOutsideJail() {
+        let jailRule = JailRule(
+            name: "Confine App",
+            jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.jailed"),
+            allowedPathPrefixes: ["/allowed/**"]
+        )
+        let interactor = makeJailInteractor(jailRules: [jailRule])
+        var allowed: Bool?
+
+        let event = FileAuthEvent(
+            correlationID: UUID(),
+            operation: .rename,
+            path: "/allowed/source",
+            secondaryPath: "/forbidden/dest",
+            processIdentity: identity(pid: 100),
+            processID: 100,
+            parentPID: 1,
+            processPath: "/usr/bin/test",
+            teamID: "OTHER",
+            signingID: "com.child.process",
+            uid: 501,
+            gid: 20,
+            ttyPath: nil,
+            deadline: 0,
+            respond: { a, _ in allowed = a }
+        )
+        interactor.handleJailEventSync(event, jailRuleID: jailRule.id)
+
+        #expect(allowed == false)
     }
 }

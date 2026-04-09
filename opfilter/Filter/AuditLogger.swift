@@ -24,11 +24,16 @@ struct AuditLogger {
         let groupName = resolveGroupName(gid: fileEvent.gid)
         let ancestryTree = formatAncestryTree(ancestors)
 
-        return [
+        var fields = [
             "action=FILE_ACCESS",
             "policy_version=\(policyVersion)",
             "policy_name=\(decision.policyName)",
             "path=\(fileEvent.path)",
+        ]
+        if let secondaryPath = fileEvent.secondaryPath {
+            fields.append("secondary_path=\(secondaryPath)")
+        }
+        fields.append(contentsOf: [
             "access_type=\(fileEvent.operation.rawValue)",
             "decision=\(decisionTag)",
             "operation_id=\(operationID.uuidString)",
@@ -44,7 +49,8 @@ struct AuditLogger {
             "codesigning_id=\(resolveSigningID(teamID: fileEvent.teamID, signingID: fileEvent.signingID))",
             "ancestry_tree=\(ancestryTree)",
             "dwell_ns=\(dwellNanoseconds)",
-        ].joined(separator: "|")
+        ])
+        return fields.joined(separator: "|")
     }
 
     private func policyVersionString(for decision: PolicyDecision) -> String {

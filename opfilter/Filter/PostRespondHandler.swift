@@ -29,6 +29,7 @@ final class PostRespondHandler: @unchecked Sendable {
             let folderOpenEvent = FolderOpenEvent(
                 operation: fileEvent.operation.rawValue,
                 path: fileEvent.path,
+                secondaryPath: fileEvent.secondaryPath,
                 timestamp: Date(),
                 processID: fileEvent.processID,
                 processPath: fileEvent.processPath,

@@ -44,6 +44,7 @@ private func fileAuthEvent(
         correlationID: UUID(),
         operation: .open,
         path: path,
+        secondaryPath: nil,
         processIdentity: identity(),
         processID: 100,
         parentPID: 1,
@@ -326,5 +327,52 @@ struct FileAuthPipelineTests {
         #expect(m.hotPathProcessedCount == 3)
         #expect(m.hotPathRespondedCount == 3)
         #expect(m.eventBufferDropCount == 0)
+    }
+
+    @Test("denies when secondary path is protected and process is not allowed")
+    func secondaryPathDenied() {
+        let processTree = FakePipelineProcessTree()
+
+        let responded = DispatchSemaphore(value: 0)
+        var allowedResult = false
+
+        let postRespondCalled = DispatchSemaphore(value: 0)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        let event = FileAuthEvent(
+            correlationID: UUID(),
+            operation: .rename,
+            path: "/unprotected/source",
+            secondaryPath: "/protected/dest",
+            processIdentity: identity(),
+            processID: 100,
+            parentPID: 1,
+            processPath: "/usr/bin/test",
+            teamID: "",
+            signingID: "",
+            uid: 501,
+            gid: 20,
+            ttyPath: nil,
+            deadline: 0,
+            respond: { allowed, _ in
+                allowedResult = allowed
+                responded.signal()
+            }
+        )
+
+        pipeline.submit(event)
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult == false)
     }
 }

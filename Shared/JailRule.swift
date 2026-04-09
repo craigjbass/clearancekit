@@ -45,6 +45,13 @@ public func checkJailPath(rule: JailRule, path: String) -> PolicyDecision {
     return .jailDenied(ruleID: rule.id, ruleName: rule.name, allowedPrefixes: rule.allowedPathPrefixes)
 }
 
+public func checkJailPaths(rule: JailRule, path: String, secondaryPath: String?) -> PolicyDecision {
+    let primaryDecision = checkJailPath(rule: rule, path: path)
+    guard let secondaryPath else { return primaryDecision }
+    guard primaryDecision.isAllowed else { return primaryDecision }
+    return checkJailPath(rule: rule, path: secondaryPath)
+}
+
 public func checkJailPolicy(
     jailRules: [JailRule],
     path: String,

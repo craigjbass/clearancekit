@@ -186,13 +186,15 @@ final class ESInboundAdapter {
             interactor.handleFileAuth(openFileEvent(from: message, esClient: esClient, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_RENAME:
             let path = string(from: message.pointee.event.rename.source.pointee.path)
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path, correlationID: correlationID))
+            let secondaryPath = renameDestinationPath(from: message.pointee.event.rename)
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path, secondaryPath: secondaryPath, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_UNLINK:
             let path = string(from: message.pointee.event.unlink.target.pointee.path)
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_LINK:
             let path = string(from: message.pointee.event.link.source.pointee.path)
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path, correlationID: correlationID))
+            let secondaryPath = linkDestinationPath(from: message.pointee.event.link)
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path, secondaryPath: secondaryPath, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_CREATE:
             let path = createEventPath(from: message.pointee.event.create)
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path, correlationID: correlationID))
@@ -201,16 +203,19 @@ final class ESInboundAdapter {
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_COPYFILE:
             let path = string(from: message.pointee.event.copyfile.source.pointee.path)
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path, correlationID: correlationID))
+            let secondaryPath = copyfileDestinationPath(from: message.pointee.event.copyfile)
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path, secondaryPath: secondaryPath, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_READDIR:
             let path = string(from: message.pointee.event.readdir.target.pointee.path)
             interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
             let path = string(from: message.pointee.event.exchangedata.file1.pointee.path)
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path, correlationID: correlationID))
+            let secondaryPath = string(from: message.pointee.event.exchangedata.file2.pointee.path)
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path, secondaryPath: secondaryPath, correlationID: correlationID))
         case ES_EVENT_TYPE_AUTH_CLONE:
             let path = string(from: message.pointee.event.clone.source.pointee.path)
-            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path, correlationID: correlationID))
+            let secondaryPath = cloneDestinationPath(from: message.pointee.event.clone)
+            interactor.handleFileAuth(fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path, secondaryPath: secondaryPath, correlationID: correlationID))
         default:
             fatalError("Received unsubscribed ES event type: \(message.pointee.event_type.rawValue)")
         }
@@ -222,7 +227,7 @@ final class ESInboundAdapter {
             es_respond_flags_result(esClient, message, allowed ? UInt32.max : 0, cache)
             es_release_message(message)
         }
-        return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, correlationID: correlationID, respond: respond)
+        return fileAuthEvent(from: message, esClient: esClient, operation: .open, path: path, secondaryPath: nil, correlationID: correlationID, respond: respond)
     }
 
     static func fileAuthEvent(
@@ -230,13 +235,14 @@ final class ESInboundAdapter {
         esClient: OpaquePointer,
         operation: FileOperation,
         path: String,
+        secondaryPath: String? = nil,
         correlationID: UUID = UUID()
     ) -> FileAuthEvent {
         let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void = { allowed, cache in
             es_respond_auth_result(esClient, message, allowed ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
             es_release_message(message)
         }
-        return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, correlationID: correlationID, respond: respond)
+        return fileAuthEvent(from: message, esClient: esClient, operation: operation, path: path, secondaryPath: secondaryPath, correlationID: correlationID, respond: respond)
     }
 
     private static func fileAuthEvent(
@@ -244,6 +250,7 @@ final class ESInboundAdapter {
         esClient: OpaquePointer,
         operation: FileOperation,
         path: String,
+        secondaryPath: String?,
         correlationID: UUID,
         respond: @escaping @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
     ) -> FileAuthEvent {
@@ -260,6 +267,7 @@ final class ESInboundAdapter {
             correlationID: correlationID,
             operation: operation,
             path: path,
+            secondaryPath: secondaryPath,
             processIdentity: processIdentity,
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
@@ -272,6 +280,37 @@ final class ESInboundAdapter {
             deadline: message.pointee.deadline,
             respond: respond
         )
+    }
+
+    static func renameDestinationPath(from event: es_event_rename_t) -> String {
+        switch event.destination_type {
+        case ES_DESTINATION_TYPE_EXISTING_FILE:
+            return string(from: event.destination.existing_file.pointee.path)
+        case ES_DESTINATION_TYPE_NEW_PATH:
+            let dir = string(from: event.destination.new_path.dir.pointee.path)
+            let filename = string(from: event.destination.new_path.filename)
+            return "\(dir)/\(filename)"
+        default:
+            return ""
+        }
+    }
+
+    static func linkDestinationPath(from event: es_event_link_t) -> String {
+        let dir = string(from: event.target_dir.pointee.path)
+        let filename = string(from: event.target_filename)
+        return "\(dir)/\(filename)"
+    }
+
+    static func copyfileDestinationPath(from event: es_event_copyfile_t) -> String {
+        let dir = string(from: event.target_dir.pointee.path)
+        let filename = string(from: event.target_name)
+        return "\(dir)/\(filename)"
+    }
+
+    static func cloneDestinationPath(from event: es_event_clone_t) -> String {
+        let dir = string(from: event.target_dir.pointee.path)
+        let filename = string(from: event.target_name)
+        return "\(dir)/\(filename)"
     }
 
     static func createEventPath(from event: es_event_create_t) -> String {

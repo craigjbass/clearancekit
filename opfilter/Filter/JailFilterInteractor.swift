@@ -52,7 +52,7 @@ final class JailFilterInteractor: @unchecked Sendable {
             return
         }
 
-        let decision = checkJailPath(rule: rule, path: fileEvent.path)
+        let decision = checkJailPaths(rule: rule, path: fileEvent.path, secondaryPath: fileEvent.secondaryPath)
         fileEvent.respond(decision.isAllowed, false)
         jailMetricsStorage.withLock {
             $0.jailEvaluatedCount += 1

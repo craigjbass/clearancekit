@@ -321,6 +321,43 @@ struct CheckJailPathTests {
     }
 }
 
+// MARK: - checkJailPaths (dual-path)
+
+@Suite("checkJailPaths")
+struct CheckJailPathsDualPathTests {
+
+    private let rule = JailRule(
+        name: "Path Rule",
+        jailedSignature: ProcessSignature(teamID: "TEAM1", signingID: "com.example.app"),
+        allowedPathPrefixes: ["/allowed/**", "/exact"]
+    )
+
+    @Test("denies when secondary path is outside allowed prefixes")
+    func deniesSecondaryPathOutside() {
+        let decision = checkJailPaths(rule: rule, path: "/allowed/file", secondaryPath: "/forbidden/dest")
+        #expect(!decision.isAllowed)
+        #expect(decision.jailedRuleID == rule.id)
+    }
+
+    @Test("allows when both paths are within allowed prefixes")
+    func allowsBothPathsInside() {
+        let decision = checkJailPaths(rule: rule, path: "/allowed/file", secondaryPath: "/exact")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("denies when primary path is outside allowed prefixes")
+    func deniesPrimaryPathOutside() {
+        let decision = checkJailPaths(rule: rule, path: "/forbidden/src", secondaryPath: "/allowed/dest")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("nil secondary path delegates to single-path check")
+    func nilSecondaryPath() {
+        let decision = checkJailPaths(rule: rule, path: "/allowed/file", secondaryPath: nil)
+        #expect(decision.isAllowed)
+    }
+}
+
 // MARK: - checkAncestorJailPolicy
 
 @Suite("checkAncestorJailPolicy")

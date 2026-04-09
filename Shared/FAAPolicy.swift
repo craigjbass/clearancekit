@@ -345,6 +345,27 @@ public func checkFAAPolicy(
     return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
 }
 
+public func checkFAAPolicy(
+    rules: [FAARule],
+    path: String,
+    secondaryPath: String?,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision {
+    let primaryDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    guard let secondaryPath else { return primaryDecision }
+    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return moreRestrictiveDecision(primaryDecision, secondaryDecision)
+}
+
+private func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
+    if !lhs.isAllowed { return lhs }
+    if !rhs.isAllowed { return rhs }
+    return lhs
+}
+
 // MARK: - Path classification
 
 public enum PathRuleClassification {
@@ -366,6 +387,23 @@ public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassifica
     return matchingRule.requiresAncestry ? .ancestryRequired(matchingRule: matchingRule) : .processLevelOnly(matchingRule: matchingRule)
 }
 
+public func classifyPaths(_ path: String, secondaryPath: String?, rules: [FAARule]) -> PathRuleClassification {
+    let primaryClassification = classifyPath(path, rules: rules)
+    guard let secondaryPath else { return primaryClassification }
+    let secondaryClassification = classifyPath(secondaryPath, rules: rules)
+    return moreRestrictive(primaryClassification, secondaryClassification)
+}
+
+private func moreRestrictive(_ lhs: PathRuleClassification, _ rhs: PathRuleClassification) -> PathRuleClassification {
+    switch (lhs, rhs) {
+    case (.ancestryRequired, _): return lhs
+    case (_, .ancestryRequired): return rhs
+    case (.processLevelOnly, _): return lhs
+    case (_, .processLevelOnly): return rhs
+    default: return .noRuleApplies
+    }
+}
+
 // MARK: - Unified access evaluation
 
 public func evaluateAccess(
@@ -373,6 +411,7 @@ public func evaluateAccess(
     allowlist: [AllowlistEntry],
     ancestorAllowlist: [AncestorAllowlistEntry] = [],
     path: String,
+    secondaryPath: String? = nil,
     processPath: String,
     teamID: String,
     signingID: String,
@@ -388,7 +427,7 @@ public func evaluateAccess(
         }
     }
 
-    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
 }
 
 public func evaluateAccess(
