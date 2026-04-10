@@ -154,6 +154,11 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public let allowedAncestorProcessPaths: [String]
     public var allowedAncestorSignatures: [ProcessSignature]
 
+    /// When true, the rule only fires for write operations. Read-only opens
+    /// (and AUTH_READDIR) skip this rule and continue to the next match —
+    /// any process may read files under the protected path.
+    public let enforceOnWriteOnly: Bool
+
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
     }
@@ -165,7 +170,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedProcessPaths: [String] = [],
         allowedSignatures: [ProcessSignature] = [],
         allowedAncestorProcessPaths: [String] = [],
-        allowedAncestorSignatures: [ProcessSignature] = []
+        allowedAncestorSignatures: [ProcessSignature] = [],
+        enforceOnWriteOnly: Bool = false
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -174,10 +180,11 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.allowedSignatures = allowedSignatures
         self.allowedAncestorProcessPaths = allowedAncestorProcessPaths
         self.allowedAncestorSignatures = allowedAncestorSignatures
+        self.enforceOnWriteOnly = enforceOnWriteOnly
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures
+        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures, enforceOnWriteOnly
     }
 
     public init(from decoder: Decoder) throws {
@@ -189,6 +196,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedSignatures)) ?? []
         allowedAncestorProcessPaths = (try? c.decode([String].self, forKey: .allowedAncestorProcessPaths)) ?? []
         allowedAncestorSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedAncestorSignatures)) ?? []
+        enforceOnWriteOnly = (try? c.decode(Bool.self, forKey: .enforceOnWriteOnly)) ?? false
     }
 }
 
