@@ -14,7 +14,6 @@ private let safariSignatures: [ProcessSignature] = [
     apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
     apple("com.apple.SafariPlatformSupport.Helper"),
     apple("com.apple.WebKit.GPU"),
-    apple("com.apple.localizationswitcherd"),
     apple("com.apple.Safari.PasswordBreachAgent"),
     apple("com.apple.Safari.CacheDeleteExtension"),
     apple("com.apple.AuthenticationServices.Helper"),
