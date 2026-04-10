@@ -17,7 +17,7 @@
 | **SAST** | 6/10 | Medium | Partially mitigated | SAST is provided by CodeClimate on every push. The scorer does not fully recognise CodeClimate; score reflects partial detection. No additional tooling planned — CodeClimate coverage is considered sufficient for this project's risk profile. |
 | **CII-Best-Practices** | 0/10 | Low | Accepted | Apply for an OpenSSF Best Practices badge at `bestpractices.coreinfrastructure.org`. Most criteria will already be met given existing CI, security policy, and licence. Low effort, improves discoverability and scorer result. |
 | **Contributors** | 3/10 | Low | Accepted (solo project) | Score reflects single-organisation contribution. No action required — accept the score as a structural property of a solo project. Document this in the assessment so it is not confused with a real risk. |
-| **Packaging** | ? | Medium | Unknown | The scorer could not determine packaging status. If ClearanceKit ships distributable artefacts, publish them as a GitHub Release with a consistent, machine-readable naming scheme. The scorer looks for release assets to infer packaging. |
+| **Packaging** | ? | Medium | Not applicable | ClearanceKit does not publish to a package ecosystem (e.g. npm, PyPI). The check is not relevant. |
 | **Dangerous-Workflow** | 10/10 | Critical | Mitigated | No action required. |
 | **Dependency-Update-Tool** | 10/10 | High | Mitigated | No action required. |
 | **Binary-Artifacts** | 10/10 | High | Mitigated | No action required. |
