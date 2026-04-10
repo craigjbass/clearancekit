@@ -42,6 +42,7 @@ let safariPreset = AppPreset(
                 apple("com.apple.Passwords"),
                 apple("com.apple.quicklook.ThumbnailsAgent"),
                 apple("com.apple.quicklook.thumbnail.TextExtension"),
+                apple("com.apple.SafariServices"),
             ]
         ),
         FAARule(
