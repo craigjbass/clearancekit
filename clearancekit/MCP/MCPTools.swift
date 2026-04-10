@@ -109,14 +109,25 @@ enum MCPDispatcher {
         let pathPrefix = args["path_prefix"]?.stringValue
         let limit = args["limit"]?.intValue ?? 200
 
-        var events = XPCClient.shared.events
+        let allEvents = XPCClient.shared.events
+        let events: [FolderOpenEvent]
         if let prefix = pathPrefix {
-            events = events.filter { matchesPathPattern($0.path, pattern: prefix) }
+            events = allEvents.filter { matchesPathPattern($0.path, pattern: prefix) }
+        } else {
+            events = allEvents
         }
 
         if events.isEmpty {
             let note = pathPrefix.map { " matching \"\($0)\"" } ?? ""
-            return text("No events found\(note). Total events in buffer: \(XPCClient.shared.events.count)")
+            return text("No events found\(note). Total events in buffer: \(allEvents.count)")
+        }
+
+        struct DenyExample {
+            let operation: String
+            let path: String
+            let secondaryPath: String?
+            let reason: String
+            var count: Int
         }
 
         struct ProcessEntry {
@@ -126,28 +137,44 @@ enum MCPDispatcher {
             var denied: Int
             var allowed: Int
             let examplePath: String
+            var denyExamples: [String: DenyExample]
         }
 
         var processMap: [String: ProcessEntry] = [:]
         for event in events {
             let key = "\(event.teamID):\(event.signingID)"
-            if var entry = processMap[key] {
-                if event.accessAllowed { entry.allowed += 1 } else { entry.denied += 1 }
-                processMap[key] = entry
+            var entry = processMap[key] ?? ProcessEntry(
+                signingID: event.signingID,
+                teamID: event.teamID,
+                processPath: event.processPath,
+                denied: 0,
+                allowed: 0,
+                examplePath: event.path,
+                denyExamples: [:]
+            )
+            if event.accessAllowed {
+                entry.allowed += 1
             } else {
-                processMap[key] = ProcessEntry(
-                    signingID: event.signingID,
-                    teamID: event.teamID,
-                    processPath: event.processPath,
-                    denied: event.accessAllowed ? 0 : 1,
-                    allowed: event.accessAllowed ? 1 : 0,
-                    examplePath: event.path
-                )
+                entry.denied += 1
+                let dualKey = event.secondaryPath != nil ? "dual" : "single"
+                let denyKey = "\(event.operation)|\(dualKey)|\(event.decisionReason)"
+                if var existing = entry.denyExamples[denyKey] {
+                    existing.count += 1
+                    entry.denyExamples[denyKey] = existing
+                } else {
+                    entry.denyExamples[denyKey] = DenyExample(
+                        operation: event.operation,
+                        path: event.path,
+                        secondaryPath: event.secondaryPath,
+                        reason: event.decisionReason,
+                        count: 1
+                    )
+                }
             }
+            processMap[key] = entry
         }
 
-        var entries = Array(processMap.values).sorted { $0.denied > $1.denied }
-        entries = Array(entries.prefix(limit))
+        let entries = Array(processMap.values).sorted { $0.denied > $1.denied }.prefix(limit)
 
         var lines: [String] = ["Unique processes (\(entries.count)) from \(events.count) events:"]
         for entry in entries {
@@ -156,6 +183,17 @@ enum MCPDispatcher {
             lines.append("  Process: \(entry.processPath)")
             lines.append("  Events: \(entry.denied) denied, \(entry.allowed) allowed")
             if pathPrefix == nil { lines.append("  Example path: \(entry.examplePath)") }
+
+            let denyPatterns = entry.denyExamples.values.sorted { $0.count > $1.count }.prefix(5)
+            for example in denyPatterns {
+                lines.append("  Denied ×\(example.count): \(example.operation) \(example.path)")
+                if let secondary = example.secondaryPath {
+                    lines.append("    -> \(secondary)")
+                }
+                if !example.reason.isEmpty {
+                    lines.append("    reason: \(example.reason)")
+                }
+            }
         }
         return text(lines.joined(separator: "\n"))
     }
@@ -337,7 +375,7 @@ enum MCPDispatcher {
     private static var toolDefinitions: [JSONValue] {[
         toolDef(
             name: "list_events",
-            description: "List recent file access events observed by ClearanceKit, grouped by unique process. Denied events appear first — these signing IDs need to be added to the rule. Supports * wildcard in path_prefix (e.g. /Users/*/Library/Mail).",
+            description: "List recent file access events observed by ClearanceKit, grouped by unique process. Denied events appear first — these signing IDs need to be added to the rule. For each denied process, distinct deny patterns are shown with operation type, primary path, secondary path (for rename/link/copyfile/exchangedata/clone), and decision reason — the secondary path is essential for diagnosing dual-path denies. Supports * wildcard in path_prefix (e.g. /Users/*/Library/Mail).",
             params: [
                 "path_prefix": (type: "string",  description: "Path prefix filter, supports * wildcard", required: false),
                 "limit":       (type: "integer", description: "Max unique processes to return (default 200)", required: false)
