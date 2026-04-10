@@ -22,6 +22,11 @@
 //                                                       or "37KMK6XFTT:*"
 //    AllowedAncestorProcessPaths (array of strings)
 //    AllowedAncestorSignatures   (array of strings)  — same format as AllowedSignatures
+//    EnforceOnWriteOnly          (bool, optional)    — when true, the rule
+//                                                       only fires for write
+//                                                       operations; reads
+//                                                       fall through to the
+//                                                       next rule
 //
 
 import Foundation

@@ -134,6 +134,43 @@ struct ManagedPolicyRuleParserTests {
         #expect(rule?.allowedAncestorProcessPaths.isEmpty == true)
         #expect(rule?.allowedAncestorSignatures.isEmpty == true)
     }
+
+    @Test("EnforceOnWriteOnly true is parsed")
+    func enforceOnWriteOnlyTrue() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/etc/pam.d",
+            "EnforceOnWriteOnly": true,
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == true)
+    }
+
+    @Test("EnforceOnWriteOnly false is parsed")
+    func enforceOnWriteOnlyFalse() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/etc/pam.d",
+            "EnforceOnWriteOnly": false,
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == false)
+    }
+
+    @Test("absent EnforceOnWriteOnly defaults to false")
+    func enforceOnWriteOnlyAbsent() {
+        let dict: [String: Any] = ["ProtectedPathPrefix": "/etc/pam.d"]
+
+        #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == false)
+    }
+
+    @Test("EnforceOnWriteOnly with non-bool type defaults to false")
+    func enforceOnWriteOnlyWrongType() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/etc/pam.d",
+            "EnforceOnWriteOnly": "true",  // String, not Bool
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == false)
+    }
 }
 
 // MARK: - parseManagedAllowlistEntry

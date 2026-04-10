@@ -31,6 +31,7 @@ func parseManagedPolicyRule(_ dict: [String: Any]) -> FAARule? {
         allowedProcessPaths:         dict["AllowedProcessPaths"]         as? [String] ?? [],
         allowedSignatures:           parseSignatures(dict["AllowedSignatures"]         as? [String] ?? []),
         allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],
-        allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? [])
+        allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? []),
+        enforceOnWriteOnly:          dict["EnforceOnWriteOnly"] as? Bool ?? false
     )
 }

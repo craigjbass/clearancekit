@@ -114,6 +114,13 @@ when the field is set, and omits it when `false` to keep emitted plists tidy.
 The sample `scripts/clearancekit-managed-policy.mobileconfig` and the README
 schema table both gain a row for `EnforceOnWriteOnly`.
 
+### Santa export interop
+`SantaMobileconfigExporter` already emits an `AllowReadAccess` key in every
+watch item (currently hardcoded to `false`). The mapping for the new feature
+is direct: `enforceOnWriteOnly == true` → `AllowReadAccess: true` in the
+exported watch item. Tests in `Tests/SantaMobileconfigExporterTests.swift`
+gain coverage for both polarities of the field.
+
 ## GUI
 
 `RuleEditView` gains a `Toggle("Only enforce on writes")` above the Allowed
@@ -229,9 +236,11 @@ Each step is an independent commit:
 6. Update `checkFAAPolicy` test suite (PolicyDecisionTests extensions).
 7. Update `ManagedPolicyParser` for `EnforceOnWriteOnly`. Tests.
 8. Update `ClearanceKitMobileconfigExporter`. Tests.
-9. Update `RuleEditView` toggle.
-10. Update `MCPTools` add_rule / update_rule / list_rules / list_presets.
-11. README + sample mobileconfig + docs.
+9. Update `SantaMobileconfigExporter` to emit `AllowReadAccess: true` when
+   `enforceOnWriteOnly` is set. Tests.
+10. Update `RuleEditView` toggle.
+11. Update `MCPTools` add_rule / update_rule / list_rules / list_presets.
+12. README + sample mobileconfig + docs.
 
 Steps 1–5 are the load-bearing core. Steps 7–11 are surface area.
 
