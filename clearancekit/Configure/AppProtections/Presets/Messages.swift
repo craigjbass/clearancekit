@@ -19,6 +19,11 @@ private let messagesSpotlightSignatures: [ProcessSignature] = [
     apple("com.apple.mdwrite"),
 ]
 
+private let messagesQuickLookSignatures: [ProcessSignature] = [
+    apple("com.apple.quicklook.ThumbnailsAgent"),
+    apple("com.apple.quicklook.thumbnail.ImageExtension"),
+]
+
 let messagesPreset = AppPreset(
     id: "messages-data-protection",
     appName: "Messages",
@@ -28,7 +33,7 @@ let messagesPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0007-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Messages",
-            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures
+            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures + messagesQuickLookSignatures
         ),
     ]
 )
