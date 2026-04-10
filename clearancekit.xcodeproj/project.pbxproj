@@ -69,6 +69,7 @@
 				Configure/AppProtections/AppProtection.swift,
 				Configure/AppProtections/AppProtectionStore.swift,
 				Configure/AppProtections/ManagedAppProtectionLoader.swift,
+				Configure/AppProtections/Presets/Calendar.swift,
 				Configure/AppProtections/Presets/Chrome.swift,
 				Configure/AppProtections/Presets/Contacts.swift,
 				Configure/AppProtections/Presets/Discord.swift,

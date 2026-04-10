@@ -115,7 +115,16 @@ Known process candidates:
 - `com.apple.cloudd`
 - `com.apple.mds` — Spotlight
 
-**Status:** [ ] paths verified  [ ] signing IDs verified  [ ] preset written  [ ] tested
+**Status:** [x] paths verified  [x] signing IDs verified  [x] preset written  [x] tested
+
+Baked as `calendarPreset` in `clearancekit/Configure/AppProtections/Presets/Calendar.swift`.
+Empirically validated via discovery session. `/Users/*/Library/Calendars` produced no
+events during testing — omitted. Discovered signing IDs: `iCal` (Calendar.app itself),
+`calaccessd` (the primary daemon — 500+ deny events on the group container before
+allowance), `dataaccessd` (CalDAV/Exchange sync), `CalendarWeatherKitService`
+(event-location weather lookups). `iCal` had to be added to the **group container**
+rule as well as its own container — Calendar.app performs rename/clone operations
+between the two paths, and the secondary-path check fails the more-restrictive rule.
 
 ---
 
