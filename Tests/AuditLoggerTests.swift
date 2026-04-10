@@ -17,6 +17,7 @@ struct AuditLoggerTests {
         teamID: String = "TEAM1",
         signingID: String = "com.example.app",
         operation: FileOperation = .open,
+        accessKind: AccessKind = .write,
         processID: pid_t = 100,
         parentPID: pid_t = 1,
         uid: uid_t = 0,
@@ -25,6 +26,7 @@ struct AuditLoggerTests {
         FileAuthEvent(
             correlationID: UUID(),
             operation: operation,
+            accessKind: accessKind,
             path: path,
             secondaryPath: nil,
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),

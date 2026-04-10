@@ -38,11 +38,13 @@ private func fileAuthEvent(
     processPath: String = "/usr/bin/test",
     teamID: String = "",
     signingID: String = "",
+    accessKind: AccessKind = .write,
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
         correlationID: UUID(),
         operation: .open,
+        accessKind: accessKind,
         path: path,
         secondaryPath: nil,
         processIdentity: identity(),
@@ -350,6 +352,7 @@ struct FileAuthPipelineTests {
         let event = FileAuthEvent(
             correlationID: UUID(),
             operation: .rename,
+            accessKind: .write,
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
             processIdentity: identity(),

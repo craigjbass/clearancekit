@@ -84,6 +84,7 @@ private func openFileEvent(
     processPath: String = "/usr/bin/test",
     teamID: String = "",
     signingID: String = "",
+    accessKind: AccessKind = .write,
     processIdentity: ProcessIdentity? = nil,
     deadline: UInt64 = 0,
     respond: @escaping @Sendable (Bool) -> Void
@@ -91,6 +92,7 @@ private func openFileEvent(
     FileAuthEvent(
         correlationID: UUID(),
         operation: .open,
+        accessKind: accessKind,
         path: path,
         secondaryPath: nil,
         processIdentity: processIdentity ?? identity(pid: 100),
@@ -111,11 +113,13 @@ private func openFileEventCapturingCache(
     path: String,
     teamID: String = "",
     signingID: String = "",
+    accessKind: AccessKind = .write,
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
         correlationID: UUID(),
         operation: .open,
+        accessKind: accessKind,
         path: path,
         secondaryPath: nil,
         processIdentity: identity(pid: 100),

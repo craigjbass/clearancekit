@@ -25,6 +25,7 @@ enum FileOperation: String {
 struct FileAuthEvent: Sendable {
     let correlationID: UUID
     let operation: FileOperation
+    let accessKind: AccessKind
     let path: String
     let secondaryPath: String?
     let processIdentity: ProcessIdentity

@@ -42,11 +42,13 @@ private func openFileEvent(
     processPath: String = "/usr/bin/test",
     teamID: String = "",
     signingID: String = "",
+    accessKind: AccessKind = .write,
     respond: @escaping @Sendable (Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
         correlationID: UUID(),
         operation: .open,
+        accessKind: accessKind,
         path: path,
         secondaryPath: nil,
         processIdentity: identity(pid: 100),
@@ -67,11 +69,13 @@ private func openFileEventCapturingCache(
     path: String,
     teamID: String = "",
     signingID: String = "",
+    accessKind: AccessKind = .write,
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
         correlationID: UUID(),
         operation: .open,
+        accessKind: accessKind,
         path: path,
         secondaryPath: nil,
         processIdentity: identity(pid: 100),
@@ -218,6 +222,7 @@ struct JailFilterInteractorTests {
         let event = FileAuthEvent(
             correlationID: UUID(),
             operation: .rename,
+            accessKind: .write,
             path: "/allowed/source",
             secondaryPath: "/forbidden/dest",
             processIdentity: identity(pid: 100),
