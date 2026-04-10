@@ -198,6 +198,26 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedAncestorSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedAncestorSignatures)) ?? []
         enforceOnWriteOnly = (try? c.decode(Bool.self, forKey: .enforceOnWriteOnly)) ?? false
     }
+
+    /// Custom encoder that omits `enforceOnWriteOnly` when it equals the
+    /// default (`false`). This is load-bearing for `Database.canonicalRulesJSON`
+    /// signature compatibility: existing user databases were signed by a
+    /// build whose FAARule had no such field, so the only way the old
+    /// signatures still verify after upgrade is for the canonical JSON
+    /// of a default-false rule to remain byte-identical to the v1 shape.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(protectedPathPrefix, forKey: .protectedPathPrefix)
+        try c.encode(source, forKey: .source)
+        try c.encode(allowedProcessPaths, forKey: .allowedProcessPaths)
+        try c.encode(allowedSignatures, forKey: .allowedSignatures)
+        try c.encode(allowedAncestorProcessPaths, forKey: .allowedAncestorProcessPaths)
+        try c.encode(allowedAncestorSignatures, forKey: .allowedAncestorSignatures)
+        if enforceOnWriteOnly {
+            try c.encode(enforceOnWriteOnly, forKey: .enforceOnWriteOnly)
+        }
+    }
 }
 
 // MARK: - Policy
