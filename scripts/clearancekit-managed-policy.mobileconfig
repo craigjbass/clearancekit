@@ -106,6 +106,20 @@
                                         <array>
                                             <string>37KMK6XFTT:*</string>
                                         </array>
+                                        <!--
+                                            EnforceOnWriteOnly (optional, default false):
+                                            when true, the rule only fires for write
+                                            operations. Reads from any process pass
+                                            through. Use this for tamper-protection of
+                                            config files like /etc/pam.d, /etc/ssh, or
+                                            audio plugin bundles, where any process
+                                            should be able to read the file but only
+                                            specific processes should be able to modify it.
+                                        -->
+                                        <!--
+                                        <key>EnforceOnWriteOnly</key>
+                                        <true/>
+                                        -->
                                     </dict>
                                 </array>
 

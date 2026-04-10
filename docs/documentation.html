@@ -1009,10 +1009,13 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
     "AllowedProcessPaths": ["/usr/bin/example"],
     "AllowedSignatures": ["apple:com.apple.Safari", "TEAM:*"],
     "AllowedAncestorProcessPaths": ["/usr/bin/parent"],
-    "AllowedAncestorSignatures": ["TEAM:com.example.runner"]
+    "AllowedAncestorSignatures": ["TEAM:com.example.runner"],
+    "EnforceOnWriteOnly": false
 }</code></pre>
 
 <p>If <code>ID</code> is omitted, it is derived deterministically from the <code>ProtectedPathPrefix</code>.</p>
+
+<p>When <code>EnforceOnWriteOnly</code> is <code>true</code>, the rule only fires for write operations (rename, unlink, link, create, truncate, copyfile, exchangedata, clone, and opens with <code>FWRITE</code> / <code>O_APPEND</code> / <code>O_TRUNC</code>). Read-only opens fall through to the next rule. Use this for tamper-protection of config files like <code>/etc/pam.d</code>, <code>/etc/ssh</code>, or audio plugin bundles, where any process should be able to read the file but only specific processes should be able to modify it. Defaults to <code>false</code>.</p>
 
 <h3>GlobalAllowlist schema</h3>
 <pre><code>{

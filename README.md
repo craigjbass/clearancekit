@@ -193,6 +193,7 @@ Delivered as an array under the `FAAPolicy` preference key. Each entry creates a
 | `AllowedProcessPaths` | array of strings | No | Processes allowed by executable path. |
 | `AllowedAncestorSignatures` | array of strings | No | Parent processes allowed by signing identity, each in `teamID:signingID` format. |
 | `AllowedAncestorProcessPaths` | array of strings | No | Parent processes allowed by path. |
+| `EnforceOnWriteOnly` | bool | No | When `true`, the rule only fires for write operations (rename, unlink, link, create, truncate, copyfile, exchangedata, clone, and opens with `FWRITE` / `O_APPEND` / `O_TRUNC`). Read-only opens fall through to the next rule. Use this for tamper-protection of config files (`/etc/pam.d`, `/etc/ssh`, audio plugin bundles, etc.) where any process should be able to read but only specific processes should be able to modify. Defaults to `false`. |
 
 #### The `teamID:signingID` format
 
