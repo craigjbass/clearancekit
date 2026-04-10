@@ -15,7 +15,7 @@
 | **Branch-Protection** | 3/10 | High | Accepted | Force-pushes and deletion are already disabled on `main`, and branch protection applies to administrators. The remaining scorer warnings (no status checks, no PR requirement, codeowners review undetectable) all require a PR-based workflow to satisfy. These are incompatible with trunk-based development and are accepted. |
 | **Fuzzing** | 0/10 | Medium | Accepted (not feasible) | Swift fuzzing tooling does not currently integrate with OSS-Fuzz in a workable way for this project. Risk accepted. Compensating controls: comprehensive unit tests on the parsing and policy evaluation paths most likely to be affected by malformed input. |
 | **SAST** | 6/10 | Medium | Partially mitigated | SAST is provided by CodeClimate on every push. The scorer does not fully recognise CodeClimate; score reflects partial detection. No additional tooling planned — CodeClimate coverage is considered sufficient for this project's risk profile. |
-| **CII-Best-Practices** | 0/10 | Low | Accepted | Apply for an OpenSSF Best Practices badge at `bestpractices.coreinfrastructure.org`. Most criteria will already be met given existing CI, security policy, and licence. Low effort, improves discoverability and scorer result. |
+| **CII-Best-Practices** | 0/10 | Low | Consider tackling | See [CII Best Practices assessment](#cii-best-practices-assessment) below. Passing level is achievable with a small number of targeted additions. Silver and Gold are not compatible with solo trunk-based development. |
 | **Contributors** | 3/10 | Low | Accepted (solo project) | Score reflects single-organisation contribution. No action required — accept the score as a structural property of a solo project. Document this in the assessment so it is not confused with a real risk. |
 | **Packaging** | ? | Medium | Not applicable | ClearanceKit does not publish to a package ecosystem (e.g. npm, PyPI). The check is not relevant. |
 | **Dangerous-Workflow** | 10/10 | Critical | Mitigated | No action required. |
@@ -29,3 +29,38 @@
 | **License** | 10/10 | Low | Mitigated | No action required. |
 | **CI-Tests** | 10/10 | Low | Mitigated | No action required. |
 
+---
+
+## CII Best Practices Assessment
+
+The only level achievable solo on trunk-based development is **Passing** — Silver requires substantial documentation (governance, architecture, roadmap, assurance case, 80% coverage measurement) and Gold requires bus factor ≥2 and two-person review, which are incompatible with solo development.
+
+**Pass** — already met:
+
+| Criterion | Evidence |
+|---|---|
+| Description, installation, interface docs | README covers all of this in detail |
+| FLOSS licence (MIT, OSI-approved) | `LICENSE.md` |
+| Public distributed VCS with history | GitHub / git |
+| Unique version identifiers, SemVer, tagged releases | Pipeline tags every build |
+| Release notes | `--generate-notes` on every GitHub release |
+| Bug reporting process + public archive | GitHub Issues |
+| Vulnerability reporting process + private channel | `SECURITY.md` + GitHub private advisories |
+| Automated build + CI test run on every push | `prerelease.yml` runs `xcodebuild test` |
+| Static analysis | SonarCloud (badge in README) + CodeClimate |
+| No leaked credentials | Secrets via GitHub Actions secrets; scored 10/10 |
+| MITM-resistant delivery | HTTPS + notarised DMG + SLSA provenance + Sigstore bundle |
+| Developers know secure design / common errors | Evident from README threat model depth |
+| Discussion mechanism | Matrix chat linked from README |
+
+**Fail / gap** — needs addressing for Passing:
+
+| Criterion | Gap |
+|---|---|
+| `contribution` (MUST) | No `CONTRIBUTING.md` — the badge requires documenting how contributions are handled, even if the answer is "not accepted" or "maintainer-only" |
+| `vulnerability_report_response` (MUST) | `SECURITY.md` documents *where* to report but not a commitment to respond within 14 days |
+| `release_notes_vulns` (MUST) | Release notes must explicitly identify fixed vulnerabilities/CVEs where applicable — auto-generated notes won't do this |
+| `test_policy` (MUST) | A written policy that new functionality requires tests must exist in a contributor-visible location (CLAUDE.md covers this but it's not a standard contribution doc) |
+| `build_floss_tools` (SHOULD) | Xcode is proprietary — unavoidable for this platform, but the criterion is SHOULD not MUST, so this is a scoring drag not a blocker |
+
+The `release_notes_vulns` criterion will self-satisfy once a CVE is disclosed and fixed; no gap exists today since there are no known vulnerabilities.
