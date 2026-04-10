@@ -86,6 +86,12 @@ struct RuleEditView: View {
                 } header: {
                     pickerSectionHeader("Allowed Ancestor Signatures", target: .ancestorSignature)
                 }
+                Section {
+                    Toggle("Only enforce on writes", isOn: $draft.enforceOnWriteOnly)
+                } footer: {
+                    Text("When enabled, this rule only blocks operations that modify files (writes, renames, deletions, etc.). Any process may read the protected files. Use this for tamper-protection of config files where read access is not sensitive.")
+                        .foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
 
@@ -158,6 +164,7 @@ private struct DraftRule {
     var allowedSignatures: [String] = []
     var allowedAncestorProcessPaths: [String] = []
     var allowedAncestorSignatures: [String] = []
+    var enforceOnWriteOnly: Bool = false
 
     init() {}
 
@@ -167,6 +174,7 @@ private struct DraftRule {
         self.allowedSignatures = rule.allowedSignatures.map(\.description)
         self.allowedAncestorProcessPaths = rule.allowedAncestorProcessPaths
         self.allowedAncestorSignatures = rule.allowedAncestorSignatures.map(\.description)
+        self.enforceOnWriteOnly = rule.enforceOnWriteOnly
     }
 
     func toRule(preservingID id: UUID?) -> FAARule {
@@ -185,7 +193,8 @@ private struct DraftRule {
             allowedProcessPaths: nonEmpty(allowedProcessPaths),
             allowedSignatures: nonEmpty(allowedSignatures).compactMap(parseSignature),
             allowedAncestorProcessPaths: nonEmpty(allowedAncestorProcessPaths),
-            allowedAncestorSignatures: nonEmpty(allowedAncestorSignatures).compactMap(parseSignature)
+            allowedAncestorSignatures: nonEmpty(allowedAncestorSignatures).compactMap(parseSignature),
+            enforceOnWriteOnly: enforceOnWriteOnly
         )
     }
 }
