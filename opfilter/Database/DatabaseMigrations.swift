@@ -23,6 +23,7 @@ let allMigrations: [Migration] = [
     Migration(version: 3, name: "Create user ancestor allowlist table", up: migration003CreateAncestorAllowlist),
     Migration(version: 4, name: "Create user jail rules table", up: migration004CreateJailRules),
     Migration(version: 5, name: "Create feature flags table", up: migration005CreateFeatureFlags),
+    Migration(version: 6, name: "Add enforce_on_write_only column to user_rules", up: migration006AddEnforceOnWriteOnlyColumn),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -256,4 +257,18 @@ private func migration005CreateFeatureFlags(_ db: Database) {
         ]
     )
     NSLog("Migration 005: Created feature_flags table with mcp_server_enabled=false")
+}
+
+// MARK: - Migration 006: Add enforce_on_write_only column to user_rules
+//
+// Adds the column with DEFAULT 0 so existing rows materialise as
+// enforceOnWriteOnly = false. The data_signatures row for user_rules is
+// intentionally left intact: FAARule.encode(to:) omits enforceOnWriteOnly
+// when false, so the canonical JSON for every existing rule is byte-
+// identical to what the previous build signed and the existing signature
+// still verifies on first launch after upgrade.
+
+private func migration006AddEnforceOnWriteOnlyColumn(_ db: Database) {
+    db.execute("ALTER TABLE user_rules ADD COLUMN enforce_on_write_only INTEGER NOT NULL DEFAULT 0")
+    NSLog("Migration 006: Added enforce_on_write_only column to user_rules")
 }

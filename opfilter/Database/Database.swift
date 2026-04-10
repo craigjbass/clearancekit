@@ -162,7 +162,8 @@ final class Database {
         query("""
             SELECT id, protected_path_prefix,
                    allowed_process_paths, allowed_signatures,
-                   allowed_ancestor_process_paths, allowed_ancestor_signatures
+                   allowed_ancestor_process_paths, allowed_ancestor_signatures,
+                   enforce_on_write_only
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) {
@@ -194,8 +195,9 @@ final class Database {
             INSERT INTO user_rules
                 (id, protected_path_prefix,
                  allowed_process_paths, allowed_signatures,
-                 allowed_ancestor_process_paths, allowed_ancestor_signatures)
-            VALUES (?, ?, ?, ?, ?, ?)
+                 allowed_ancestor_process_paths, allowed_ancestor_signatures,
+                 enforce_on_write_only)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, bindings: [
             .text(rule.id.uuidString),
             .text(rule.protectedPathPrefix),
@@ -203,6 +205,7 @@ final class Database {
             .text(encodeSignatureArray(rule.allowedSignatures)),
             .text(encodeStringArray(rule.allowedAncestorProcessPaths)),
             .text(encodeSignatureArray(rule.allowedAncestorSignatures)),
+            .int(rule.enforceOnWriteOnly ? 1 : 0),
         ])
     }
 
@@ -218,7 +221,8 @@ final class Database {
             allowedProcessPaths: decodeStringArray(columnText(stmt, 2)),
             allowedSignatures: decodeSignatureArray(columnText(stmt, 3)),
             allowedAncestorProcessPaths: decodeStringArray(columnText(stmt, 4)),
-            allowedAncestorSignatures: decodeSignatureArray(columnText(stmt, 5))
+            allowedAncestorSignatures: decodeSignatureArray(columnText(stmt, 5)),
+            enforceOnWriteOnly: sqlite3_column_int(stmt, 6) != 0
         )
     }
 
