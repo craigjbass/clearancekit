@@ -36,6 +36,11 @@ indirect enum JSONValue: Codable, Equatable {
         return i
     }
 
+    var boolValue: Bool? {
+        guard case .bool(let b) = self else { return nil }
+        return b
+    }
+
     var arrayValue: [JSONValue]? {
         guard case .array(let a) = self else { return nil }
         return a

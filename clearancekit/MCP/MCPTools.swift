@@ -228,10 +228,18 @@ enum MCPDispatcher {
         }
         let signatures = try parseSignatures(from: args["allowed_signatures"])
         let id = args["id"]?.stringValue.flatMap { UUID(uuidString: $0) } ?? UUID()
-        let rule = FAARule(id: id, protectedPathPrefix: pathPrefix, source: .user, allowedSignatures: signatures)
+        let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? false
+        let rule = FAARule(
+            id: id,
+            protectedPathPrefix: pathPrefix,
+            source: .user,
+            allowedSignatures: signatures,
+            enforceOnWriteOnly: enforceOnWriteOnly
+        )
         try await PolicyStore.shared.add(rule)
         var lines = ["Rule added:", "  ID: \(rule.id.uuidString)", "  Path: \(pathPrefix)"]
         if !signatures.isEmpty { lines.append("  Signatures: \(signatures.map(\.description).joined(separator: ", "))") }
+        if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
         return text(lines.joined(separator: "\n"))
     }
 
@@ -247,6 +255,7 @@ enum MCPDispatcher {
             throw MCPToolError.notFound("No user rule with id \(idString)")
         }
         let signatures = try parseSignatures(from: args["allowed_signatures"])
+        let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? existing.enforceOnWriteOnly
         let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
@@ -254,10 +263,18 @@ enum MCPDispatcher {
             allowedProcessPaths: existing.allowedProcessPaths,
             allowedSignatures: signatures,
             allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorSignatures: existing.allowedAncestorSignatures
+            allowedAncestorSignatures: existing.allowedAncestorSignatures,
+            enforceOnWriteOnly: enforceOnWriteOnly
         )
         try await store.update(updated)
-        return text("Rule updated:\n  ID: \(updated.id.uuidString)\n  Path: \(updated.protectedPathPrefix)\n  Signatures: \(signatures.map(\.description).joined(separator: ", "))")
+        var lines = [
+            "Rule updated:",
+            "  ID: \(updated.id.uuidString)",
+            "  Path: \(updated.protectedPathPrefix)",
+            "  Signatures: \(signatures.map(\.description).joined(separator: ", "))",
+        ]
+        if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
+        return text(lines.joined(separator: "\n"))
     }
 
     // MARK: - remove_rule
@@ -293,7 +310,8 @@ enum MCPDispatcher {
             lines.append("\n[\(stateLabel)] \(preset.appName) — \(preset.id)")
             lines.append("  Installed: \(preset.isInstalled)")
             for rule in preset.rules {
-                lines.append("  Rule [\(rule.id.uuidString)]: \(rule.protectedPathPrefix)")
+                let writesOnlyTag = rule.enforceOnWriteOnly ? " [writes only]" : ""
+                lines.append("  Rule [\(rule.id.uuidString)]: \(rule.protectedPathPrefix)\(writesOnlyTag)")
                 if !rule.allowedSignatures.isEmpty {
                     lines.append("    Sigs: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
                 }
@@ -347,7 +365,8 @@ enum MCPDispatcher {
     }
 
     private static func formatRule(_ rule: FAARule) -> String {
-        var lines = ["  [\(rule.id.uuidString)] \(rule.protectedPathPrefix)"]
+        let writesOnlyTag = rule.enforceOnWriteOnly ? " [writes only]" : ""
+        var lines = ["  [\(rule.id.uuidString)] \(rule.protectedPathPrefix)\(writesOnlyTag)"]
         if !rule.allowedSignatures.isEmpty {
             lines.append("    Signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
         }
@@ -390,17 +409,19 @@ enum MCPDispatcher {
             name: "add_rule",
             description: "Add a new user FAA rule. Requires Touch ID. Pass allowed_signatures: [] to create a blank discovery rule — ClearanceKit will deny and log all access, letting you collect signing IDs via list_events.",
             params: [
-                "protected_path_prefix": (type: "string", description: "Path to protect (e.g. /Users/*/Library/Mail)", required: true),
-                "allowed_signatures":    (type: "array",  description: "Allowed signing IDs as [\"teamID:signingID\"]. Apple binaries: \"apple:com.apple.Foo\".", required: false),
-                "id":                    (type: "string", description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false)
+                "protected_path_prefix":  (type: "string",  description: "Path to protect (e.g. /Users/*/Library/Mail)", required: true),
+                "allowed_signatures":     (type: "array",   description: "Allowed signing IDs as [\"teamID:signingID\"]. Apple binaries: \"apple:com.apple.Foo\".", required: false),
+                "enforce_on_write_only":  (type: "boolean", description: "When true, the rule only enforces on writes (rename/unlink/link/create/truncate/copyfile/exchangedata/clone, plus opens with FWRITE/O_APPEND/O_TRUNC). Reads from any process pass through. Defaults to false.", required: false),
+                "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false)
             ]
         ),
         toolDef(
             name: "update_rule",
-            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID.",
+            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID. enforce_on_write_only is preserved from the existing rule when omitted.",
             params: [
-                "id":                 (type: "string", description: "UUID of the user rule to update", required: true),
-                "allowed_signatures": (type: "array",  description: "Complete new list of signatures as [\"teamID:signingID\"]", required: true)
+                "id":                     (type: "string",  description: "UUID of the user rule to update", required: true),
+                "allowed_signatures":     (type: "array",   description: "Complete new list of signatures as [\"teamID:signingID\"]", required: true),
+                "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false)
             ]
         ),
         toolDef(
