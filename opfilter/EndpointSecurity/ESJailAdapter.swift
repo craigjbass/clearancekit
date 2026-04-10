@@ -201,35 +201,35 @@ final class ESJailAdapter {
                     case ES_EVENT_TYPE_AUTH_RENAME:
                         let path = ESInboundAdapter.string(from: message.pointee.event.rename.source.pointee.path)
                         let secondaryPath = ESInboundAdapter.renameDestinationPath(from: message.pointee.event.rename)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .rename, accessKind: .write, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_UNLINK:
                         let path = ESInboundAdapter.string(from: message.pointee.event.unlink.target.pointee.path)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, path: path, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .unlink, accessKind: .write, path: path, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_LINK:
                         let path = ESInboundAdapter.string(from: message.pointee.event.link.source.pointee.path)
                         let secondaryPath = ESInboundAdapter.linkDestinationPath(from: message.pointee.event.link)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .link, accessKind: .write, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_CREATE:
                         let path = ESInboundAdapter.createEventPath(from: message.pointee.event.create)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, path: path, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .create, accessKind: .write, path: path, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_TRUNCATE:
                         let path = ESInboundAdapter.string(from: message.pointee.event.truncate.target.pointee.path)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, path: path, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .truncate, accessKind: .write, path: path, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_COPYFILE:
                         let path = ESInboundAdapter.string(from: message.pointee.event.copyfile.source.pointee.path)
                         let secondaryPath = ESInboundAdapter.copyfileDestinationPath(from: message.pointee.event.copyfile)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .copyfile, accessKind: .write, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_READDIR:
                         let path = ESInboundAdapter.string(from: message.pointee.event.readdir.target.pointee.path)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, path: path, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .readdir, accessKind: .read, path: path, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_EXCHANGEDATA:
                         let path = ESInboundAdapter.string(from: message.pointee.event.exchangedata.file1.pointee.path)
                         let secondaryPath = ESInboundAdapter.string(from: message.pointee.event.exchangedata.file2.pointee.path)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .exchangedata, accessKind: .write, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
                     case ES_EVENT_TYPE_AUTH_CLONE:
                         let path = ESInboundAdapter.string(from: message.pointee.event.clone.source.pointee.path)
                         let secondaryPath = ESInboundAdapter.cloneDestinationPath(from: message.pointee.event.clone)
-                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
+                        interactor.handleJailEventSync(ESInboundAdapter.fileAuthEvent(from: message, esClient: esClient, operation: .clone, accessKind: .write, path: path, secondaryPath: secondaryPath, correlationID: correlationID), jailRuleID: ruleID)
                     default:
                         fatalError("ESJailAdapter: received unsubscribed event type \(message.pointee.event_type.rawValue)")
                     }
