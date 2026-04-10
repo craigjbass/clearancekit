@@ -177,6 +177,53 @@ struct FileAuthPipelineTests {
         #expect(m.slowQueueEnqueueCount == 0)
     }
 
+    @Test("write-only rule on a read responds with cache=false (cache safety)")
+    func writeOnlyRuleReadResponseDoesNotCache() {
+        // A write-only rule covers /protected. A read of /protected/file
+        // hits .processLevelOnly because the rule's path prefix matches —
+        // the rule itself is then skipped by checkFAAPolicy because the
+        // access is a read, but the responder must still use cache=false
+        // so that a subsequent write to the same vnode by the same process
+        // re-triggers the auth callback. Caching the read-allow would let
+        // a later write bypass the rule entirely.
+        let processTree = FakePipelineProcessTree()
+
+        let responded = DispatchSemaphore(value: 0)
+        var allowedResult = false
+        var cacheResult = true  // start as true so a missing assignment fails the test
+
+        let postRespondCalled = DispatchSemaphore(value: 0)
+
+        let writeOnlyRule = FAARule(
+            protectedPathPrefix: "/protected",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [writeOnlyRule] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        let event = fileAuthEvent(path: "/protected/file", accessKind: .read) { allowed, cache in
+            allowedResult = allowed
+            cacheResult = cache
+            responded.signal()
+        }
+
+        pipeline.submit(event)
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult == true)
+        #expect(cacheResult == false)
+    }
+
     @Test("ancestry-required event enters slow queue and responds after evaluation")
     func ancestryRequiredSlowPath() {
         let processTree = FakePipelineProcessTree()
