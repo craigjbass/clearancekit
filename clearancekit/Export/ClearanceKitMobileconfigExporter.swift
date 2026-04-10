@@ -88,6 +88,9 @@ enum ClearanceKitMobileconfigExporter {
         if !rule.allowedAncestorSignatures.isEmpty {
             dict["AllowedAncestorSignatures"] = rule.allowedAncestorSignatures.map { "\($0.teamID):\($0.signingID)" }
         }
+        if rule.enforceOnWriteOnly {
+            dict["EnforceOnWriteOnly"] = true
+        }
         return dict
     }
 
