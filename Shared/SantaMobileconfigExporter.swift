@@ -122,7 +122,7 @@ public struct SantaMobileconfigExporter {
         var item: [String: Any] = [
             "Paths": [santaPathEntry(from: rule.protectedPathPrefix, forcePrefixMatch: true)],
             "Options": [
-                "AllowReadAccess": false,
+                "AllowReadAccess": rule.enforceOnWriteOnly,
                 "AuditOnly": false,
                 "RuleType": "PathsWithAllowedProcesses",
                 "BlockMessage": "Access to this path is restricted by ClearanceKit policy",

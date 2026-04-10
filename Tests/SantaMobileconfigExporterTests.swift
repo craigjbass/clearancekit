@@ -113,6 +113,35 @@ struct SantaMobileconfigExporterTests {
         #expect(options["BlockMessage"] != nil)
     }
 
+    @Test("enforceOnWriteOnly rule exports AllowReadAccess true")
+    func enforceOnWriteOnlyMapsToAllowReadAccessTrue() throws {
+        let rule = FAARule(
+            protectedPathPrefix: "/etc/pam.d",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [rule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let options = watchItem?["Options"] as? [String: Any] ?? [:]
+
+        #expect(options["AllowReadAccess"] as? Bool == true)
+    }
+
+    @Test("default rule exports AllowReadAccess false")
+    func defaultRuleMapsToAllowReadAccessFalse() throws {
+        let rule = FAARule(
+            protectedPathPrefix: "/etc/hosts",
+            allowedProcessPaths: ["/bin/cat"]
+        )
+        let result = try SantaMobileconfigExporter.export(rules: [rule], allowlist: [])
+        let items = try watchItems(from: result)
+        let watchItem = items.values.first as? [String: Any]
+        let options = watchItem?["Options"] as? [String: Any] ?? [:]
+
+        #expect(options["AllowReadAccess"] as? Bool == false)
+    }
+
     // MARK: - Process entries from rule signatures
 
     @Test("allowed signature with non-apple teamID maps to SigningID + TeamID")
