@@ -292,10 +292,12 @@ public func checkFAAPolicy(
     processPath: String,
     teamID: String,
     signingID: String,
+    accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
     for rule in rules {
         guard pathIsProtected(path, by: rule.protectedPathPrefix) else { continue }
+        if rule.enforceOnWriteOnly && accessKind == .read { continue }
 
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
@@ -346,11 +348,12 @@ public func checkFAAPolicy(
     processPath: String,
     teamID: String,
     signingID: String,
+    accessKind: AccessKind,
     ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
 ) async -> PolicyDecision {
     let needsAncestry = rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
     let ancestors = needsAncestry ? await ancestryProvider() : []
-    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }
 
 public func checkFAAPolicy(
@@ -360,11 +363,12 @@ public func checkFAAPolicy(
     processPath: String,
     teamID: String,
     signingID: String,
+    accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
-    let primaryDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    let primaryDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     guard let secondaryPath else { return primaryDecision }
-    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     return moreRestrictiveDecision(primaryDecision, secondaryDecision)
 }
 
@@ -423,6 +427,7 @@ public func evaluateAccess(
     processPath: String,
     teamID: String,
     signingID: String,
+    accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
     if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
@@ -435,7 +440,7 @@ public func evaluateAccess(
         }
     }
 
-    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }
 
 public func evaluateAccess(
@@ -446,6 +451,7 @@ public func evaluateAccess(
     processPath: String,
     teamID: String,
     signingID: String,
+    accessKind: AccessKind,
     ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
 ) async -> PolicyDecision {
     if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
@@ -456,5 +462,5 @@ public func evaluateAccess(
         rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
     let ancestors = needsAncestors ? await ancestryProvider() : []
 
-    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }

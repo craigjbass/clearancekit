@@ -140,6 +140,7 @@ final class FileAuthPipeline: @unchecked Sendable {
                 rules: rules, allowlist: allowlist, ancestorAllowlist: [],
                 path: event.path, secondaryPath: event.secondaryPath, processPath: event.processPath,
                 teamID: event.teamID, signingID: event.signingID,
+                accessKind: event.accessKind,
                 ancestors: []
             )
             event.respond(decision.isAllowed, false)
@@ -203,6 +204,7 @@ final class FileAuthPipeline: @unchecked Sendable {
             processPath: event.processPath,
             teamID: event.teamID,
             signingID: event.signingID,
+            accessKind: event.accessKind,
             ancestors: ancestors
         )
 

@@ -273,6 +273,7 @@ struct AccessEvaluationTests {
         processPath: String = "/bin/test",
         teamID: String = "",
         signingID: String = "",
+        accessKind: AccessKind = .write,
         ancestors: [AncestorInfo] = []
     ) async -> PolicyDecision {
         await evaluateAccess(
@@ -282,6 +283,7 @@ struct AccessEvaluationTests {
             processPath: processPath,
             teamID: teamID,
             signingID: signingID,
+            accessKind: accessKind,
             ancestryProvider: { ancestors }
         )
     }
@@ -634,6 +636,83 @@ struct AccessEvaluationTests {
         #expect(decision.reason.contains("process path"))
     }
 
+    // MARK: Policy evaluation — write-only rules
+
+    @Test("enforceOnWriteOnly rule allows reads from any process")
+    func writeOnlyRuleAllowsReads() async {
+        let rule = FAARule(
+            id: ruleID,
+            protectedPathPrefix: "/etc/pam.d",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+        let decision = await decide(rules: [rule], path: "/etc/pam.d/sudo", processPath: "/bin/cat", accessKind: .read)
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    @Test("enforceOnWriteOnly rule denies writes from non-allowed process")
+    func writeOnlyRuleDeniesWrites() async {
+        let rule = FAARule(
+            id: ruleID,
+            protectedPathPrefix: "/etc/pam.d",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+        let decision = await decide(rules: [rule], path: "/etc/pam.d/sudo", processPath: "/bin/evil", accessKind: .write)
+        #expect(!decision.isAllowed)
+        #expect(decision.matchedRuleID == ruleID)
+    }
+
+    @Test("enforceOnWriteOnly rule allows writes from allowed process")
+    func writeOnlyRuleAllowsAuthorisedWrites() async {
+        let rule = FAARule(
+            id: ruleID,
+            protectedPathPrefix: "/etc/pam.d",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+        let decision = await decide(
+            rules: [rule],
+            path: "/etc/pam.d/sudo",
+            processPath: "/usr/libexec/opendirectoryd",
+            teamID: "",
+            signingID: "com.apple.opendirectoryd",
+            accessKind: .write
+        )
+        #expect(decision.isAllowed)
+    }
+
+    @Test("enforceOnWriteOnly skip falls through to later rule on same path for reads")
+    func writeOnlyFallsThroughToLaterRule() async {
+        // The write-only rule is skipped on a read event. The all-access
+        // rule that follows IS evaluated and denies because /bin/cat is
+        // not on its allow list. This pins the additive semantics —
+        // write-only rules provide extra write-side protection without
+        // disabling the read protection of later rules covering the
+        // same path.
+        let writeOnly = FAARule(
+            id: UUID(),
+            protectedPathPrefix: "/etc/pam.d",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.opendirectoryd")],
+            enforceOnWriteOnly: true
+        )
+        let allAccess = FAARule(
+            id: UUID(),
+            protectedPathPrefix: "/etc/pam.d",
+            allowedProcessPaths: ["/usr/libexec/opendirectoryd"]
+        )
+        let decision = await decide(
+            rules: [writeOnly, allAccess],
+            path: "/etc/pam.d/sudo",
+            processPath: "/bin/cat",
+            accessKind: .read
+        )
+        #expect(!decision.isAllowed)
+    }
+
     // MARK: Global ancestor allowlist
 
     private func decideWithAncestorAllowlist(
@@ -644,6 +723,7 @@ struct AccessEvaluationTests {
         processPath: String = "/bin/test",
         teamID: String = "",
         signingID: String = "",
+        accessKind: AccessKind = .write,
         ancestors: [AncestorInfo]
     ) async -> PolicyDecision {
         await evaluateAccess(
@@ -654,6 +734,7 @@ struct AccessEvaluationTests {
             processPath: processPath,
             teamID: teamID,
             signingID: signingID,
+            accessKind: accessKind,
             ancestryProvider: { ancestors }
         )
     }
@@ -946,6 +1027,7 @@ struct CheckFAAPolicyDualPathTests {
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
+            accessKind: .write,
             ancestors: []
         )
         #expect(!decision.isAllowed)
@@ -961,6 +1043,7 @@ struct CheckFAAPolicyDualPathTests {
             processPath: "/allowed",
             teamID: "",
             signingID: "",
+            accessKind: .write,
             ancestors: []
         )
         #expect(decision.isAllowed)
@@ -979,6 +1062,7 @@ struct CheckFAAPolicyDualPathTests {
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
+            accessKind: .write,
             ancestors: []
         )
         #expect(!decision.isAllowed)
@@ -994,6 +1078,7 @@ struct CheckFAAPolicyDualPathTests {
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
+            accessKind: .write,
             ancestors: []
         )
         guard case .noRuleApplies = decision else {
