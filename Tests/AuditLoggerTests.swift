@@ -182,11 +182,11 @@ struct AuditLoggerTests {
         #expect(entry.contains("|codesigning_id=\(invalidSignature)|"))
     }
 
-    @Test("apple team ID sentinel is used when only signing ID is set")
-    func appleTeamIDSentinelWhenTeamIDEmpty() {
+    @Test("empty team ID is logged as-is when signing ID is set")
+    func emptyTeamIDLoggedAsIs() {
         let event = makeFileEvent(teamID: "", signingID: "com.apple.example")
         let entry = auditLogger.formatEntry(.noRuleApplies, for: event, ancestors: [], dwellNanoseconds: 0)
-        #expect(entry.contains("|team_id=\(appleTeamID)|"))
+        #expect(entry.contains("|team_id=|"))
         #expect(entry.contains("|codesigning_id=com.apple.example|"))
     }
 

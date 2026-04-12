@@ -75,7 +75,7 @@ struct AuditLogger {
 
     private func resolveTeamID(teamID: String, signingID: String) -> String {
         if teamID.isEmpty && signingID.isEmpty { return invalidSignature }
-        return teamID.isEmpty ? appleTeamID : teamID
+        return teamID
     }
 
     private func resolveSigningID(teamID: String, signingID: String) -> String {
