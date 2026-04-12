@@ -9,7 +9,8 @@ import SwiftUI
 import AppKit
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case events      = "Events"
+    case events       = "Events"
+    case tamperEvents = "Tamper Events"
     case policy      = "Policy"
     case presets     = "App Protections"
     case jail        = "Jail"
@@ -26,7 +27,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .events:      return "list.bullet"
+        case .events:       return "list.bullet"
+        case .tamperEvents: return "exclamationmark.shield"
         case .policy:      return "shield"
         case .presets:     return "lock.app.dashed"
         case .jail:        return "lock.rectangle.on.rectangle"
@@ -61,6 +63,8 @@ struct ContentView: View {
                     Section("Monitor") {
                         Label(SidebarItem.events.rawValue, systemImage: SidebarItem.events.icon)
                             .tag(SidebarItem.events)
+                        Label(SidebarItem.tamperEvents.rawValue, systemImage: SidebarItem.tamperEvents.icon)
+                            .tag(SidebarItem.tamperEvents)
                         Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
                             .tag(SidebarItem.processes)
                         Label(SidebarItem.processTree.rawValue, systemImage: SidebarItem.processTree.icon)
@@ -92,7 +96,8 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 160, ideal: 180)
             } detail: {
                 switch nav.selection {
-                case .events:      EventsWindowView()
+                case .events:       EventsWindowView()
+                case .tamperEvents: TamperEventsView()
                 case .policy:      PolicyView()
                 case .presets:     PresetsView()
                 case .jail:        JailView()

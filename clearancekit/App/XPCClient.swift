@@ -33,6 +33,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var hasServiceVersionMismatch = false
     @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
+    @Published private(set) var tamperEvents: [TamperAttemptEvent] = []
     @Published private(set) var pendingSignatureIssue: PendingSignatureIssue? = nil
     @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
     @Published private(set) var mcpEnabled = false
@@ -44,6 +45,7 @@ final class XPCClient: NSObject, ObservableObject {
     private let denyNotificationDebounce: TimeInterval = 30.0
     /// Events buffered since the last flush. Not published — only `events` triggers SwiftUI repaints.
     private var pendingEvents: [FolderOpenEvent] = []
+    private var pendingTamperEvents: [TamperAttemptEvent] = []
 
     private override init() {
         super.init()
@@ -51,6 +53,7 @@ final class XPCClient: NSObject, ObservableObject {
             while true {
                 try? await Task.sleep(for: .seconds(3))
                 self.flushPendingEvents()
+                self.flushPendingTamperEvents()
             }
         }
     }
@@ -59,6 +62,12 @@ final class XPCClient: NSObject, ObservableObject {
         guard !pendingEvents.isEmpty else { return }
         events.insert(contentsOf: pendingEvents.reversed(), at: 0)
         pendingEvents.removeAll(keepingCapacity: true)
+    }
+
+    private func flushPendingTamperEvents() {
+        guard !pendingTamperEvents.isEmpty else { return }
+        tamperEvents.insert(contentsOf: pendingTamperEvents.reversed(), at: 0)
+        pendingTamperEvents.removeAll(keepingCapacity: true)
     }
 
     func connect() {
@@ -95,6 +104,13 @@ final class XPCClient: NSObject, ObservableObject {
             argumentIndex: 0,
             ofReply: true
         )
+        let tamperClasses = NSSet(array: [TamperAttemptEvent.self, NSArray.self, NSDate.self, NSUUID.self, NSString.self]) as! Set<AnyHashable>
+        remoteInterface.setClasses(
+            tamperClasses,
+            for: #selector(ServiceProtocol.fetchRecentTamperEvents(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         conn.remoteObjectInterface = remoteInterface
 
         conn.exportedInterface = NSXPCInterface(with: ClientProtocol.self)
@@ -115,6 +131,12 @@ final class XPCClient: NSObject, ObservableObject {
         conn.exportedInterface?.setClasses(
             NSSet(array: [PipelineMetricsSnapshot.self]) as! Set<AnyHashable>,
             for: #selector(ClientProtocol.metricsUpdated(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        conn.exportedInterface?.setClasses(
+            NSSet(array: [TamperAttemptEvent.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.tamperAttemptDenied(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -479,6 +501,24 @@ final class XPCClient: NSObject, ObservableObject {
             }
         }
     }
+
+    func fetchHistoricTamperEvents() {
+        guard let conn = connection,
+              let service = conn.remoteObjectProxyWithErrorHandler({ error in
+                  logger.error("XPCClient: fetchHistoricTamperEvents error: \(error.localizedDescription, privacy: .public)")
+              }) as? ServiceProtocol else {
+            return
+        }
+        service.fetchRecentTamperEvents { [weak self] historicEvents in
+            Task { @MainActor in
+                guard let self = self else { return }
+                let existingIDs = Set((self.tamperEvents + self.pendingTamperEvents).map(\.eventID))
+                let newEvents = historicEvents.filter { !existingIDs.contains($0.eventID) }
+                self.tamperEvents.append(contentsOf: newEvents)
+                self.tamperEvents.sort { $0.timestamp > $1.timestamp }
+            }
+        }
+    }
 }
 
 // MARK: - PolicyServiceProtocol
@@ -639,6 +679,13 @@ extension XPCClient: ClientProtocol {
             if metricsHistory.count > 61 {
                 metricsHistory.removeFirst(metricsHistory.count - 61)
             }
+        }
+    }
+
+    nonisolated func tamperAttemptDenied(_ event: TamperAttemptEvent) {
+        logger.warning("XPCClient: Tamper attempt denied — PID \(event.sourcePID, privacy: .public) signingID: \(event.signingID, privacy: .public)")
+        Task { @MainActor in
+            self.pendingTamperEvents.append(event)
         }
     }
 }

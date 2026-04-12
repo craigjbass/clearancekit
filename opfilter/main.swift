@@ -79,7 +79,6 @@ let jailInteractor = JailFilterInteractor(
 )
 
 let tamperResistanceAdapter = ESTamperResistanceAdapter(esAPI: LiveEndpointSecurityAPI())
-tamperResistanceAdapter.start()
 
 let adapter = ESInboundAdapter(interactor: faaInteractor, esAdapterQueue: esAdapterQueue)
 let jailAdapter = ESJailAdapter(interactor: jailInteractor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
@@ -97,6 +96,9 @@ let server = XPCServer(
 postRespondHandler.onEvent = { event in
     server.handleEvent(event)
 }
+
+tamperResistanceAdapter.onTamperDenied = { event in server.handleTamperEvent(event) }
+tamperResistanceAdapter.start()
 
 server.start()
 

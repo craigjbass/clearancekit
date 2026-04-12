@@ -67,6 +67,12 @@ final class XPCServer: NSObject, @unchecked Sendable {
         }
     }
 
+    func handleTamperEvent(_ event: TamperAttemptEvent) {
+        serverQueue.async { [self] in
+            broadcaster.broadcast(event)
+        }
+    }
+
     func pushMetrics(_ metrics: PipelineMetrics, jail: JailMetrics, timestamp: Date) {
         let snapshot = PipelineMetricsSnapshot(
             eventBufferEnqueueCount: metrics.eventBufferEnqueueCount,
@@ -158,6 +164,10 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func recentEvents() -> [FolderOpenEvent] {
         broadcaster.recentEvents()
+    }
+
+    fileprivate func recentTamperEvents() -> [TamperAttemptEvent] {
+        broadcaster.recentTamperEvents()
     }
 
     // MARK: - Rule mutations
@@ -347,6 +357,13 @@ extension XPCServer: NSXPCListenerDelegate {
             argumentIndex: 0,
             ofReply: true
         )
+        let tamperClasses = NSSet(array: [TamperAttemptEvent.self, NSArray.self, NSDate.self, NSUUID.self, NSString.self]) as! Set<AnyHashable>
+        exportedInterface.setClasses(
+            tamperClasses,
+            for: #selector(ServiceProtocol.fetchRecentTamperEvents(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         newConnection.exportedInterface = exportedInterface
         newConnection.exportedObject = ConnectionHandler(server: self, connection: newConnection)
 
@@ -366,6 +383,12 @@ extension XPCServer: NSXPCListenerDelegate {
         remoteInterface.setClasses(
             NSSet(array: [PipelineMetricsSnapshot.self]) as! Set<AnyHashable>,
             for: #selector(ClientProtocol.metricsUpdated(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        remoteInterface.setClasses(
+            NSSet(array: [TamperAttemptEvent.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.tamperAttemptDenied(_:)),
             argumentIndex: 0,
             ofReply: false
         )
@@ -425,6 +448,13 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply([]); return }
         server.serverQueue.async {
             reply(server.recentEvents())
+        }
+    }
+
+    func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void) {
+        guard let server else { reply([]); return }
+        server.serverQueue.async {
+            reply(server.recentTamperEvents())
         }
     }
 

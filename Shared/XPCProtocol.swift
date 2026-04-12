@@ -239,6 +239,63 @@ public class SignatureIssueNotification: NSObject, NSSecureCoding {
     }
 }
 
+// MARK: - TamperAttemptEvent
+
+@objc(TamperAttemptEvent)
+public class TamperAttemptEvent: NSObject, NSSecureCoding, @unchecked Sendable {
+    public static var supportsSecureCoding: Bool { true }
+
+    @objc public let eventID: UUID
+    @objc public let timestamp: Date
+    @objc public let sourcePID: Int32
+    @objc public let sourcePIDVersion: UInt32
+    @objc public let teamID: String
+    @objc public let signingID: String
+    /// "signal" or "proc_suspend_resume"
+    @objc public let esEventType: String
+
+    public init(
+        sourcePID: Int32,
+        sourcePIDVersion: UInt32,
+        teamID: String,
+        signingID: String,
+        esEventType: String,
+        timestamp: Date = Date(),
+        eventID: UUID = UUID()
+    ) {
+        self.eventID = eventID
+        self.timestamp = timestamp
+        self.sourcePID = sourcePID
+        self.sourcePIDVersion = sourcePIDVersion
+        self.teamID = teamID
+        self.signingID = signingID
+        self.esEventType = esEventType
+        super.init()
+    }
+
+    public required init?(coder: NSCoder) {
+        guard let timestamp = coder.decodeObject(of: NSDate.self, forKey: "timestamp") as Date? else { return nil }
+        self.eventID = (coder.decodeObject(of: NSUUID.self, forKey: "eventID") as UUID?) ?? UUID()
+        self.timestamp = timestamp
+        self.sourcePID = coder.decodeInt32(forKey: "sourcePID")
+        self.sourcePIDVersion = UInt32(bitPattern: coder.decodeInt32(forKey: "sourcePIDVersion"))
+        self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
+        self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
+        self.esEventType = (coder.decodeObject(of: NSString.self, forKey: "esEventType") as String?) ?? ""
+        super.init()
+    }
+
+    public func encode(with coder: NSCoder) {
+        coder.encode(eventID as NSUUID, forKey: "eventID")
+        coder.encode(timestamp as NSDate, forKey: "timestamp")
+        coder.encode(sourcePID, forKey: "sourcePID")
+        coder.encode(Int32(bitPattern: sourcePIDVersion), forKey: "sourcePIDVersion")
+        coder.encode(teamID as NSString, forKey: "teamID")
+        coder.encode(signingID as NSString, forKey: "signingID")
+        coder.encode(esEventType as NSString, forKey: "esEventType")
+    }
+}
+
 // MARK: - Service Protocol (exposed by opfilter)
 //
 // Called by the GUI app:  registerClient / unregisterClient /
@@ -307,6 +364,9 @@ public protocol ServiceProtocol {
     // MCP server toggle. Persisted in the feature_flags table with tamper-resistant
     // signature. On signature failure the flag defaults to disabled.
     func setMCPEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
+
+    // Returns a snapshot of recent tamper attempt events.
+    func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void)
 }
 
 // MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
@@ -336,4 +396,6 @@ public protocol ClientProtocol {
     // Opfilter pushes a cumulative metrics snapshot once per second so the GUI
     // can compute per-second rates and render a live throughput graph.
     func metricsUpdated(_ snapshot: PipelineMetricsSnapshot)
+    // Opfilter calls this when a tamper attempt against the opfilter process is denied.
+    func tamperAttemptDenied(_ event: TamperAttemptEvent)
 }

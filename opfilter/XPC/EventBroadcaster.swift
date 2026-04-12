@@ -18,6 +18,7 @@ final class EventBroadcaster: @unchecked Sendable {
     private struct State {
         var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
         var recentEvents: [FolderOpenEvent] = []
+        var recentTamperEvents: [TamperAttemptEvent] = []
     }
 
     private let storage: OSAllocatedUnfairLock<State>
@@ -66,6 +67,23 @@ final class EventBroadcaster: @unchecked Sendable {
 
     func recentEvents() -> [FolderOpenEvent] {
         storage.withLock { $0.recentEvents }
+    }
+
+    func broadcast(_ event: TamperAttemptEvent) {
+        let clients = storage.withLock { state -> [NSXPCConnection] in
+            state.recentTamperEvents.append(event)
+            if state.recentTamperEvents.count > maxHistoryCount {
+                state.recentTamperEvents.removeFirst(state.recentTamperEvents.count - maxHistoryCount)
+            }
+            return Array(state.guiClients.values)
+        }
+        for conn in clients {
+            (conn.remoteObjectProxy as? ClientProtocol)?.tamperAttemptDenied(event)
+        }
+    }
+
+    func recentTamperEvents() -> [TamperAttemptEvent] {
+        storage.withLock { $0.recentTamperEvents }
     }
 
     // MARK: - State broadcasting
