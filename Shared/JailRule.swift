@@ -60,8 +60,7 @@ public func checkJailPolicy(
 ) -> PolicyDecision {
     guard !jailRules.isEmpty else { return .noRuleApplies }
 
-    let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
-    guard let rule = jailRules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) else {
+    guard let rule = jailRules.first(where: { $0.jailedSignature.matches(resolvedTeamID: teamID, signingID: signingID) }) else {
         return .noRuleApplies
     }
 
@@ -83,8 +82,7 @@ public func checkAncestorJailPolicy(
     guard !jailRules.isEmpty else { return nil }
 
     for ancestor in ancestors {
-        let resolvedTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
-        guard let rule = jailRules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: ancestor.signingID) }) else { continue }
+        guard let rule = jailRules.first(where: { $0.jailedSignature.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) else { continue }
         return checkJailPath(rule: rule, path: path)
     }
     return nil

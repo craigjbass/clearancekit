@@ -537,12 +537,20 @@ struct AccessEvaluationTests {
         #expect(decision.isAllowed)
     }
 
-    @Test("Apple platform binary gets resolved team ID in policy")
-    func applePlatformBinaryResolution() async {
+    @Test("Apple platform binary is allowed when teamID is apple")
+    func applePlatformBinaryAllowed() async {
         let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.finder")
         let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
-        let decision = await decide(rules: rules, path: "/protected/file", processPath: "/System/Finder", signingID: "com.apple.finder")
+        let decision = await decide(rules: rules, path: "/protected/file", processPath: "/System/Finder", teamID: appleTeamID, signingID: "com.apple.finder")
         #expect(decision.isAllowed)
+    }
+
+    @Test("ad-hoc signed binary with Apple signing ID cannot spoof Apple identity in rules")
+    func adhocBinaryCannotSpoofAppleIdentityInRules() async {
+        let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.finder")
+        let rules = [ruleProtecting("/protected", allowedSignatures: [sig])]
+        let decision = await decide(rules: rules, path: "/protected/file", processPath: "/tmp/evil", teamID: "", signingID: "com.apple.finder")
+        #expect(!decision.isAllowed)
     }
 
     @Test("denied when signature does not match")
@@ -572,13 +580,22 @@ struct AccessEvaluationTests {
         #expect(decision.isAllowed)
     }
 
-    @Test("ancestor with empty team ID resolved to apple")
-    func ancestorAppleResolution() async {
+    @Test("Apple platform binary ancestor is allowed when teamID is apple")
+    func applePlatformBinaryAncestorAllowed() async {
         let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.launchd")
         let rules = [ruleProtecting("/protected", allowedAncestorSignatures: [sig])]
-        let ancestors = [AncestorInfo(path: "/sbin/launchd", teamID: "", signingID: "com.apple.launchd")]
+        let ancestors = [AncestorInfo(path: "/sbin/launchd", teamID: "apple", signingID: "com.apple.launchd")]
         let decision = await decide(rules: rules, path: "/protected/file", processPath: "/child", teamID: "SOMETEAM", signingID: "com.child", ancestors: ancestors)
         #expect(decision.isAllowed)
+    }
+
+    @Test("ad-hoc signed ancestor with Apple signing ID cannot spoof Apple identity in rules")
+    func adhocAncestorCannotSpoofAppleIdentityInRules() async {
+        let sig = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.launchd")
+        let rules = [ruleProtecting("/protected", allowedAncestorSignatures: [sig])]
+        let ancestors = [AncestorInfo(path: "/sbin/fake-launchd", teamID: "", signingID: "com.apple.launchd")]
+        let decision = await decide(rules: rules, path: "/protected/file", processPath: "/child", teamID: "SOMETEAM", signingID: "com.child", ancestors: ancestors)
+        #expect(!decision.isAllowed)
     }
 
     @Test("denied when no ancestor matches")
@@ -706,7 +723,7 @@ struct AccessEvaluationTests {
             rules: [rule],
             path: "/etc/pam.d/sudo",
             processPath: "/usr/libexec/opendirectoryd",
-            teamID: "",
+            teamID: appleTeamID,
             signingID: "com.apple.opendirectoryd",
             accessKind: .write
         )
@@ -779,7 +796,7 @@ struct AccessEvaluationTests {
         // sshd CAN write known_hosts (rule 1 allows)
         let sshdWriteKnownHosts = await decide(
             rules: rules, path: "/Users/admin/.ssh/known_hosts",
-            processPath: "/usr/sbin/sshd", teamID: "", signingID: "com.apple.sshd",
+            processPath: "/usr/sbin/sshd", teamID: appleTeamID, signingID: "com.apple.sshd",
             accessKind: .write
         )
         #expect(sshdWriteKnownHosts.isAllowed)
@@ -822,7 +839,7 @@ struct AccessEvaluationTests {
 
         let sshdWriteKnownHosts = await decide(
             rules: rules, path: "/Users/admin/.ssh/known_hosts",
-            processPath: "/usr/sbin/sshd", teamID: "", signingID: "com.apple.sshd",
+            processPath: "/usr/sbin/sshd", teamID: appleTeamID, signingID: "com.apple.sshd",
             accessKind: .write
         )
         #expect(sshdWriteKnownHosts.isAllowed)

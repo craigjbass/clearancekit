@@ -118,6 +118,7 @@ final class ESJailAdapter {
                 let childKey = ProcessKey(child.audit_token)
                 let signingID = ESInboundAdapter.string(from: child.signing_id)
                 let teamID = ESInboundAdapter.string(from: child.team_id)
+                let childIsPlatformBinary = child.is_platform_binary
                 esJailAdapterQueue.async {
                     if let parentRuleID = jailedProcessesLock.withLock({ $0[parentKey] }) {
                         jailedProcessesLock.withLock { $0[childKey] = parentRuleID }
@@ -125,7 +126,7 @@ final class ESJailAdapter {
                     }
                     let rules = rulesLock.withLock { $0 }
                     guard !rules.isEmpty else { return }
-                    let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
+                    let resolvedTeamID = childIsPlatformBinary ? appleTeamID : teamID
                     guard let rule = rules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) else { return }
                     jailedProcessesLock.withLock { $0[childKey] = rule.id }
                 }
@@ -137,6 +138,7 @@ final class ESJailAdapter {
                 let parentKey = ProcessKey(message.pointee.process.pointee.parent_audit_token)
                 let signingID = ESInboundAdapter.string(from: target.signing_id)
                 let teamID = ESInboundAdapter.string(from: target.team_id)
+                let targetIsPlatformBinary = target.is_platform_binary
                 esJailAdapterQueue.async {
                     let inherited = jailedProcessesLock.withLock { map -> Bool in
                         if let ruleID = map[oldKey] {
@@ -153,7 +155,7 @@ final class ESJailAdapter {
                     guard !inherited else { return }
                     let rules = rulesLock.withLock { $0 }
                     guard !rules.isEmpty else { return }
-                    let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
+                    let resolvedTeamID = targetIsPlatformBinary ? appleTeamID : teamID
                     if let rule = rules.first(where: { $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) {
                         jailedProcessesLock.withLock { $0[newKey] = rule.id }
                     }

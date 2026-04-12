@@ -354,9 +354,8 @@ public func checkFAAPolicy(
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
         }
 
-        let resolvedTeamID = teamID.isEmpty ? appleTeamID : teamID
         if !rule.allowedSignatures.isEmpty,
-           let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: resolvedTeamID, signingID: signingID) }) {
+           let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
         }
 
@@ -368,8 +367,7 @@ public func checkFAAPolicy(
 
         if !rule.allowedAncestorSignatures.isEmpty {
             for ancestor in ancestors {
-                let resolvedAncestorTeamID = ancestor.teamID.isEmpty ? appleTeamID : ancestor.teamID
-                if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: resolvedAncestorTeamID, signingID: ancestor.signingID) }) {
+                if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
                     return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
                 }
             }

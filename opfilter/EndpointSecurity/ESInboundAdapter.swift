@@ -265,7 +265,7 @@ final class ESInboundAdapter {
         )
         let signingID = string(from: process.signing_id)
         let rawTeamID = string(from: process.team_id)
-        let teamID = rawTeamID.isEmpty && !signingID.isEmpty ? "apple" : rawTeamID
+        let teamID = process.is_platform_binary ? "apple" : rawTeamID
         return FileAuthEvent(
             correlationID: correlationID,
             operation: operation,

@@ -147,16 +147,30 @@ struct JailPolicyTests {
         }
     }
 
-    @Test("resolves empty team ID to apple team ID for matching")
-    func appleTeamIDResolution() {
+    @Test("Apple platform binary is jailed when teamID is apple")
+    func applePlatformBinaryIsJailed() {
+        let appleJail = JailRule(
+            name: "Jail Apple Tool",
+            jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
+            allowedPathPrefixes: ["/usr/local/**"]
+        )
+        let decision = checkJailPolicy(jailRules: [appleJail], path: "/usr/local/bin/thing", teamID: appleTeamID, signingID: "com.apple.tool")
+        guard case .jailAllowed = decision else {
+            Issue.record("Expected jailAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("ad-hoc signed binary with empty team ID is not matched by Apple jail rule")
+    func adhocBinaryNotMatchedByAppleJailRule() {
         let appleJail = JailRule(
             name: "Jail Apple Tool",
             jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
             allowedPathPrefixes: ["/usr/local/**"]
         )
         let decision = checkJailPolicy(jailRules: [appleJail], path: "/usr/local/bin/thing", teamID: "", signingID: "com.apple.tool")
-        guard case .jailAllowed = decision else {
-            Issue.record("Expected jailAllowed, got \(decision)")
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected noRuleApplies, got \(String(describing: decision))")
             return
         }
     }
@@ -418,17 +432,32 @@ struct CheckAncestorJailPolicyTests {
         }
     }
 
-    @Test("resolves empty team ID to apple for ancestor matching")
-    func appleTeamIDResolution() {
+    @Test("Apple platform binary ancestor is matched by Apple jail rule when teamID is apple")
+    func applePlatformBinaryAncestorMatchesJailRule() {
         let appleRule = JailRule(
             name: "Jail Apple Tool",
             jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
             allowedPathPrefixes: ["/usr/**"]
         )
-        let ancestors = [AncestorInfo(path: "/usr/bin/tool", teamID: "", signingID: "com.apple.tool")]
+        let ancestors = [AncestorInfo(path: "/usr/bin/tool", teamID: "apple", signingID: "com.apple.tool")]
         let result = checkAncestorJailPolicy(jailRules: [appleRule], path: "/usr/local/file", ancestors: ancestors)
         guard case .jailAllowed = result else {
             Issue.record("Expected jailAllowed, got \(String(describing: result))")
+            return
+        }
+    }
+
+    @Test("ad-hoc signed ancestor with empty team ID is not matched by Apple jail rule")
+    func adhocAncestorNotMatchedByAppleJailRule() {
+        let appleRule = JailRule(
+            name: "Jail Apple Tool",
+            jailedSignature: ProcessSignature(teamID: appleTeamID, signingID: "com.apple.tool"),
+            allowedPathPrefixes: ["/usr/**"]
+        )
+        let ancestors = [AncestorInfo(path: "/tmp/fake-tool", teamID: "", signingID: "com.apple.tool")]
+        let result = checkAncestorJailPolicy(jailRules: [appleRule], path: "/usr/local/file", ancestors: ancestors)
+        guard case .none = result else {
+            Issue.record("Expected nil, got \(String(describing: result))")
             return
         }
     }

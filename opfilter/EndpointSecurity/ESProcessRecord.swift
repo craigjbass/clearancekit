@@ -41,7 +41,7 @@ func processRecord(from esProcess: UnsafeMutablePointer<es_process_t>) -> Proces
     } else {
         rawTeamID = ""
     }
-    let teamID = rawTeamID.isEmpty && !signingID.isEmpty ? "apple" : rawTeamID
+    let teamID = process.is_platform_binary ? "apple" : rawTeamID
 
     let uid = uid_t(process.audit_token.val.1)
     let gid = gid_t(process.audit_token.val.2)
