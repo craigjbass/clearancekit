@@ -13,7 +13,22 @@ let chromePreset = AppPreset(
     rules: [
         FAARule(
             id: UUID(uuidString: "2E8546E3-C08A-4877-986D-3E676A4B96F3")!,
-            protectedPathPrefix: "/Users/*/Library/Application Support/Google",
+            protectedPathPrefix: "/Users/*/Library/Application Support/Google/Chrome",
+            allowedSignatures: [
+                sig("EQHXZ8M8AV", "com.google.Chrome.helper"),
+                sig("EQHXZ8M8AV", "com.google.Chrome"),
+                sig("EQHXZ8M8AV", "com.google.GoogleUpdater"),
+                sig("EQHXZ8M8AV", "chrome_crashpad_handler"),
+                apple("com.apple.LoginItems-Settings.extension"),
+                apple("com.apple.Safari.BrowserDataImportingService"),
+            ],
+            allowedAncestorSignatures: [
+                sig("EQHXZ8M8AV", "com.google.GoogleUpdater"),
+            ]
+        ),
+        FAARule(
+            id: UUID(uuidString: "DF5BFEFE-4CE8-4FFF-BD16-000F3EEA1618")!,
+            protectedPathPrefix: "/Users/*/Library/Application Support/Google/GoogleUpdater",
             allowedSignatures: [
                 sig("EQHXZ8M8AV", "com.google.Chrome.helper"),
                 sig("EQHXZ8M8AV", "com.google.Chrome"),
@@ -28,7 +43,7 @@ let chromePreset = AppPreset(
         ),
         FAARule(
             id: UUID(uuidString: "09627815-1A42-4ABD-968E-F2AE94745282")!,
-            protectedPathPrefix: "/Users/*/Library/Caches/Google",
+            protectedPathPrefix: "/Users/*/Library/Caches/Google/Chrome",
             allowedSignatures: [
                 sig("EQHXZ8M8AV", "com.google.Chrome.helper"),
                 sig("EQHXZ8M8AV", "com.google.Chrome"),
