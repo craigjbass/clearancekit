@@ -125,6 +125,7 @@
 				EndpointSecurity/ESInboundAdapter.swift,
 				EndpointSecurity/ESJailAdapter.swift,
 				EndpointSecurity/ESProcessRecord.swift,
+				EndpointSecurity/LiveEndpointSecurityAPI.swift,
 				Info.plist,
 				main.swift,
 				Policy/ManagedAllowlistLoader.swift,
