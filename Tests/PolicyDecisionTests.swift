@@ -109,6 +109,22 @@ struct ProcessSignatureTests {
         #expect(!sig.matches(resolvedTeamID: "TEAM1", signingID: "com.example.other"))
     }
 
+    @Test("universal wildcard *:* matches any team and signing ID")
+    func universalWildcardMatchesAny() {
+        let sig = ProcessSignature(teamID: "*", signingID: "*")
+        #expect(sig.matches(resolvedTeamID: "apple", signingID: "com.apple.Safari"))
+        #expect(sig.matches(resolvedTeamID: "TEAM1", signingID: "com.example.app"))
+        #expect(sig.matches(resolvedTeamID: "EQHXZ8M8AV", signingID: "com.google.Chrome"))
+    }
+
+    @Test("wildcard team with specific signing ID matches only that signing ID")
+    func wildcardTeamSpecificSigningID() {
+        let sig = ProcessSignature(teamID: "*", signingID: "com.apple.Safari")
+        #expect(sig.matches(resolvedTeamID: "apple", signingID: "com.apple.Safari"))
+        #expect(sig.matches(resolvedTeamID: "OTHERTEAM", signingID: "com.apple.Safari"))
+        #expect(!sig.matches(resolvedTeamID: "apple", signingID: "com.apple.Mail"))
+    }
+
     @Test("round-trips through JSON")
     func jsonRoundTrip() throws {
         let sig = ProcessSignature(teamID: "ABC", signingID: "com.test")
@@ -711,6 +727,57 @@ struct AccessEvaluationTests {
             accessKind: .read
         )
         #expect(!decision.isAllowed)
+    }
+
+    // MARK: Policy evaluation — subpath read carve-out with universal wildcard
+
+    @Test("universal wildcard carves out read-only subpath under a locked parent")
+    func universalWildcardSubpathCarveOut() async {
+        // Three rules implementing the SSH pattern from issue #130:
+        //   1. Write-only rule on ~/.ssh/known_hosts (only sshd may write)
+        //   2. Universal wildcard on ~/.ssh/known_hosts (any process may read)
+        //   3. Full lock on ~/.ssh/ (only ssh/sshd may access)
+        let sshd = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.sshd")
+        let ssh  = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.ssh")
+        let any  = ProcessSignature(teamID: "*", signingID: "*")
+
+        let rules = [
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh/known_hosts",
+                    allowedSignatures: [sshd], enforceOnWriteOnly: true),
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh/known_hosts",
+                    allowedSignatures: [any]),
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh",
+                    allowedSignatures: [ssh, sshd]),
+        ]
+
+        // Any process can READ known_hosts (rule 1 skipped, rule 2 wildcard allows)
+        let readKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/bin/cat", accessKind: .read
+        )
+        #expect(readKnownHosts.isAllowed)
+
+        // Unauthorized process cannot WRITE known_hosts (rule 1 denies)
+        let writeKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/bin/evil", accessKind: .write
+        )
+        #expect(!writeKnownHosts.isAllowed)
+
+        // sshd CAN write known_hosts (rule 1 allows)
+        let sshdWriteKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/usr/sbin/sshd", teamID: "", signingID: "com.apple.sshd",
+            accessKind: .write
+        )
+        #expect(sshdWriteKnownHosts.isAllowed)
+
+        // Unauthorized process cannot READ id_rsa (rules 1+2 don't match, rule 3 denies)
+        let readIdRsa = await decide(
+            rules: rules, path: "/Users/admin/.ssh/id_rsa",
+            processPath: "/bin/evil", accessKind: .read
+        )
+        #expect(!readIdRsa.isAllowed)
     }
 
     // MARK: Global ancestor allowlist

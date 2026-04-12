@@ -244,6 +244,33 @@ Each step is an independent commit:
 
 Steps 1–5 are the load-bearing core. Steps 7–11 are surface area.
 
+## Universal wildcard `*:*`
+
+`ProcessSignature.matches` now treats `teamID == "*"` as a wildcard,
+completing the wildcard grid (`TEAM:*`, `*:signingID`, `*:*`). This
+enables read-only subpath carve-outs under a locked parent — the
+3-rule pattern described in issue #130:
+
+```
+Rule 1: /parent/child  EnforceOnWriteOnly=true  AllowedSignatures=[writers]
+Rule 2: /parent/child  AllowedSignatures=["*:*"]
+Rule 3: /parent/       AllowedSignatures=[readers+writers]
+```
+
+Reads of `/parent/child` skip rule 1 (write-only), hit rule 2
+(universal wildcard, allowed). Writes of `/parent/child` hit rule 1.
+Reads of `/parent/other` skip rules 1+2 (path mismatch), hit rule 3.
+
+## Follow-up: require valid code signing
+
+`*:*` matches unsigned processes because `resolvedTeamID` maps empty
+team IDs to `"apple"` and `*` matches anything. A future follow-up
+should add a **require valid signing** per-rule flag that rejects
+processes with no code signature. This would allow operators to write
+`*:*` with confidence that only properly-signed processes can match,
+preventing unsigned or ad-hoc-signed binaries from exploiting a
+universal wildcard carve-out.
+
 ## Open questions
 
 - **Audit volume**: with `EnforceOnWriteOnly`, we'll see *no* audit log

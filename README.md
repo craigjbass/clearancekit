@@ -204,12 +204,13 @@ Every signature entry is a colon-separated pair:
 
 Use `apple` as the `teamID` for Apple platform binaries, which carry an empty Team ID in their code signature.
 
-Use `*` as the `signingID` to allow any binary from a given team:
+Use `*` as the `signingID` to allow any binary from a given team. Use `*` as the `teamID` to match any team. Combine both as `*:*` to match any signed or unsigned process — useful for read-only subpath carve-outs under a locked parent (see `EnforceOnWriteOnly`):
 
 ```
 37KMK6XFTT:*                              — any binary signed by team 37KMK6XFTT
 apple:com.apple.Safari                    — Safari signed by Apple
 37KMK6XFTT:uk.craigbass.clearancekit     — clearancekit app only
+*:*                                       — any process (universal wildcard)
 ```
 
 #### Example

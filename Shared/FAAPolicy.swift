@@ -133,7 +133,7 @@ public struct ProcessSignature: Codable, Equatable, Hashable {
     }
 
     public func matches(resolvedTeamID: String, signingID: String) -> Bool {
-        guard teamID == resolvedTeamID else { return false }
+        guard teamID == "*" || teamID == resolvedTeamID else { return false }
         return self.signingID == "*" || self.signingID == signingID
     }
 }
