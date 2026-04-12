@@ -17,6 +17,14 @@ struct PresetsView: View {
         builtInPresets.filter(\.isInstalled)
     }
 
+    private var appPresets: [AppPreset] {
+        installedPresets.filter { $0.appBundlePath != nil }
+    }
+
+    private var systemPresets: [AppPreset] {
+        installedPresets.filter { $0.appBundlePath == nil }
+    }
+
     private var driftedPresets: [AppPreset] {
         installedPresets.filter { $0.hasDrifted(in: policyStore.userRules) }
     }
@@ -39,9 +47,17 @@ struct PresetsView: View {
                 }
             }
             Section("Built-in") {
-                ForEach(installedPresets) { preset in
+                ForEach(appPresets) { preset in
                     PresetRow(preset: preset, userRules: policyStore.userRules)
                         .padding(.vertical, 6)
+                }
+            }
+            if !systemPresets.isEmpty {
+                Section("System Hardening") {
+                    ForEach(systemPresets) { preset in
+                        PresetRow(preset: preset, userRules: policyStore.userRules)
+                            .padding(.vertical, 6)
+                    }
                 }
             }
         }
@@ -444,6 +460,9 @@ private struct PresetRow: View {
                     }
                     if hasDrifted {
                         badge("update available", color: .blue)
+                    }
+                    if preset.isExperimental {
+                        badge("experimental", color: .purple)
                     }
                 }
                 Text(preset.description)

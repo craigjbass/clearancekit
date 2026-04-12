@@ -50,5 +50,10 @@ let safariPreset = AppPreset(
             protectedPathPrefix: "/Users/*/Library/Group Containers/group.com.apple.safari",
             allowedSignatures: safariSignatures
         ),
+        FAARule(
+            id: UUID(uuidString: "B0267342-C6B1-4348-8412-C188DF765752")!,
+            protectedPathPrefix: "/Users/*/Library/Cookies/Cookies.binarycookies",
+            allowedSignatures: safariSignatures + [apple("com.apple.Passwords")]
+        ),
     ]
 )

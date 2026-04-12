@@ -236,6 +236,22 @@ public let faaPolicy: [FAARule] = [
         source: .builtin,
         allowedSignatures: [ProcessSignature(teamID: clearancekitTeamID, signingID: "uk.craigbass.clearancekit.opfilter")]
     ),
+
+    // Protect PAM configuration. Writing to /etc/pam.d outside of system
+    // software updates is a known persistence technique — malicious PAM modules
+    // can intercept every authentication on the machine. Reads are unrestricted.
+    FAARule(
+        id: UUID(uuidString: "A5816D31-EF55-4B7C-AF20-689D7AC3EF1A")!,
+        protectedPathPrefix: "/etc/pam.d",
+        source: .builtin,
+        allowedSignatures: [
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.installer"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.SoftwareUpdateAgent"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.mdmclient"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.packagekit"),
+        ],
+        enforceOnWriteOnly: true
+    ),
 ]
 
 // MARK: - Path matching

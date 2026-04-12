@@ -126,6 +126,19 @@ The only exception is when the protocol must be visible to both binary targets (
 - `PolicyDatabaseProtocol` lives in `opfilter/Policy/` alongside `PolicyRepository`, which takes it in its `init`. ✓
 - A protocol consumed only by `opfilter/Filter/` types belongs in `opfilter/Filter/`, even if its concrete implementation lives in `Shared/`. The conformance (`extension ConcreteType: TheProtocol`) is declared in a file within `opfilter/Filter/`, keeping `Shared/` free of the dependency.
 
+## Preset and rule UUIDs
+
+Every `FAARule` and `AppPreset` requires a stable UUID that must never change after the rule ships — the database signing system uses it as a key.
+
+**Always generate new UUIDs with `uuidgen`:**
+
+```bash
+uuidgen
+# → e.g. B0267342-C6B1-4348-8412-C188DF765752
+```
+
+Never hand-craft UUID strings.
+
 ## Comments
 
 Code should explain itself through precise naming and small, focused units. Comments are not a substitute for clarity.
