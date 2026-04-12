@@ -5,6 +5,10 @@
 //  Thin coordinator: sets up the XPC listener, wires PolicyRepository,
 //  EventBroadcaster, FAAFilterInteractor, JailFilterInteractor, and ESInboundAdapter together.
 //
+//  The listener starts immediately on init/start() with just the broadcaster, so the GUI
+//  can connect during opfilter startup. Once all dependencies are ready, configure(_:)
+//  sets the ServerContext and pushes initial state to any clients that connected early.
+//
 
 import Foundation
 import os
@@ -14,36 +18,42 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 private let jailEnabledFile = URL(fileURLWithPath: "/Library/Application Support/clearancekit/jail-enabled")
 
 final class XPCServer: NSObject, @unchecked Sendable {
+
+    // MARK: - ServerContext
+
+    /// All dependencies that become available after the initial process-tree scan
+    /// and policy loading. Passed in via configure(_:) once startup completes.
+    struct ServerContext {
+        let processTree: ProcessTreeProtocol
+        let policyRepository: PolicyRepository
+        let faaInteractor: FAAFilterInteractor
+        let jailInteractor: JailFilterInteractor
+        let adapter: ESInboundAdapter
+        let jailAdapter: ESJailAdapter
+    }
+
+    // MARK: - Stored state
+
     private var listener: NSXPCListener?
-    private let processTree: ProcessTreeProtocol
-    private let policyRepository: PolicyRepository
     private let broadcaster: EventBroadcaster
-    private let faaInteractor: FAAFilterInteractor
-    private let jailInteractor: JailFilterInteractor
-    private let adapter: ESInboundAdapter
-    private let jailAdapter: ESJailAdapter
     fileprivate let serverQueue: DispatchQueue
+    /// Protected by contextLock so it can be read from main.swift after configure()
+    /// without waiting for the serverQueue dispatch to complete.
+    private let contextLock = OSAllocatedUnfairLock<ServerContext?>(initialState: nil)
+    private var context: ServerContext? { contextLock.withLock { $0 } }
+
+    // MARK: - Init
 
     init(
-        processTree: ProcessTreeProtocol,
-        policyRepository: PolicyRepository,
         broadcaster: EventBroadcaster,
-        faaInteractor: FAAFilterInteractor,
-        jailInteractor: JailFilterInteractor,
-        adapter: ESInboundAdapter,
-        jailAdapter: ESJailAdapter,
         serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
     ) {
-        self.processTree = processTree
-        self.policyRepository = policyRepository
         self.broadcaster = broadcaster
-        self.faaInteractor = faaInteractor
-        self.jailInteractor = jailInteractor
-        self.adapter = adapter
-        self.jailAdapter = jailAdapter
         self.serverQueue = serverQueue
         super.init()
     }
+
+    // MARK: - Lifecycle
 
     func start() {
         listener = NSXPCListener(machServiceName: XPCConstants.serviceName)
@@ -51,15 +61,27 @@ final class XPCServer: NSObject, @unchecked Sendable {
         listener?.resume()
     }
 
-    func handleXProtectChange() {
+    /// Called once all dependencies are initialised. Sets the server context and
+    /// pushes the initial policy snapshot to any GUI clients that connected early.
+    func configure(_ context: ServerContext) {
+        contextLock.withLock { $0 = context }
         serverQueue.async { [self] in
-            let reloaded = enumerateXProtectEntries()
-            guard policyRepository.updateXProtectEntries(reloaded) else { return }
-            applyAllowlistToFilter()
+            broadcaster.broadcastToAllClients { [self] proxy in
+                pushPolicySnapshot(to: proxy, context: context)
+            }
         }
     }
 
-    // MARK: - Direct filter integration
+    // MARK: - Event broadcasting
+
+    func handleXProtectChange() {
+        serverQueue.async { [self] in
+            guard let context else { return }
+            let reloaded = enumerateXProtectEntries()
+            guard context.policyRepository.updateXProtectEntries(reloaded) else { return }
+            applyAllowlistToFilter()
+        }
+    }
 
     func handleEvent(_ event: FolderOpenEvent) {
         serverQueue.async { [self] in
@@ -94,11 +116,11 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Policy / allowlist assembly
 
     func mergedRules() -> [FAARule] {
-        policyRepository.mergedRules()
+        context?.policyRepository.mergedRules() ?? []
     }
 
     func mergedJailRules() -> [JailRule] {
-        policyRepository.mergedJailRules()
+        context?.policyRepository.mergedJailRules() ?? []
     }
 
     // MARK: - Jail adapter lifecycle
@@ -108,54 +130,65 @@ final class XPCServer: NSObject, @unchecked Sendable {
     }
 
     func startJailAdapterIfEnabled() {
-        guard isJailEnabled else { return }
-        let rules = policyRepository.mergedJailRules()
-        jailAdapter.start(initialRules: rules)
+        guard let context, isJailEnabled else { return }
+        let rules = context.policyRepository.mergedJailRules()
+        context.jailAdapter.start(initialRules: rules)
     }
 
     fileprivate func setJailEnabled(_ enabled: Bool) {
+        guard let context else { return }
         if enabled {
             if !FileManager.default.createFile(atPath: jailEnabledFile.path, contents: nil) {
                 logger.error("XPCServer: Failed to create jail-enabled flag file")
             }
-            let rules = policyRepository.mergedJailRules()
-            jailAdapter.start(initialRules: rules)
+            let rules = context.policyRepository.mergedJailRules()
+            context.jailAdapter.start(initialRules: rules)
         } else {
             try? FileManager.default.removeItem(at: jailEnabledFile)
-            jailAdapter.stop()
+            context.jailAdapter.stop()
         }
         broadcaster.broadcastToAllClients { $0.jailEnabledUpdated(enabled) }
     }
 
     fileprivate func setMCPEnabled(_ enabled: Bool) {
-        policyRepository.setMCPEnabled(enabled)
+        guard let context else { return }
+        context.policyRepository.setMCPEnabled(enabled)
         broadcaster.broadcastToAllClients { $0.mcpEnabledUpdated(enabled) }
     }
 
     // MARK: - Filter application
 
     func applyPolicyToFilter() {
-        adapter.updatePolicy(policyRepository.mergedRules())
+        guard let context else { return }
+        context.adapter.updatePolicy(context.policyRepository.mergedRules())
     }
 
     func applyAllowlistToFilter() {
-        faaInteractor.updateAllowlist(policyRepository.mergedAllowlist())
-        faaInteractor.updateAncestorAllowlist(policyRepository.mergedAncestorAllowlist())
+        guard let context else { return }
+        context.faaInteractor.updateAllowlist(context.policyRepository.mergedAllowlist())
+        context.faaInteractor.updateAncestorAllowlist(context.policyRepository.mergedAncestorAllowlist())
     }
 
     func applyJailRulesToFilter() {
-        let rules = policyRepository.mergedJailRules()
-        jailInteractor.updateJailRules(rules)
-        jailAdapter.updateJailRules(rules)
+        guard let context else { return }
+        let rules = context.policyRepository.mergedJailRules()
+        context.jailInteractor.updateJailRules(rules)
+        context.jailAdapter.updateJailRules(rules)
     }
 
     // MARK: - Client registration
 
     fileprivate func addGUIClient(_ connection: NSXPCConnection) {
         _ = broadcaster.addClient(connection)
-        if let notification = policyRepository.pendingSignatureIssueNotification() {
-            (connection.remoteObjectProxy as? ClientProtocol)?.signatureIssueDetected(notification)
+        guard let context else {
+            (connection.remoteObjectProxy as? ClientProtocol)?.serviceReady(false)
+            return
         }
+        guard let proxy = connection.remoteObjectProxy as? ClientProtocol else { return }
+        if let notification = context.policyRepository.pendingSignatureIssueNotification() {
+            proxy.signatureIssueDetected(notification)
+        }
+        pushPolicySnapshot(to: proxy, context: context)
     }
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
@@ -173,84 +206,96 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Rule mutations
 
     fileprivate func applyAddRule(_ rule: FAARule) {
-        policyRepository.addRule(rule)
+        guard let context else { return }
+        context.policyRepository.addRule(rule)
         applyPolicyToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
     }
 
     fileprivate func applyUpdateRule(_ rule: FAARule) {
-        policyRepository.updateRule(rule)
+        guard let context else { return }
+        context.policyRepository.updateRule(rule)
         applyPolicyToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
     }
 
     fileprivate func applyRemoveRule(ruleID: UUID) {
-        policyRepository.removeRule(ruleID: ruleID)
+        guard let context else { return }
+        context.policyRepository.removeRule(ruleID: ruleID)
         applyPolicyToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
     }
 
     // MARK: - Allowlist mutations
 
     fileprivate func applyAddAllowlistEntry(_ entry: AllowlistEntry) {
-        policyRepository.addAllowlistEntry(entry)
+        guard let context else { return }
+        context.policyRepository.addAllowlistEntry(entry)
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist()) }
     }
 
     fileprivate func applyRemoveAllowlistEntry(entryID: UUID) {
-        policyRepository.removeAllowlistEntry(entryID: entryID)
+        guard let context else { return }
+        context.policyRepository.removeAllowlistEntry(entryID: entryID)
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist()) }
     }
 
     // MARK: - Ancestor allowlist mutations
 
     fileprivate func applyAddAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry) {
-        policyRepository.addAncestorAllowlistEntry(entry)
+        guard let context else { return }
+        context.policyRepository.addAncestorAllowlistEntry(entry)
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(self.policyRepository.encodedUserAncestorAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(context.policyRepository.encodedUserAncestorAllowlist()) }
     }
 
     fileprivate func applyRemoveAncestorAllowlistEntry(entryID: UUID) {
-        policyRepository.removeAncestorAllowlistEntry(entryID: entryID)
+        guard let context else { return }
+        context.policyRepository.removeAncestorAllowlistEntry(entryID: entryID)
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(self.policyRepository.encodedUserAncestorAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(context.policyRepository.encodedUserAncestorAllowlist()) }
     }
 
     // MARK: - Jail rule mutations
 
     fileprivate func applyAddJailRule(_ rule: JailRule) {
-        policyRepository.addJailRule(rule)
+        guard let context else { return }
+        context.policyRepository.addJailRule(rule)
         applyJailRulesToFilter()
-        adapter.clearCache()
-        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+        context.adapter.clearCache()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(context.policyRepository.encodedUserJailRules()) }
     }
 
     fileprivate func applyUpdateJailRule(_ rule: JailRule) {
-        policyRepository.updateJailRule(rule)
+        guard let context else { return }
+        context.policyRepository.updateJailRule(rule)
         applyJailRulesToFilter()
-        adapter.clearCache()
-        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+        context.adapter.clearCache()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(context.policyRepository.encodedUserJailRules()) }
     }
 
     fileprivate func applyRemoveJailRule(ruleID: UUID) {
-        policyRepository.removeJailRule(ruleID: ruleID)
+        guard let context else { return }
+        context.policyRepository.removeJailRule(ruleID: ruleID)
         applyJailRulesToFilter()
-        adapter.clearCache()
-        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(self.policyRepository.encodedUserJailRules()) }
+        context.adapter.clearCache()
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(context.policyRepository.encodedUserJailRules()) }
     }
 
     // MARK: - Jailed process query
 
     fileprivate func activeJailedProcesses() -> [RunningProcessInfo] {
-        ProcessEnumerator.enumerate(pids: jailAdapter.activeJailedPIDs())
+        guard let context else { return [] }
+        return ProcessEnumerator.enumerate(pids: context.jailAdapter.activeJailedPIDs())
     }
 
     // MARK: - Process tree snapshot
 
     fileprivate func processTreeSnapshot() -> [RunningProcessInfo] {
-        processTree.allRecords().map { record in
+        guard let context else { return [] }
+        return context.processTree.allRecords().map { record in
             RunningProcessInfo(
                 pid: record.identity.pid,
                 pidVersion: record.identity.pidVersion,
@@ -268,33 +313,37 @@ final class XPCServer: NSObject, @unchecked Sendable {
     // MARK: - Discovery mode
 
     fileprivate func beginDiscovery() {
-        adapter.setDiscoveryPaths(["/Users"])
+        guard let context else { return }
+        context.adapter.setDiscoveryPaths(["/Users"])
     }
 
     fileprivate func endDiscovery() {
-        adapter.setDiscoveryPaths([])
+        guard let context else { return }
+        context.adapter.setDiscoveryPaths([])
     }
 
     // MARK: - Signature issue resolution
 
     fileprivate func resolveSignatureIssue(approved: Bool) {
-        policyRepository.resolveSignatureIssue(approved: approved)
+        guard let context else { return }
+        context.policyRepository.resolveSignatureIssue(approved: approved)
         applyPolicyToFilter()
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(self.policyRepository.encodedUserRules()) }
-        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(self.policyRepository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist()) }
     }
 
     // MARK: - Resync
 
     fileprivate func requestResync(requestingConnection: NSXPCConnection, reply: @escaping () -> Void) {
         serverQueue.async { [self] in
+            guard let context else { reply(); return }
             let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
             let reloadedJailRules = ManagedJailRuleLoader.loadWithSync()
             let reloadedXProtect = enumerateXProtectEntries()
 
-            policyRepository.resync(
+            context.policyRepository.resync(
                 managedRules: reloadedRules,
                 managedAllowlist: reloadedAllowlist,
                 managedJailRules: reloadedJailRules,
@@ -304,25 +353,26 @@ final class XPCServer: NSObject, @unchecked Sendable {
             applyPolicyToFilter()
             applyAllowlistToFilter()
             applyJailRulesToFilter()
-            pushPolicySnapshotToGUIClient(requestingConnection)
+            guard let proxy = requestingConnection.remoteObjectProxy as? ClientProtocol else { reply(); return }
+            pushPolicySnapshot(to: proxy, context: context)
             reply()
         }
     }
 
     // MARK: - Snapshot push
 
-    fileprivate func pushPolicySnapshotToGUIClient(_ connection: NSXPCConnection) {
-        let proxy = connection.remoteObjectProxy as? ClientProtocol
-        proxy?.managedRulesUpdated(policyRepository.encodedManagedRules())
-        proxy?.userRulesUpdated(policyRepository.encodedUserRules())
-        proxy?.managedAllowlistUpdated(policyRepository.encodedManagedAllowlist())
-        proxy?.userAllowlistUpdated(policyRepository.encodedUserAllowlist())
-        proxy?.managedAncestorAllowlistUpdated(policyRepository.encodedManagedAncestorAllowlist())
-        proxy?.userAncestorAllowlistUpdated(policyRepository.encodedUserAncestorAllowlist())
-        proxy?.managedJailRulesUpdated(policyRepository.encodedManagedJailRules())
-        proxy?.userJailRulesUpdated(policyRepository.encodedUserJailRules())
-        proxy?.jailEnabledUpdated(isJailEnabled)
-        proxy?.mcpEnabledUpdated(policyRepository.mcpEnabled)
+    private func pushPolicySnapshot(to proxy: ClientProtocol, context: ServerContext) {
+        proxy.managedRulesUpdated(context.policyRepository.encodedManagedRules())
+        proxy.userRulesUpdated(context.policyRepository.encodedUserRules())
+        proxy.managedAllowlistUpdated(context.policyRepository.encodedManagedAllowlist())
+        proxy.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist())
+        proxy.managedAncestorAllowlistUpdated(context.policyRepository.encodedManagedAncestorAllowlist())
+        proxy.userAncestorAllowlistUpdated(context.policyRepository.encodedUserAncestorAllowlist())
+        proxy.managedJailRulesUpdated(context.policyRepository.encodedManagedJailRules())
+        proxy.userJailRulesUpdated(context.policyRepository.encodedUserJailRules())
+        proxy.jailEnabledUpdated(isJailEnabled)
+        proxy.mcpEnabledUpdated(context.policyRepository.mcpEnabled)
+        proxy.serviceReady(true)
     }
 }
 
@@ -632,4 +682,3 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         }
     }
 }
-

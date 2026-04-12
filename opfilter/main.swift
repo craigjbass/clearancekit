@@ -26,6 +26,12 @@ let slowSignal = DispatchSemaphore(value: 0)
 
 let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearancekit")
 
+// Start the XPC server before the slow process-tree scan so the GUI can connect
+// immediately and show a loading state while opfilter finishes initialising.
+let broadcaster = EventBroadcaster()
+let server = XPCServer(broadcaster: broadcaster, serverQueue: xpcServerQueue)
+server.start()
+
 let processTree = ProcessTree(evictionQueue: evictionQueue)
 processTree.buildInitialTree()
 
@@ -41,7 +47,6 @@ let policyRepository = PolicyRepository(
     managedJailRules: managedJailRules,
     xprotectEntries: xprotectEntries
 )
-let broadcaster = EventBroadcaster()
 
 let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
 let allowlistState = AllowlistState()
@@ -82,16 +87,15 @@ let tamperResistanceAdapter = ESTamperResistanceAdapter(esAPI: LiveEndpointSecur
 
 let adapter = ESInboundAdapter(interactor: faaInteractor, esAdapterQueue: esAdapterQueue)
 let jailAdapter = ESJailAdapter(interactor: jailInteractor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
-let server = XPCServer(
+
+server.configure(XPCServer.ServerContext(
     processTree: processTree,
     policyRepository: policyRepository,
-    broadcaster: broadcaster,
     faaInteractor: faaInteractor,
     jailInteractor: jailInteractor,
     adapter: adapter,
-    jailAdapter: jailAdapter,
-    serverQueue: xpcServerQueue
-)
+    jailAdapter: jailAdapter
+))
 
 postRespondHandler.onEvent = { event in
     server.handleEvent(event)
@@ -99,8 +103,6 @@ postRespondHandler.onEvent = { event in
 
 tamperResistanceAdapter.onTamperDenied = { event in server.handleTamperEvent(event) }
 tamperResistanceAdapter.start()
-
-server.start()
 
 let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()

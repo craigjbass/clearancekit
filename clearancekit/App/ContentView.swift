@@ -304,11 +304,13 @@ struct SetupView: View {
     }
 
     private var statusColor: Color {
-        xpcClient.isConnected ? .green : .red
+        if xpcClient.isConnected && !xpcClient.isServiceReady { return .orange }
+        return xpcClient.isConnected ? .green : .red
     }
 
     private var statusText: String {
-        xpcClient.isConnected ? "Connected" : "Disconnected"
+        if xpcClient.isConnected && !xpcClient.isServiceReady { return "Initializing..." }
+        return xpcClient.isConnected ? "Connected" : "Disconnected"
     }
 
     private func prepareExtensionAction(_ action: ExtensionAction) async {

@@ -30,6 +30,7 @@ final class XPCClient: NSObject, ObservableObject {
     static let shared = XPCClient()
 
     @Published private(set) var isConnected = false
+    @Published private(set) var isServiceReady = false
     @Published private(set) var hasServiceVersionMismatch = false
     @Published private(set) var serviceVersion = ""
     @Published private(set) var events: [FolderOpenEvent] = []
@@ -204,6 +205,7 @@ final class XPCClient: NSObject, ObservableObject {
         connection?.invalidate()
         connection = nil
         isConnected = false
+        isServiceReady = false
 
         logger.error("XPCClient: Connection lost, scheduling reconnect")
         scheduleReconnect()
@@ -686,6 +688,12 @@ extension XPCClient: ClientProtocol {
         logger.warning("XPCClient: Tamper attempt denied — PID \(event.sourcePID, privacy: .public) signingID: \(event.signingID, privacy: .public)")
         Task { @MainActor in
             self.pendingTamperEvents.append(event)
+        }
+    }
+
+    nonisolated func serviceReady(_ isReady: Bool) {
+        Task { @MainActor in
+            self.isServiceReady = isReady
         }
     }
 }

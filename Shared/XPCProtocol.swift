@@ -398,4 +398,7 @@ public protocol ClientProtocol {
     func metricsUpdated(_ snapshot: PipelineMetricsSnapshot)
     // Opfilter calls this when a tamper attempt against the opfilter process is denied.
     func tamperAttemptDenied(_ event: TamperAttemptEvent)
+    // Opfilter pushes false when a client connects before initialisation completes,
+    // and true once the initial policy snapshot has been delivered.
+    func serviceReady(_ isReady: Bool)
 }
