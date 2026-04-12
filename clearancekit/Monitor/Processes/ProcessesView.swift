@@ -291,15 +291,15 @@ private struct DenyGroupRow: View {
 
     private var displayTeamID: String {
         if group.teamID.isEmpty && group.signingID.isEmpty { return invalidSignature }
-        return group.teamID.isEmpty ? "apple" : group.teamID
+        return group.teamID
     }
 
     private var allowlistEntry: AllowlistEntry {
         AllowlistEntry(
             signingID: group.signingID,
             processPath: group.signingID.isEmpty ? group.processPath : "",
-            platformBinary: group.teamID.isEmpty && !group.signingID.isEmpty,
-            teamID: group.teamID
+            platformBinary: group.teamID == appleTeamID,
+            teamID: group.teamID == appleTeamID ? "" : group.teamID
         )
     }
 
@@ -405,9 +405,8 @@ private func buildJailedTree(
 
     func buildNode(pid: pid_t, inheritedRule: JailRule?) -> JailedProcessNode? {
         guard let process = byPID[pid] else { return nil }
-        let resolvedTeamID = process.teamID.isEmpty ? appleTeamID : process.teamID
         let matchedRule = rules.first {
-            $0.jailedSignature.matches(resolvedTeamID: resolvedTeamID, signingID: process.signingID)
+            $0.jailedSignature.matches(resolvedTeamID: process.teamID, signingID: process.signingID)
         }
         let effectiveRule = matchedRule ?? inheritedRule
 

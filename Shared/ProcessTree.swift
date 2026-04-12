@@ -219,7 +219,7 @@ func codeSigningInfo(for code: SecCode) -> (teamID: String, signingID: String) {
     return (teamID, signingID)
 }
 
-private func isApplePlatformBinary(_ staticCode: SecStaticCode) -> Bool {
+func isApplePlatformBinary(_ staticCode: SecStaticCode) -> Bool {
     var requirement: SecRequirement?
     guard SecRequirementCreateWithString("anchor apple" as CFString, SecCSFlags(rawValue: 0), &requirement) == errSecSuccess,
           let requirement else { return false }
