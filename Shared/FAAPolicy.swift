@@ -298,6 +298,10 @@ private func globMatches(string: String, pattern: String) -> Bool {
     return match(string.startIndex, pattern.startIndex)
 }
 
+private func pathSpecificity(_ pattern: String) -> Int {
+    pattern.split(separator: "/", omittingEmptySubsequences: true).count
+}
+
 // MARK: - Policy evaluation
 
 /// Evaluates FAA policy rules against a file-access request.
@@ -315,8 +319,19 @@ public func checkFAAPolicy(
     accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
-    for rule in rules {
-        guard pathIsProtected(path, by: rule.protectedPathPrefix) else { continue }
+    let matching = rules.enumerated().compactMap { index, rule -> (index: Int, rule: FAARule)? in
+        guard pathIsProtected(path, by: rule.protectedPathPrefix) else { return nil }
+        return (index, rule)
+    }
+    let sorted = matching.sorted { lhs, rhs in
+        let lhsSpec = pathSpecificity(lhs.rule.protectedPathPrefix)
+        let rhsSpec = pathSpecificity(rhs.rule.protectedPathPrefix)
+        if lhsSpec != rhsSpec { return lhsSpec > rhsSpec }
+        if lhs.rule.enforceOnWriteOnly != rhs.rule.enforceOnWriteOnly { return lhs.rule.enforceOnWriteOnly }
+        return lhs.index < rhs.index
+    }
+
+    for (_, rule) in sorted {
         if rule.enforceOnWriteOnly && accessKind == .read { continue }
 
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
@@ -413,10 +428,12 @@ public enum PathRuleClassification {
 /// data is needed before evaluating access. Uses first-match-wins semantics,
 /// matching `checkFAAPolicy`.
 public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassification {
-    guard let matchingRule = rules.first(where: { pathIsProtected(path, by: $0.protectedPathPrefix) }) else {
-        return .noRuleApplies
+    let matching = rules.filter { pathIsProtected(path, by: $0.protectedPathPrefix) }
+    guard let first = matching.first else { return .noRuleApplies }
+    if matching.contains(where: \.requiresAncestry) {
+        return .ancestryRequired(matchingRule: first)
     }
-    return matchingRule.requiresAncestry ? .ancestryRequired(matchingRule: matchingRule) : .processLevelOnly(matchingRule: matchingRule)
+    return .processLevelOnly(matchingRule: first)
 }
 
 public func classifyPaths(_ path: String, secondaryPath: String?, rules: [FAARule]) -> PathRuleClassification {

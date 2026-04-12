@@ -589,18 +589,30 @@ struct AccessEvaluationTests {
         #expect(!decision.isAllowed)
     }
 
-    // MARK: Policy evaluation — first match wins
+    // MARK: Policy evaluation — most specific path wins
 
-    @Test("first matching rule wins — earlier allow beats later deny")
-    func firstRuleWins() async {
+    @Test("more specific rule wins regardless of array order")
+    func moreSpecificRuleWins() async {
+        let broadDeny = FAARule(protectedPathPrefix: "/protected")
+        let specificAllow = FAARule(protectedPathPrefix: "/protected/sub", allowedProcessPaths: ["/usr/bin/safe"])
+        let decision = await decide(
+            rules: [broadDeny, specificAllow],
+            path: "/protected/sub/file",
+            processPath: "/usr/bin/safe"
+        )
+        #expect(decision.isAllowed)
+    }
+
+    @Test("equally specific rules — earlier allow beats later deny")
+    func equalSpecificityAllowFirst() async {
         let allowRule = FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/usr/bin/safe"])
         let denyAllRule = FAARule(protectedPathPrefix: "/protected")
         let decision = await decide(rules: [allowRule, denyAllRule], path: "/protected/file", processPath: "/usr/bin/safe")
         #expect(decision.isAllowed)
     }
 
-    @Test("first matching rule wins — earlier deny beats later allow")
-    func firstDenyWins() async {
+    @Test("equally specific rules — earlier deny beats later allow")
+    func equalSpecificityDenyFirst() async {
         let denyAllRule = FAARule(protectedPathPrefix: "/protected")
         let allowRule = FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/usr/bin/safe"])
         let decision = await decide(rules: [denyAllRule, allowRule], path: "/protected/file", processPath: "/usr/bin/safe")
@@ -773,6 +785,48 @@ struct AccessEvaluationTests {
         #expect(sshdWriteKnownHosts.isAllowed)
 
         // Unauthorized process cannot READ id_rsa (rules 1+2 don't match, rule 3 denies)
+        let readIdRsa = await decide(
+            rules: rules, path: "/Users/admin/.ssh/id_rsa",
+            processPath: "/bin/evil", accessKind: .read
+        )
+        #expect(!readIdRsa.isAllowed)
+    }
+
+    @Test("SSH carve-out works regardless of rule order")
+    func sshCarveOutReversedOrder() async {
+        let sshd = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.sshd")
+        let ssh  = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.ssh")
+        let any  = ProcessSignature(teamID: "*", signingID: "*")
+
+        // Same three rules as universalWildcardSubpathCarveOut but REVERSED
+        let rules = [
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh",
+                    allowedSignatures: [ssh, sshd]),
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh/known_hosts",
+                    allowedSignatures: [any]),
+            FAARule(id: UUID(), protectedPathPrefix: "/Users/*/.ssh/known_hosts",
+                    allowedSignatures: [sshd], enforceOnWriteOnly: true),
+        ]
+
+        let readKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/bin/cat", accessKind: .read
+        )
+        #expect(readKnownHosts.isAllowed)
+
+        let writeKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/bin/evil", accessKind: .write
+        )
+        #expect(!writeKnownHosts.isAllowed)
+
+        let sshdWriteKnownHosts = await decide(
+            rules: rules, path: "/Users/admin/.ssh/known_hosts",
+            processPath: "/usr/sbin/sshd", teamID: "", signingID: "com.apple.sshd",
+            accessKind: .write
+        )
+        #expect(sshdWriteKnownHosts.isAllowed)
+
         let readIdRsa = await decide(
             rules: rules, path: "/Users/admin/.ssh/id_rsa",
             processPath: "/bin/evil", accessKind: .read
@@ -1015,14 +1069,14 @@ struct ClassifyPathTests {
         }
     }
 
-    @Test("first-match-wins — earlier process-only rule takes precedence")
-    func firstMatchWins() {
+    @Test("any matching rule requiring ancestry promotes to ancestryRequired")
+    func anyMatchingAncestryPromotes() {
         let rules = [
             FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/safe"]),
             FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/parent"]),
         ]
-        guard case .processLevelOnly = classifyPath("/protected/file", rules: rules) else {
-            Issue.record("Expected .processLevelOnly from first matching rule")
+        guard case .ancestryRequired = classifyPath("/protected/file", rules: rules) else {
+            Issue.record("Expected .ancestryRequired because one matching rule requires ancestry")
             return
         }
     }
