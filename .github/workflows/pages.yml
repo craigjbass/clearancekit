@@ -37,7 +37,7 @@ jobs:
           python3 -c "from PIL import Image; img = Image.open('clearancekit/clearancekit.icon/Assets/ChatGPT Image Jan 26, 2026 at 11_46_59 PM.png'); img.resize((512, 512), Image.LANCZOS).save('docs/logo.png', 'PNG', optimize=True)"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs/
 
