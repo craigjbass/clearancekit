@@ -41,10 +41,19 @@ public enum PolicyDecision {
     case jailAllowed(ruleID: UUID, ruleName: String, matchedPrefix: String)
     /// Jailed process accessed a path outside its allowed prefixes — denied.
     case jailDenied(ruleID: UUID, ruleName: String, allowedPrefixes: [String])
+    /// Covered by a rule that allows access only after Touch ID authorization.
+    /// The filter must drive the GUI prompt and either open a session or deny.
+    case requiresAuthorization(
+        ruleID: UUID,
+        ruleName: String,
+        ruleSource: RuleSource,
+        criterion: String,
+        sessionDuration: TimeInterval
+    )
 
     public var isAllowed: Bool {
         switch self {
-        case .denied, .jailDenied: return false
+        case .denied, .jailDenied, .requiresAuthorization: return false
         default: return true
         }
     }
@@ -55,6 +64,7 @@ public enum PolicyDecision {
         case .denied(let ruleID, _, _, _): return ruleID
         case .jailAllowed(let ruleID, _, _): return ruleID
         case .jailDenied(let ruleID, _, _): return ruleID
+        case .requiresAuthorization(let ruleID, _, _, _, _): return ruleID
         default: return nil
         }
     }
@@ -73,6 +83,7 @@ public enum PolicyDecision {
         case .denied(_, let name, _, _): return name
         case .jailAllowed(_, let name, _): return name
         case .jailDenied(_, let name, _): return name
+        case .requiresAuthorization(_, let name, _, _, _): return name
         default: return ""
         }
     }
@@ -81,6 +92,7 @@ public enum PolicyDecision {
         switch self {
         case .allowed(_, _, let source, _): return source
         case .denied(_, _, let source, _): return source
+        case .requiresAuthorization(_, _, let source, _, _): return source
         default: return nil
         }
     }
@@ -99,6 +111,8 @@ public enum PolicyDecision {
             return "Jail \"\(ruleName)\" — allowed: matched prefix \(prefix)"
         case .jailDenied(_, let ruleName, let prefixes):
             return "Denied by jail \"\(ruleName)\" — allowed prefixes: \(prefixes.joined(separator: ", "))"
+        case .requiresAuthorization(_, let ruleName, _, let criterion, _):
+            return "Requires Touch ID for rule \"\(ruleName)\" — matched \(criterion)"
         }
     }
 }
@@ -402,6 +416,27 @@ public func checkFAAPolicy(
         if !rule.allowedSignatures.isEmpty,
            let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
+        }
+
+        if !rule.authorizedSignatures.isEmpty,
+           rule.authorizedSignatures.contains(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
+            return .requiresAuthorization(
+                ruleID: rule.id,
+                ruleName: rule.protectedPathPrefix,
+                ruleSource: rule.source,
+                criterion: "authorizedSignature",
+                sessionDuration: rule.authorizationSessionDuration
+            )
+        }
+
+        if rule.requiresAuthorization && !teamID.isEmpty {
+            return .requiresAuthorization(
+                ruleID: rule.id,
+                ruleName: rule.protectedPathPrefix,
+                ruleSource: rule.source,
+                criterion: "requiresAuthorization",
+                sessionDuration: rule.authorizationSessionDuration
+            )
         }
 
         if !rule.allowedAncestorProcessPaths.isEmpty {
