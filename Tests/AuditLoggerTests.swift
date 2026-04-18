@@ -32,6 +32,7 @@ struct AuditLoggerTests {
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),
             processID: processID,
             parentPID: parentPID,
+            parentPIDVersion: 0,
             processPath: processPath,
             teamID: teamID,
             signingID: signingID,
