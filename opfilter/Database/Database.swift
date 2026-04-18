@@ -163,7 +163,9 @@ final class Database {
             SELECT id, protected_path_prefix,
                    allowed_process_paths, allowed_signatures,
                    allowed_ancestor_process_paths, allowed_ancestor_signatures,
-                   enforce_on_write_only
+                   enforce_on_write_only, require_valid_signing,
+                   authorized_signatures, requires_authorization,
+                   authorization_session_duration
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) {
@@ -196,8 +198,10 @@ final class Database {
                 (id, protected_path_prefix,
                  allowed_process_paths, allowed_signatures,
                  allowed_ancestor_process_paths, allowed_ancestor_signatures,
-                 enforce_on_write_only)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 enforce_on_write_only, require_valid_signing,
+                 authorized_signatures, requires_authorization,
+                 authorization_session_duration)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bindings: [
             .text(rule.id.uuidString),
             .text(rule.protectedPathPrefix),
@@ -206,6 +210,10 @@ final class Database {
             .text(encodeStringArray(rule.allowedAncestorProcessPaths)),
             .text(encodeSignatureArray(rule.allowedAncestorSignatures)),
             .int(rule.enforceOnWriteOnly ? 1 : 0),
+            .int(rule.requireValidSigning ? 1 : 0),
+            .text(encodeSignatureArray(rule.authorizedSignatures)),
+            .int(rule.requiresAuthorization ? 1 : 0),
+            .int(Int(rule.authorizationSessionDuration)),
         ])
     }
 
@@ -222,7 +230,11 @@ final class Database {
             allowedSignatures: decodeSignatureArray(columnText(stmt, 3)),
             allowedAncestorProcessPaths: decodeStringArray(columnText(stmt, 4)),
             allowedAncestorSignatures: decodeSignatureArray(columnText(stmt, 5)),
-            enforceOnWriteOnly: sqlite3_column_int(stmt, 6) != 0
+            enforceOnWriteOnly: sqlite3_column_int(stmt, 6) != 0,
+            requireValidSigning: sqlite3_column_int(stmt, 7) != 0,
+            authorizedSignatures: decodeSignatureArray(columnText(stmt, 8)),
+            requiresAuthorization: sqlite3_column_int(stmt, 9) != 0,
+            authorizationSessionDuration: TimeInterval(sqlite3_column_int64(stmt, 10))
         )
     }
 

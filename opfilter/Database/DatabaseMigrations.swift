@@ -24,6 +24,7 @@ let allMigrations: [Migration] = [
     Migration(version: 4, name: "Create user jail rules table", up: migration004CreateJailRules),
     Migration(version: 5, name: "Create feature flags table", up: migration005CreateFeatureFlags),
     Migration(version: 6, name: "Add enforce_on_write_only column to user_rules", up: migration006AddEnforceOnWriteOnlyColumn),
+    Migration(version: 7, name: "Add require_valid_signing and authorization columns to user_rules", up: migration007AddAuthorizationColumns),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -271,4 +272,24 @@ private func migration005CreateFeatureFlags(_ db: Database) {
 private func migration006AddEnforceOnWriteOnlyColumn(_ db: Database) {
     db.execute("ALTER TABLE user_rules ADD COLUMN enforce_on_write_only INTEGER NOT NULL DEFAULT 0")
     NSLog("Migration 006: Added enforce_on_write_only column to user_rules")
+}
+
+// MARK: - Migration 007: Add require_valid_signing and authorization columns to user_rules
+//
+// Adds columns with defaults matching FAARule field defaults. FAARule.encode(to:)
+// omits each field when at its default, so existing signatures remain valid after
+// upgrade — the canonical JSON for any rule whose new fields are at their defaults
+// is byte-identical to what the previous build signed.
+//
+// Note: require_valid_signing was previously parsed from JSON but never persisted,
+// causing a signature mismatch on restart for any rule where it was set to true.
+// This migration fixes that going forward; affected users see one final suspect
+// dialog, after which re-saving corrects the stored signature.
+
+private func migration007AddAuthorizationColumns(_ db: Database) {
+    db.execute("ALTER TABLE user_rules ADD COLUMN require_valid_signing INTEGER NOT NULL DEFAULT 0")
+    db.execute("ALTER TABLE user_rules ADD COLUMN authorized_signatures TEXT NOT NULL DEFAULT '[]'")
+    db.execute("ALTER TABLE user_rules ADD COLUMN requires_authorization INTEGER NOT NULL DEFAULT 0")
+    db.execute("ALTER TABLE user_rules ADD COLUMN authorization_session_duration INTEGER NOT NULL DEFAULT 300")
+    NSLog("Migration 007: Added require_valid_signing and authorization columns to user_rules")
 }
