@@ -137,8 +137,8 @@ private final class FakeBroadcaster: AuthorizationBroadcasting, @unchecked Senda
     init(answer: Bool?) { self.answer = answer }
 
     func requestAuthorizationFromFirstClient(
-        processName: String, signingID: String, pid: Int, pidVersion: UInt32,
-        path: String, isWrite: Bool, remainingSeconds: Double,
+        processName: String, signingID: String, teamID: String, pid: Int, pidVersion: UInt32,
+        path: String, isWrite: Bool, remainingSeconds: Double, ancestors: [AncestorInfo],
         reply: @escaping (Bool) -> Void
     ) {
         guard let answer else { reply(false); return }

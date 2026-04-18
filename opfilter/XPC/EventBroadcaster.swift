@@ -104,11 +104,13 @@ extension EventBroadcaster: AuthorizationBroadcasting {
     func requestAuthorizationFromFirstClient(
         processName: String,
         signingID: String,
+        teamID: String,
         pid: Int,
         pidVersion: UInt32,
         path: String,
         isWrite: Bool,
         remainingSeconds: Double,
+        ancestors: [AncestorInfo],
         reply: @escaping (Bool) -> Void
     ) {
         let connection: NSXPCConnection? = storage.withLock { $0.guiClients.values.first }
@@ -136,11 +138,13 @@ extension EventBroadcaster: AuthorizationBroadcasting {
         proxy.requestAuthorization(
             processName: processName,
             signingID: signingID,
+            teamID: teamID,
             pid: pid,
             pidVersion: pidVersion,
             path: path,
             isWrite: isWrite,
             remainingSeconds: remainingSeconds,
+            ancestors: ancestors,
             withReply: safeReply
         )
     }

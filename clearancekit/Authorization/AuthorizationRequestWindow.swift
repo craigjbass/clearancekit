@@ -13,9 +13,11 @@ final class AuthorizationRequestWindow: NSObject {
     struct AuthRequest {
         let processName: String
         let signingID: String
+        let teamID: String
         let path: String
         let isWrite: Bool
         let remainingSeconds: Double
+        let ancestors: [AncestorInfo]
         let reply: (Bool) -> Void
     }
 
@@ -36,8 +38,11 @@ final class AuthorizationRequestWindow: NSObject {
         guard let request = pendingRequests.first else { return }
         currentDeadline = Date().addingTimeInterval(request.remainingSeconds)
 
-        let width: CGFloat = 340
-        let height: CGFloat = 110
+        let width: CGFloat = 360
+        let baseHeight: CGFloat = 120
+        let ancestorHeight: CGFloat = 18
+        let height = baseHeight + ancestorHeight * CGFloat(request.ancestors.count)
+
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let origin = NSPoint(
             x: screen.visibleFrame.maxX - width - 8,
@@ -65,40 +70,72 @@ final class AuthorizationRequestWindow: NSObject {
         effect.layer?.cornerRadius = 12
         effect.layer?.masksToBounds = true
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        // Outer horizontal stack: [icon | content]
+        let outer = NSStackView()
+        outer.orientation = .horizontal
+        outer.alignment = .top
+        outer.spacing = 12
+        outer.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 16)
+        outer.translatesAutoresizingMaskIntoConstraints = false
 
-        let headline = NSTextField(labelWithString: "\(request.isWrite ? "Write" : "Read") access requested")
+        // Biometric icon
+        let iconView = NSImageView()
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .systemRed))
+        iconView.image = NSImage(systemSymbolName: "touchid", accessibilityDescription: nil)?
+            .withSymbolConfiguration(iconConfig)
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        outer.addArrangedSubview(iconView)
+
+        // Content stack
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 3
+
+        let accessKind = request.isWrite ? "Write" : "Read"
+        let headline = NSTextField(labelWithString: "\(accessKind) access requested")
         headline.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        stack.addArrangedSubview(headline)
+        headline.textColor = .systemRed
+        content.addArrangedSubview(headline)
 
         let pathLine = NSTextField(labelWithString: request.path)
         pathLine.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         pathLine.textColor = .secondaryLabelColor
         pathLine.lineBreakMode = .byTruncatingMiddle
-        stack.addArrangedSubview(pathLine)
+        content.addArrangedSubview(pathLine)
 
-        let processLine = NSTextField(labelWithString: request.processName)
-        processLine.textColor = .secondaryLabelColor
+        let shortName = URL(fileURLWithPath: request.processName).lastPathComponent
+        let processLine = NSTextField(labelWithString: "\(shortName)  ·  \(request.signingID)  ·  \(request.teamID)")
         processLine.font = NSFont.systemFont(ofSize: 11)
-        stack.addArrangedSubview(processLine)
+        processLine.textColor = .secondaryLabelColor
+        processLine.lineBreakMode = .byTruncatingMiddle
+        content.addArrangedSubview(processLine)
+
+        for ancestor in request.ancestors {
+            let ancestorShortName = URL(fileURLWithPath: ancestor.path).lastPathComponent
+            let line = NSTextField(labelWithString: "↑ \(ancestorShortName)  (\(ancestor.signingID))")
+            line.font = NSFont.systemFont(ofSize: 11)
+            line.textColor = .tertiaryLabelColor
+            line.lineBreakMode = .byTruncatingMiddle
+            content.addArrangedSubview(line)
+        }
 
         let countdown = NSTextField(labelWithString: "")
-        countdown.textColor = .tertiaryLabelColor
         countdown.font = NSFont.systemFont(ofSize: 11)
-        stack.addArrangedSubview(countdown)
+        countdown.textColor = .tertiaryLabelColor
+        content.addArrangedSubview(countdown)
         self.countdownLabel = countdown
 
-        effect.addSubview(stack)
+        outer.addArrangedSubview(content)
+
+        effect.addSubview(outer)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: effect.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            outer.topAnchor.constraint(equalTo: effect.topAnchor),
+            outer.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            outer.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            outer.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
         ])
 
         newPanel.contentView = effect

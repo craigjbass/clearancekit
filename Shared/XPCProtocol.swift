@@ -408,11 +408,13 @@ public protocol ClientProtocol {
     func requestAuthorization(
         processName: String,
         signingID: String,
+        teamID: String,
         pid: Int,
         pidVersion: UInt32,
         path: String,
         isWrite: Bool,
         remainingSeconds: Double,
+        ancestors: [AncestorInfo],
         withReply reply: @escaping (Bool) -> Void
     )
 }

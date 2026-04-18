@@ -141,6 +141,12 @@ final class XPCClient: NSObject, ObservableObject {
             argumentIndex: 0,
             ofReply: false
         )
+        conn.exportedInterface?.setClasses(
+            NSSet(array: [AncestorInfo.self, NSArray.self]) as! Set<AnyHashable>,
+            for: #selector(ClientProtocol.requestAuthorization(processName:signingID:teamID:pid:pidVersion:path:isWrite:remainingSeconds:ancestors:withReply:)),
+            argumentIndex: 8,
+            ofReply: false
+        )
 
         conn.invalidationHandler = { [weak self] in
             Task { @MainActor in
@@ -700,20 +706,24 @@ extension XPCClient: ClientProtocol {
     func requestAuthorization(
         processName: String,
         signingID: String,
+        teamID: String,
         pid: Int,
         pidVersion: UInt32,
         path: String,
         isWrite: Bool,
         remainingSeconds: Double,
+        ancestors: [AncestorInfo],
         withReply reply: @escaping (Bool) -> Void
     ) {
         Task { @MainActor in
             let request = AuthorizationRequestWindow.AuthRequest(
                 processName: processName,
                 signingID: signingID,
+                teamID: teamID,
                 path: path,
                 isWrite: isWrite,
                 remainingSeconds: remainingSeconds,
+                ancestors: ancestors,
                 reply: reply
             )
             AuthorizationRequestWindow.shared.enqueue(request)

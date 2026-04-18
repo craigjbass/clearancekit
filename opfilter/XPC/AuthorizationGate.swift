@@ -12,11 +12,13 @@ protocol AuthorizationBroadcasting: AnyObject, Sendable {
     func requestAuthorizationFromFirstClient(
         processName: String,
         signingID: String,
+        teamID: String,
         pid: Int,
         pidVersion: UInt32,
         path: String,
         isWrite: Bool,
         remainingSeconds: Double,
+        ancestors: [AncestorInfo],
         reply: @escaping (Bool) -> Void
     )
 }
@@ -184,11 +186,13 @@ extension AuthorizationGate {
         broadcaster.requestAuthorizationFromFirstClient(
             processName: event.processPath,
             signingID: event.signingID,
+            teamID: event.teamID,
             pid: Int(event.processID),
             pidVersion: event.processIdentity.pidVersion,
             path: event.path,
             isWrite: event.accessKind == .write,
-            remainingSeconds: remainingSeconds
+            remainingSeconds: remainingSeconds,
+            ancestors: ancestors
         ) { allowed in
             timer.cancel()
             respondOnce(allowed)
