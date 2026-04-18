@@ -64,6 +64,7 @@
 				Assets.xcassets,
 				clearancekit.icon,
 				Configure/Allowlist/AllowlistView.swift,
+				Configure/BundleUpdaters/BundleUpdaterAllowlistView.swift,
 				Configure/AppProtections/AppPickerView.swift,
 				Configure/AppProtections/AppPreset.swift,
 				Configure/AppProtections/AppProtection.swift,

@@ -14,7 +14,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case policy      = "Policy"
     case presets     = "App Protections"
     case jail        = "Jail"
-    case allowlist   = "Allowlist"
+    case allowlist        = "Allowlist"
+    case bundleUpdaters   = "Bundle Updaters"
     case processes   = "Processes"
     case processTree = "Process Tree"
     case metrics     = "Metrics"
@@ -32,7 +33,8 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .policy:      return "shield"
         case .presets:     return "lock.app.dashed"
         case .jail:        return "lock.rectangle.on.rectangle"
-        case .allowlist:   return "checkmark.shield"
+        case .allowlist:      return "checkmark.shield"
+        case .bundleUpdaters: return "lock.app.dashed.trianglebadge.exclamationmark"
         case .processes:   return "cpu"
         case .processTree: return "list.bullet.indent"
         case .metrics:     return "chart.xyaxis.line"
@@ -81,6 +83,8 @@ struct ContentView: View {
                             .tag(SidebarItem.jail)
                         Label(SidebarItem.allowlist.rawValue, systemImage: SidebarItem.allowlist.icon)
                             .tag(SidebarItem.allowlist)
+                        Label(SidebarItem.bundleUpdaters.rawValue, systemImage: SidebarItem.bundleUpdaters.icon)
+                            .tag(SidebarItem.bundleUpdaters)
                         Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
                             .tag(SidebarItem.setup)
                         Label(SidebarItem.mcpAgents.rawValue, systemImage: SidebarItem.mcpAgents.icon)
@@ -101,7 +105,8 @@ struct ContentView: View {
                 case .policy:      PolicyView()
                 case .presets:     PresetsView()
                 case .jail:        JailView()
-                case .allowlist:   AllowlistView()
+                case .allowlist:       AllowlistView()
+                case .bundleUpdaters:  BundleUpdaterAllowlistView()
                 case .processes:   ProcessesView()
                 case .processTree: ProcessTreeView()
                 case .metrics:     MetricsView()
