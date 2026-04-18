@@ -26,11 +26,13 @@ protocol PolicyDatabaseProtocol: AnyObject {
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry>
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule>
     func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag>
+    func loadBundleUpdaterSignaturesResult() -> DatabaseLoadResult<BundleUpdaterSignature>
     func saveUserRules(_ rules: [FAARule])
     func saveUserAllowlist(_ entries: [AllowlistEntry])
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry])
     func saveUserJailRules(_ rules: [JailRule])
     func saveFeatureFlags(_ flags: [FeatureFlag])
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature])
 }
 
 // MARK: - PolicyRepository

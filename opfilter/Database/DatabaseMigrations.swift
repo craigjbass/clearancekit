@@ -25,6 +25,7 @@ let allMigrations: [Migration] = [
     Migration(version: 5, name: "Create feature flags table", up: migration005CreateFeatureFlags),
     Migration(version: 6, name: "Add enforce_on_write_only column to user_rules", up: migration006AddEnforceOnWriteOnlyColumn),
     Migration(version: 7, name: "Add require_valid_signing and authorization columns to user_rules", up: migration007AddAuthorizationColumns),
+    Migration(version: 8, name: "Add bundle_updater_signatures table", up: migration008AddBundleUpdaterSignatures),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -292,4 +293,17 @@ private func migration007AddAuthorizationColumns(_ db: Database) {
     db.execute("ALTER TABLE user_rules ADD COLUMN requires_authorization INTEGER NOT NULL DEFAULT 0")
     db.execute("ALTER TABLE user_rules ADD COLUMN authorization_session_duration INTEGER NOT NULL DEFAULT 300")
     NSLog("Migration 007: Added require_valid_signing and authorization columns to user_rules")
+}
+
+// MARK: - Migration 008: Add bundle_updater_signatures table
+
+private func migration008AddBundleUpdaterSignatures(_ db: Database) {
+    db.execute("""
+        CREATE TABLE bundle_updater_signatures (
+            id TEXT PRIMARY KEY,
+            team_id TEXT NOT NULL,
+            signing_id TEXT NOT NULL
+        )
+    """)
+    NSLog("Migration 008: Created bundle_updater_signatures table")
 }

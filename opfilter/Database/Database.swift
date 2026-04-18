@@ -504,6 +504,59 @@ final class Database {
         return encoded
     }
 
+    // MARK: - Bundle Updater Signatures
+
+    func loadBundleUpdaterSignaturesResult() -> DatabaseLoadResult<BundleUpdaterSignature> {
+        var signatures: [BundleUpdaterSignature] = []
+        query("SELECT id, team_id, signing_id FROM bundle_updater_signatures ORDER BY rowid") { stmt in
+            let uuidString = columnText(stmt, 0)
+            guard let id = UUID(uuidString: uuidString) else {
+                NSLog("Database: Skipping bundle updater signature row with invalid UUID '%@'", uuidString)
+                return
+            }
+            signatures.append(BundleUpdaterSignature(
+                id: id,
+                teamID: columnText(stmt, 1),
+                signingID: columnText(stmt, 2)
+            ))
+        }
+        switch checkSignature(table: "bundle_updater_signatures", content: canonicalBundleUpdaterSignaturesJSON(signatures)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d bundle updater signature(s)", signatures.count)
+            return .ok(signatures)
+        case .suspect:
+            NSLog("Database: Signature verification failed for bundle_updater_signatures — discarding %d signature(s)", signatures.count)
+            return .suspect(signatures)
+        }
+    }
+
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
+        inTransaction {
+            execute("DELETE FROM bundle_updater_signatures")
+            for signature in signatures {
+                execute("""
+                    INSERT INTO bundle_updater_signatures (id, team_id, signing_id)
+                    VALUES (?, ?, ?)
+                """, bindings: [
+                    .text(signature.id.uuidString),
+                    .text(signature.teamID),
+                    .text(signature.signingID),
+                ])
+            }
+            updateSignature(table: "bundle_updater_signatures", content: canonicalBundleUpdaterSignaturesJSON(signatures))
+        }
+    }
+
+    private func canonicalBundleUpdaterSignaturesJSON(_ signatures: [BundleUpdaterSignature]) -> Data {
+        let sorted = signatures.sorted { $0.id.uuidString < $1.id.uuidString }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode bundle updater signatures — [BundleUpdaterSignature] must always be encodable")
+        }
+        return encoded
+    }
+
     // MARK: - Signature verification
 
     private enum SignatureCheckResult {
@@ -530,6 +583,7 @@ final class Database {
         case "user_ancestor_allowlist": break
         case "user_jail_rules":         break
         case "feature_flags":           break
+        case "bundle_updater_signatures": break
         default: preconditionFailure("Unexpected table name: \(table)")
         }
         var found = false

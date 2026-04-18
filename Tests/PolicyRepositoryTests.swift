@@ -26,11 +26,13 @@ private final class FakeDatabase: PolicyDatabaseProtocol {
     func loadUserAncestorAllowlistResult() -> DatabaseLoadResult<AncestorAllowlistEntry> { userAncestorAllowlistResult }
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> { userJailRulesResult }
     func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag> { featureFlagsResult }
+    func loadBundleUpdaterSignaturesResult() -> DatabaseLoadResult<BundleUpdaterSignature> { .ok([]) }
     func saveUserRules(_ rules: [FAARule]) { savedRules = rules }
     func saveUserAllowlist(_ entries: [AllowlistEntry]) { savedAllowlist = entries }
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) { savedAncestorAllowlist = entries }
     func saveUserJailRules(_ rules: [JailRule]) { savedJailRules = rules }
     func saveFeatureFlags(_ flags: [FeatureFlag]) { savedFeatureFlags = flags }
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {}
 }
 
 // MARK: - Factories
