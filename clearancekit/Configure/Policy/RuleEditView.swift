@@ -116,6 +116,7 @@ struct RuleEditView: View {
                 if !draft.authorizedSignatures.isEmpty || draft.requiresAuthorization {
                     Section("Session inactivity") {
                         Picker("Duration", selection: $draft.authorizationSessionDuration) {
+                            Text("No session").tag(TimeInterval(0))
                             Text("1 minute").tag(TimeInterval(60))
                             Text("5 minutes").tag(TimeInterval(300))
                             Text("15 minutes").tag(TimeInterval(900))
