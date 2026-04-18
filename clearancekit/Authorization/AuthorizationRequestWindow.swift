@@ -70,26 +70,17 @@ final class AuthorizationRequestWindow: NSObject {
         effect.layer?.cornerRadius = 12
         effect.layer?.masksToBounds = true
 
-        // Outer horizontal stack: [icon | content]
-        let outer = NSStackView()
-        outer.orientation = .horizontal
-        outer.alignment = .top
-        outer.spacing = 12
-        outer.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 16)
-        outer.translatesAutoresizingMaskIntoConstraints = false
-
-        // Biometric icon
+        // Biometric icon — fixed width, pinned top-left
         let iconView = NSImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
         let iconConfig = NSImage.SymbolConfiguration(pointSize: 28, weight: .regular)
             .applying(NSImage.SymbolConfiguration(hierarchicalColor: .systemRed))
         iconView.image = NSImage(systemSymbolName: "touchid", accessibilityDescription: nil)?
             .withSymbolConfiguration(iconConfig)
-        iconView.setContentHuggingPriority(.required, for: .horizontal)
-        iconView.setContentCompressionResistancePriority(.required, for: .horizontal)
-        outer.addArrangedSubview(iconView)
 
-        // Content stack
+        // Content stack — explicitly pinned to icon trailing so width is defined immediately
         let content = NSStackView()
+        content.translatesAutoresizingMaskIntoConstraints = false
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 3
@@ -128,14 +119,16 @@ final class AuthorizationRequestWindow: NSObject {
         content.addArrangedSubview(countdown)
         self.countdownLabel = countdown
 
-        outer.addArrangedSubview(content)
-
-        effect.addSubview(outer)
+        effect.addSubview(iconView)
+        effect.addSubview(content)
         NSLayoutConstraint.activate([
-            outer.topAnchor.constraint(equalTo: effect.topAnchor),
-            outer.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            outer.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            outer.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            iconView.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 14),
+            iconView.topAnchor.constraint(equalTo: effect.topAnchor, constant: 14),
+            iconView.widthAnchor.constraint(equalToConstant: 32),
+
+            content.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 10),
+            content.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -14),
+            content.topAnchor.constraint(equalTo: effect.topAnchor, constant: 14),
         ])
 
         newPanel.contentView = effect
