@@ -21,6 +21,7 @@ protocol PolicyServiceProtocol: AnyObject {
     func updateJailRule(_ rule: JailRule)
     func removeJailRule(ruleID: UUID)
     func setJailEnabled(_ enabled: Bool)
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature])
 }
 
 /// A function that authenticates the user before a sensitive mutation is applied.

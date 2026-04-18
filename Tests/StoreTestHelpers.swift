@@ -32,6 +32,7 @@ final class FakePolicyService: PolicyServiceProtocol {
     func updateJailRule(_ rule: JailRule) { updatedJailRules.append(rule) }
     func removeJailRule(ruleID: UUID) { removedJailRuleIDs.append(ruleID) }
     func setJailEnabled(_ enabled: Bool) { jailEnabledCalls.append(enabled) }
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {}
 }
 
 // MARK: - Auth helpers

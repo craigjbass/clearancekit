@@ -390,6 +390,16 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
+        guard let data = try? JSONEncoder().encode(signatures) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: saveBundleUpdaterSignatures error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.saveBundleUpdaterSignatures(data as NSData) { success in
+            if !success { logger.error("XPCClient: saveBundleUpdaterSignatures rejected by service") }
+        }
+    }
+
     // MARK: - Process list
 
     func fetchProcessList() async -> [RunningProcessInfo] {
@@ -700,6 +710,17 @@ extension XPCClient: ClientProtocol {
     nonisolated func serviceReady(_ isReady: Bool) {
         Task { @MainActor in
             self.isServiceReady = isReady
+        }
+    }
+
+    nonisolated func bundleUpdaterSignaturesUpdated(_ signaturesData: NSData) {
+        guard let signatures = try? JSONDecoder().decode([BundleUpdaterSignature].self, from: signaturesData as Data) else {
+            logger.fault("XPCClient: Failed to decode bundle updater signatures — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            BundleUpdaterStore.shared.receivedSignatures(signatures)
         }
     }
 
