@@ -31,6 +31,8 @@ final class FileAuthPipeline: @unchecked Sendable {
     private let allowlistProvider: @Sendable () -> [AllowlistEntry]
     private let ancestorAllowlistProvider: @Sendable () -> [AncestorAllowlistEntry]
     private let postRespondHandler: @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
+    private let authorizationGate: AuthorizationGate
+    private let authorizationHandler: @Sendable (FileAuthEvent, TimeInterval) -> Void
     private let hotPathQueue: DispatchQueue
     private let slowWorkerQueue: DispatchQueue
     private let slowWorkerSemaphore: DispatchSemaphore
@@ -44,6 +46,8 @@ final class FileAuthPipeline: @unchecked Sendable {
         allowlistProvider: @escaping @Sendable () -> [AllowlistEntry],
         ancestorAllowlistProvider: @escaping @Sendable () -> [AncestorAllowlistEntry],
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void,
+        authorizationGate: AuthorizationGate = AuthorizationGate(),
+        authorizationHandler: @escaping @Sendable (FileAuthEvent, TimeInterval) -> Void = { _, _ in },
         eventBufferCapacity: Int = 1024,
         slowQueueCapacity: Int = 256,
         hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
@@ -59,6 +63,8 @@ final class FileAuthPipeline: @unchecked Sendable {
         self.allowlistProvider = allowlistProvider
         self.ancestorAllowlistProvider = ancestorAllowlistProvider
         self.postRespondHandler = postRespond
+        self.authorizationGate = authorizationGate
+        self.authorizationHandler = authorizationHandler
         self.hotPathQueue = hotPathQueue
         self.slowWorkerQueue = slowWorkerQueue
         self.slowWorkerSemaphore = slowWorkerSemaphore
@@ -143,10 +149,14 @@ final class FileAuthPipeline: @unchecked Sendable {
                 accessKind: event.accessKind,
                 ancestors: []
             )
+            let hotAncestors = processTree.ancestors(of: event.processIdentity)
+            if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, dwellNanoseconds: 0) {
+                metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
+                return
+            }
             event.respond(decision.isAllowed, false)
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
-            let ancestors = processTree.ancestors(of: event.processIdentity)
-            postRespondHandler(event, decision, ancestors, 0)
+            postRespondHandler(event, decision, hotAncestors, 0)
 
         case .processLevelOnly, .ancestryRequired:
             let workItem = SlowWorkItem(
@@ -208,10 +218,48 @@ final class FileAuthPipeline: @unchecked Sendable {
             ancestors: ancestors
         )
 
-        event.respond(decision.isAllowed, false)
-
         let logAncestors = processTree.ancestors(of: event.processIdentity)
+        if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds) {
+            return
+        }
+        event.respond(decision.isAllowed, false)
         postRespondHandler(event, decision, logAncestors, dwellNanoseconds)
+    }
+
+    /// Returns true if the decision was handled as an authorization case (either
+    /// via an active session allow or by handing off to the authorization handler).
+    /// Returns false if the caller should proceed with normal respond/postRespond logic.
+    private func handleDecisionWithAuthorization(
+        _ decision: PolicyDecision,
+        event: FileAuthEvent,
+        ancestors: [AncestorInfo],
+        dwellNanoseconds: UInt64
+    ) -> Bool {
+        guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration) = decision else {
+            return false
+        }
+        if authorizationGate.hasActiveSession(
+            pid: event.processID,
+            pidVersion: event.processIdentity.pidVersion,
+            prefix: ruleName
+        ) {
+            authorizationGate.touchSession(
+                pid: event.processID,
+                pidVersion: event.processIdentity.pidVersion,
+                prefix: ruleName
+            )
+            let sessionDecision = PolicyDecision.allowed(
+                ruleID: ruleID,
+                ruleName: ruleName,
+                ruleSource: ruleSource,
+                matchedCriterion: "authorized session"
+            )
+            event.respond(true, false)
+            postRespondHandler(event, sessionDecision, ancestors, dwellNanoseconds)
+            return true
+        }
+        authorizationHandler(event, duration)
+        return true
     }
 
     private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) -> UInt64 {

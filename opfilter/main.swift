@@ -50,6 +50,7 @@ let policyRepository = PolicyRepository(
 
 let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
 let allowlistState = AllowlistState()
+let authorizationGate = AuthorizationGate()
 
 let faaInteractorRef = WeakBox<FAAFilterInteractor>()
 let pipeline = FileAuthPipeline(
@@ -59,6 +60,17 @@ let pipeline = FileAuthPipeline(
     ancestorAllowlistProvider: { allowlistState.currentAncestorAllowlist() },
     postRespond: { event, decision, ancestors, dwell in
         postRespondHandler.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+    },
+    authorizationGate: authorizationGate,
+    authorizationHandler: { event, duration in
+        authorizationGate.requestAuthorization(
+            event: event,
+            sessionDuration: duration,
+            broadcaster: broadcaster,
+            postRespond: { evt, decision, ancestors, dwell in
+                postRespondHandler.postRespond(fileEvent: evt, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+            }
+        )
     },
     hotPathQueue: hotPathQueue,
     slowWorkerQueue: slowWorkerQueue,
