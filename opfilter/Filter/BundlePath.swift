@@ -6,10 +6,19 @@
 import Foundation
 
 enum BundlePath {
-    static let protectedPrefixes: [String] = [
-        "/Applications/",
-        NSHomeDirectory() + "/Applications/"
-    ]
+    static let protectedPrefixes: [String] = {
+        var prefixes = ["/Applications/"]
+        let usersURL = URL(fileURLWithPath: "/Users")
+        let userDirs = (try? FileManager.default.contentsOfDirectory(
+            at: usersURL,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        )) ?? []
+        for dir in userDirs {
+            prefixes.append(dir.appendingPathComponent("Applications").path + "/")
+        }
+        return prefixes
+    }()
 
     static func extract(from accessPath: String) -> String? {
         for prefix in protectedPrefixes {

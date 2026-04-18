@@ -160,6 +160,11 @@ final class ESInboundAdapter {
         for prefix in policyPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
+        // Bundle protection prefixes are permanently muted so write events inside .app bundles
+        // are always delivered. Kept outside policyPrefixes so policy diffs never unmute them.
+        for prefix in BundlePath.protectedPrefixes {
+            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        }
         // XProtect path is permanently muted so NOTIFY_WRITE, AUTH_RENAME, and AUTH_UNLINK events
         // are always delivered for it. Kept outside policyPrefixes so policy diffs never unmute it.
         es_mute_path(client, Self.xprotectPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
