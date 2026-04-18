@@ -284,6 +284,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(context.policyRepository.encodedUserJailRules()) }
     }
 
+    // MARK: - Bundle updater signature mutations
+
+    fileprivate func applySaveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
+        guard let context else { return }
+        context.policyRepository.setBundleUpdaterSignatures(signatures)
+        broadcaster.broadcastToAllClients { $0.bundleUpdaterSignaturesUpdated(context.policyRepository.encodedBundleUpdaterSignatures()) }
+    }
+
     // MARK: - Jailed process query
 
     fileprivate func activeJailedProcesses() -> [RunningProcessInfo] {
@@ -372,6 +380,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy.userJailRulesUpdated(context.policyRepository.encodedUserJailRules())
         proxy.jailEnabledUpdated(isJailEnabled)
         proxy.mcpEnabledUpdated(context.policyRepository.mcpEnabled)
+        proxy.bundleUpdaterSignaturesUpdated(context.policyRepository.encodedBundleUpdaterSignatures())
         proxy.serviceReady(true)
     }
 }
@@ -678,6 +687,17 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply(false); return }
         server.serverQueue.async {
             server.setMCPEnabled(enabled)
+            reply(true)
+        }
+    }
+
+    func saveBundleUpdaterSignatures(_ signaturesData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        guard let signatures = try? JSONDecoder().decode([BundleUpdaterSignature].self, from: signaturesData as Data) else {
+            reply(false); return
+        }
+        server.serverQueue.async {
+            server.applySaveBundleUpdaterSignatures(signatures)
             reply(true)
         }
     }
