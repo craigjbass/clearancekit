@@ -36,45 +36,73 @@ final class AuthorizationRequestWindow: NSObject {
         guard let request = pendingRequests.first else { return }
         currentDeadline = Date().addingTimeInterval(request.remainingSeconds)
 
+        let width: CGFloat = 340
+        let height: CGFloat = 110
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let origin = NSPoint(
+            x: screen.visibleFrame.maxX - width - 8,
+            y: screen.visibleFrame.maxY - height - 8
+        )
+
         let newPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 200),
-            styleMask: [.titled],
+            contentRect: NSRect(origin: origin, size: NSSize(width: width, height: height)),
+            styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        newPanel.level = .floating
-        newPanel.title = "ClearanceKit Authorization"
+        newPanel.level = .statusBar
         newPanel.isReleasedWhenClosed = false
-        newPanel.center()
+        newPanel.backgroundColor = .clear
+        newPanel.isOpaque = false
+        newPanel.hasShadow = true
+        newPanel.hidesOnDeactivate = false
 
-        let container = NSStackView()
-        container.orientation = .vertical
-        container.alignment = .leading
-        container.spacing = 12
-        container.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        container.translatesAutoresizingMaskIntoConstraints = false
+        let effect = NSVisualEffectView()
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 12
+        effect.layer?.masksToBounds = true
 
-        let headline = NSTextField(labelWithString: "\(request.isWrite ? "Write" : "Read") access to \(request.path)")
-        headline.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        headline.lineBreakMode = .byTruncatingMiddle
-        container.addArrangedSubview(headline)
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        stack.translatesAutoresizingMaskIntoConstraints = false
 
-        let subline = NSTextField(labelWithString: "Requested by \(request.processName)")
-        subline.textColor = .secondaryLabelColor
-        container.addArrangedSubview(subline)
+        let headline = NSTextField(labelWithString: "\(request.isWrite ? "Write" : "Read") access requested")
+        headline.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        stack.addArrangedSubview(headline)
 
-        let signatureLine = NSTextField(labelWithString: "Signing ID: \(request.signingID)")
-        signatureLine.textColor = .secondaryLabelColor
-        signatureLine.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        container.addArrangedSubview(signatureLine)
+        let pathLine = NSTextField(labelWithString: request.path)
+        pathLine.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        pathLine.textColor = .secondaryLabelColor
+        pathLine.lineBreakMode = .byTruncatingMiddle
+        stack.addArrangedSubview(pathLine)
+
+        let processLine = NSTextField(labelWithString: request.processName)
+        processLine.textColor = .secondaryLabelColor
+        processLine.font = NSFont.systemFont(ofSize: 11)
+        stack.addArrangedSubview(processLine)
 
         let countdown = NSTextField(labelWithString: "")
         countdown.textColor = .tertiaryLabelColor
-        container.addArrangedSubview(countdown)
+        countdown.font = NSFont.systemFont(ofSize: 11)
+        stack.addArrangedSubview(countdown)
         self.countdownLabel = countdown
 
-        newPanel.contentView = container
-        newPanel.makeKeyAndOrderFront(nil)
+        effect.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: effect.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+
+        newPanel.contentView = effect
+        newPanel.orderFront(nil)
         self.panel = newPanel
 
         startCountdown()
