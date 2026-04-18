@@ -697,7 +697,7 @@ extension XPCClient: ClientProtocol {
         }
     }
 
-    nonisolated func requestAuthorization(
+    func requestAuthorization(
         processName: String,
         signingID: String,
         pid: Int,
@@ -707,6 +707,16 @@ extension XPCClient: ClientProtocol {
         remainingSeconds: Double,
         withReply reply: @escaping (Bool) -> Void
     ) {
-        reply(false)
+        Task { @MainActor in
+            let request = AuthorizationRequestWindow.AuthRequest(
+                processName: processName,
+                signingID: signingID,
+                path: path,
+                isWrite: isWrite,
+                remainingSeconds: remainingSeconds,
+                reply: reply
+            )
+            AuthorizationRequestWindow.shared.enqueue(request)
+        }
     }
 }
