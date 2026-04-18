@@ -26,6 +26,7 @@ struct AuthorizationGateDispatchTests {
 
         gate.requestAuthorization(
             event: event,
+            rulePrefix: "/Secrets",
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -36,7 +37,7 @@ struct AuthorizationGateDispatchTests {
         #expect(gate.hasActiveSession(
             pid: event.processID,
             pidVersion: event.processIdentity.pidVersion,
-            prefix: event.path
+            prefix: "/Secrets"
         ) == true)
     }
 
@@ -57,6 +58,7 @@ struct AuthorizationGateDispatchTests {
 
         gate.requestAuthorization(
             event: event,
+            rulePrefix: "/Secrets",
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -67,7 +69,7 @@ struct AuthorizationGateDispatchTests {
         #expect(gate.hasActiveSession(
             pid: event.processID,
             pidVersion: event.processIdentity.pidVersion,
-            prefix: event.path
+            prefix: "/Secrets"
         ) == false)
     }
 
@@ -88,6 +90,7 @@ struct AuthorizationGateDispatchTests {
 
         gate.requestAuthorization(
             event: event,
+            rulePrefix: "/Secrets",
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }

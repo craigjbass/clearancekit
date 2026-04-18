@@ -81,7 +81,7 @@ struct FileAuthPipelineAuthorizationTests {
             ancestorAllowlistProvider: { [] },
             postRespond: { _, _, _, _ in postRespondCalled.signal() },
             authorizationGate: gate,
-            authorizationHandler: { _, _ in
+            authorizationHandler: { _, _, _ in
                 handlerCalledLock.withLock { $0 = true }
             }
         )
@@ -116,7 +116,7 @@ struct FileAuthPipelineAuthorizationTests {
             ancestorAllowlistProvider: { [] },
             postRespond: { _, _, _, _ in },
             authorizationGate: gate,
-            authorizationHandler: { _, duration in
+            authorizationHandler: { _, duration, _ in
                 capturedDuration.withLock { $0 = duration }
                 handlerCalled.signal()
             }

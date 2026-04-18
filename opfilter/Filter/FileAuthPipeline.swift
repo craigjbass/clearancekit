@@ -32,7 +32,7 @@ final class FileAuthPipeline: @unchecked Sendable {
     private let ancestorAllowlistProvider: @Sendable () -> [AncestorAllowlistEntry]
     private let postRespondHandler: @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
     private let authorizationGate: AuthorizationGate
-    private let authorizationHandler: @Sendable (FileAuthEvent, TimeInterval) -> Void
+    private let authorizationHandler: @Sendable (FileAuthEvent, TimeInterval, String) -> Void
     private let hotPathQueue: DispatchQueue
     private let slowWorkerQueue: DispatchQueue
     private let slowWorkerSemaphore: DispatchSemaphore
@@ -47,7 +47,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         ancestorAllowlistProvider: @escaping @Sendable () -> [AncestorAllowlistEntry],
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void,
         authorizationGate: AuthorizationGate = AuthorizationGate(),
-        authorizationHandler: @escaping @Sendable (FileAuthEvent, TimeInterval) -> Void = { _, _ in },
+        authorizationHandler: @escaping @Sendable (FileAuthEvent, TimeInterval, String) -> Void = { _, _, _ in },
         eventBufferCapacity: Int = 1024,
         slowQueueCapacity: Int = 256,
         hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
@@ -258,7 +258,7 @@ final class FileAuthPipeline: @unchecked Sendable {
             postRespondHandler(event, sessionDecision, ancestors, dwellNanoseconds)
             return true
         }
-        authorizationHandler(event, duration)
+        authorizationHandler(event, duration, ruleName)
         return true
     }
 

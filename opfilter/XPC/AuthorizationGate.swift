@@ -77,6 +77,7 @@ final class AuthorizationGate: @unchecked Sendable {
 extension AuthorizationGate {
     func requestAuthorization(
         event: FileAuthEvent,
+        rulePrefix: String,
         sessionDuration: TimeInterval,
         broadcaster: AuthorizationBroadcasting,
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
@@ -98,7 +99,7 @@ extension AuthorizationGate {
                 gate.createSession(
                     pid: event.processID,
                     pidVersion: event.processIdentity.pidVersion,
-                    prefix: event.path,
+                    prefix: rulePrefix,
                     duration: sessionDuration
                 )
             }
