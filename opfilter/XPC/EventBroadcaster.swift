@@ -97,3 +97,51 @@ final class EventBroadcaster: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - AuthorizationBroadcasting
+
+extension EventBroadcaster: AuthorizationBroadcasting {
+    func requestAuthorizationFromFirstClient(
+        processName: String,
+        signingID: String,
+        pid: Int,
+        pidVersion: UInt32,
+        path: String,
+        isWrite: Bool,
+        remainingSeconds: Double,
+        reply: @escaping (Bool) -> Void
+    ) {
+        let connection: NSXPCConnection? = storage.withLock { $0.guiClients.values.first }
+        guard let connection else {
+            reply(false)
+            return
+        }
+        let alreadyReplied = OSAllocatedUnfairLock(initialState: false)
+        let safeReply: (Bool) -> Void = { allowed in
+            let skip = alreadyReplied.withLock { replied -> Bool in
+                if replied { return true }
+                replied = true
+                return false
+            }
+            guard !skip else { return }
+            reply(allowed)
+        }
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+            safeReply(false)
+        } as? ClientProtocol
+        guard let proxy else {
+            safeReply(false)
+            return
+        }
+        proxy.requestAuthorization(
+            processName: processName,
+            signingID: signingID,
+            pid: pid,
+            pidVersion: pidVersion,
+            path: path,
+            isWrite: isWrite,
+            remainingSeconds: remainingSeconds,
+            withReply: safeReply
+        )
+    }
+}
