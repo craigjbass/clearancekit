@@ -165,6 +165,7 @@ public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 33, signingID: "com.apple.ctcategories.service"),
     signingEntry(n: 34, signingID: "com.apple.XprotectFramework.AnalysisService"),
     signingEntry(n: 35, signingID: "com.apple.localizationswitcherd"),
+    signingEntry(n: 36, signingID: "com.apple.intents.intents-helper"),
 ]
 
 // MARK: - XProtect enumeration
