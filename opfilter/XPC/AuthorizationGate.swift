@@ -24,9 +24,21 @@ protocol AuthorizationBroadcasting: AnyObject, Sendable {
 // MARK: -
 
 struct AuthSessionKey: Hashable {
-    let pid: pid_t
-    let pidVersion: UInt32
+    let teamID: String
+    let signingID: String
+    let parentPID: pid_t
+    let parentPIDVersion: UInt32
+    let ancestorChainHash: Int
     let pathPrefix: String
+}
+
+private func ancestorChainHash(ancestors: [AncestorInfo]) -> Int {
+    var hasher = Hasher()
+    for ancestor in ancestors {
+        hasher.combine(ancestor.teamID)
+        hasher.combine(ancestor.signingID)
+    }
+    return hasher.finalize()
 }
 
 struct AuthSession {
@@ -45,8 +57,20 @@ final class AuthorizationGate: @unchecked Sendable {
         self.sessions = OSAllocatedUnfairLock(initialState: [:])
     }
 
-    func hasActiveSession(pid: pid_t, pidVersion: UInt32, prefix: String) -> Bool {
-        let key = AuthSessionKey(pid: pid, pidVersion: pidVersion, pathPrefix: prefix)
+    func hasActiveSession(
+        teamID: String,
+        signingID: String,
+        parentPID: pid_t,
+        parentPIDVersion: UInt32,
+        ancestors: [AncestorInfo],
+        prefix: String
+    ) -> Bool {
+        let key = AuthSessionKey(
+            teamID: teamID, signingID: signingID,
+            parentPID: parentPID, parentPIDVersion: parentPIDVersion,
+            ancestorChainHash: ancestorChainHash(ancestors: ancestors),
+            pathPrefix: prefix
+        )
         return sessions.withLock { store in
             guard let session = store[key] else { return false }
             if session.isActive { return true }
@@ -55,8 +79,20 @@ final class AuthorizationGate: @unchecked Sendable {
         }
     }
 
-    func touchSession(pid: pid_t, pidVersion: UInt32, prefix: String) {
-        let key = AuthSessionKey(pid: pid, pidVersion: pidVersion, pathPrefix: prefix)
+    func touchSession(
+        teamID: String,
+        signingID: String,
+        parentPID: pid_t,
+        parentPIDVersion: UInt32,
+        ancestors: [AncestorInfo],
+        prefix: String
+    ) {
+        let key = AuthSessionKey(
+            teamID: teamID, signingID: signingID,
+            parentPID: parentPID, parentPIDVersion: parentPIDVersion,
+            ancestorChainHash: ancestorChainHash(ancestors: ancestors),
+            pathPrefix: prefix
+        )
         sessions.withLock { store in
             guard var session = store[key] else { return }
             session.lastAccess = Date()
@@ -64,8 +100,21 @@ final class AuthorizationGate: @unchecked Sendable {
         }
     }
 
-    func createSession(pid: pid_t, pidVersion: UInt32, prefix: String, duration: TimeInterval) {
-        let key = AuthSessionKey(pid: pid, pidVersion: pidVersion, pathPrefix: prefix)
+    func createSession(
+        teamID: String,
+        signingID: String,
+        parentPID: pid_t,
+        parentPIDVersion: UInt32,
+        ancestors: [AncestorInfo],
+        prefix: String,
+        duration: TimeInterval
+    ) {
+        let key = AuthSessionKey(
+            teamID: teamID, signingID: signingID,
+            parentPID: parentPID, parentPIDVersion: parentPIDVersion,
+            ancestorChainHash: ancestorChainHash(ancestors: ancestors),
+            pathPrefix: prefix
+        )
         sessions.withLock { store in
             store[key] = AuthSession(lastAccess: Date(), duration: duration)
         }
@@ -78,6 +127,7 @@ extension AuthorizationGate {
     func requestAuthorization(
         event: FileAuthEvent,
         rulePrefix: String,
+        ancestors: [AncestorInfo],
         sessionDuration: TimeInterval,
         broadcaster: AuthorizationBroadcasting,
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
@@ -97,8 +147,11 @@ extension AuthorizationGate {
             guard !skip else { return }
             if allowed {
                 gate.createSession(
-                    pid: event.processID,
-                    pidVersion: event.processIdentity.pidVersion,
+                    teamID: event.teamID,
+                    signingID: event.signingID,
+                    parentPID: event.parentPID,
+                    parentPIDVersion: event.parentPIDVersion,
+                    ancestors: ancestors,
                     prefix: rulePrefix,
                     duration: sessionDuration
                 )

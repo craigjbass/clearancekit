@@ -39,6 +39,7 @@ private func authorizationEvent(
         processIdentity: ProcessIdentity(pid: pid, pidVersion: pidVersion),
         processID: pid,
         parentPID: 1,
+        parentPIDVersion: 0,
         processPath: "/Apps/Example",
         teamID: teamID,
         signingID: "com.example.app",
@@ -67,7 +68,7 @@ struct FileAuthPipelineAuthorizationTests {
     func activeSessionAllowsWithoutHandler() {
         let processTree = FakeAuthPipelineProcessTree()
         let gate = AuthorizationGate()
-        gate.createSession(pid: 4242, pidVersion: 3, prefix: "/Secrets", duration: 300)
+        gate.createSession(teamID: "ABCDE12345", signingID: "com.example.app", parentPID: 1, parentPIDVersion: 0, ancestors: [], prefix: "/Secrets", duration: 300)
 
         let responded = DispatchSemaphore(value: 0)
         var allowedResult = false
@@ -81,7 +82,7 @@ struct FileAuthPipelineAuthorizationTests {
             ancestorAllowlistProvider: { [] },
             postRespond: { _, _, _, _ in postRespondCalled.signal() },
             authorizationGate: gate,
-            authorizationHandler: { _, _, _ in
+            authorizationHandler: { _, _, _, _ in
                 handlerCalledLock.withLock { $0 = true }
             }
         )
@@ -116,7 +117,7 @@ struct FileAuthPipelineAuthorizationTests {
             ancestorAllowlistProvider: { [] },
             postRespond: { _, _, _, _ in },
             authorizationGate: gate,
-            authorizationHandler: { _, duration, _ in
+            authorizationHandler: { _, duration, _, _ in
                 capturedDuration.withLock { $0 = duration }
                 handlerCalled.signal()
             }

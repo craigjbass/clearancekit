@@ -62,10 +62,11 @@ let pipeline = FileAuthPipeline(
         postRespondHandler.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
     },
     authorizationGate: authorizationGate,
-    authorizationHandler: { event, duration, rulePrefix in
+    authorizationHandler: { event, duration, rulePrefix, ancestors in
         authorizationGate.requestAuthorization(
             event: event,
             rulePrefix: rulePrefix,
+            ancestors: ancestors,
             sessionDuration: duration,
             broadcaster: broadcaster,
             postRespond: { evt, decision, ancestors, dwell in

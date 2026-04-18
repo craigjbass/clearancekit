@@ -31,6 +31,7 @@ struct FileAuthEvent: Sendable {
     let processIdentity: ProcessIdentity
     let processID: pid_t
     let parentPID: pid_t
+    let parentPIDVersion: UInt32
     let processPath: String
     let teamID: String
     let signingID: String

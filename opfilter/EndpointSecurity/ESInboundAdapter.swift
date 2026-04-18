@@ -275,6 +275,7 @@ final class ESInboundAdapter {
             processIdentity: processIdentity,
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
+            parentPIDVersion: process.parent_audit_token.val.7,
             processPath: string(from: process.executable.pointee.path),
             teamID: teamID,
             signingID: signingID,

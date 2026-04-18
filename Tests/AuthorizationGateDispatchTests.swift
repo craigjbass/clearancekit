@@ -27,6 +27,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
+            ancestors: [],
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -35,8 +36,11 @@ struct AuthorizationGateDispatchTests {
         _ = postRespondCalled.wait(timeout: .now() + .seconds(2))
         #expect(respondedAllowed.withLock { $0 } == true)
         #expect(gate.hasActiveSession(
-            pid: event.processID,
-            pidVersion: event.processIdentity.pidVersion,
+            teamID: event.teamID,
+            signingID: event.signingID,
+            parentPID: event.parentPID,
+            parentPIDVersion: event.parentPIDVersion,
+            ancestors: [],
             prefix: "/Secrets"
         ) == true)
     }
@@ -59,6 +63,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
+            ancestors: [],
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -67,8 +72,11 @@ struct AuthorizationGateDispatchTests {
         _ = postRespondCalled.wait(timeout: .now() + .seconds(2))
         #expect(respondedAllowed.withLock { $0 } == false)
         #expect(gate.hasActiveSession(
-            pid: event.processID,
-            pidVersion: event.processIdentity.pidVersion,
+            teamID: event.teamID,
+            signingID: event.signingID,
+            parentPID: event.parentPID,
+            parentPIDVersion: event.parentPIDVersion,
+            ancestors: [],
             prefix: "/Secrets"
         ) == false)
     }
@@ -91,6 +99,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
+            ancestors: [],
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -116,7 +125,7 @@ struct AuthorizationGateDispatchTests {
             correlationID: UUID(), operation: .open, accessKind: .write,
             path: "/Secrets", secondaryPath: nil,
             processIdentity: ProcessIdentity(pid: 1234, pidVersion: 7),
-            processID: 1234, parentPID: 1, processPath: "/Apps/Example",
+            processID: 1234, parentPID: 1, parentPIDVersion: 0, processPath: "/Apps/Example",
             teamID: "ABCDE12345", signingID: "com.example.app",
             uid: 501, gid: 20, ttyPath: nil, deadline: deadline, respond: respond
         )
