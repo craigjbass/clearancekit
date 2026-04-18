@@ -5,7 +5,6 @@
 
 import Foundation
 import Testing
-@testable import clearancekit
 
 @Suite("FAARule authorization fields")
 struct FAARuleAuthorizationEncodingTests {

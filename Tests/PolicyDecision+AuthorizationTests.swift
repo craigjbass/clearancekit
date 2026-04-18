@@ -5,7 +5,6 @@
 
 import Foundation
 import Testing
-@testable import clearancekit
 
 @Suite("Authorization decisions")
 struct PolicyDecisionAuthorizationTests {
