@@ -696,4 +696,17 @@ extension XPCClient: ClientProtocol {
             self.isServiceReady = isReady
         }
     }
+
+    nonisolated func requestAuthorization(
+        processName: String,
+        signingID: String,
+        pid: Int,
+        pidVersion: UInt32,
+        path: String,
+        isWrite: Bool,
+        remainingSeconds: Double,
+        withReply reply: @escaping (Bool) -> Void
+    ) {
+        reply(false)
+    }
 }

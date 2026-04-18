@@ -401,4 +401,18 @@ public protocol ClientProtocol {
     // Opfilter pushes false when a client connects before initialisation completes,
     // and true once the initial policy snapshot has been delivered.
     func serviceReady(_ isReady: Bool)
+    /// Opfilter calls this to request a Touch ID authorization decision from
+    /// the GUI. The GUI must respond with `true` (allow and open a session)
+    /// or `false` (deny) within `remainingSeconds`, otherwise opfilter fails
+    /// closed when the ES deadline elapses.
+    func requestAuthorization(
+        processName: String,
+        signingID: String,
+        pid: Int,
+        pidVersion: UInt32,
+        path: String,
+        isWrite: Bool,
+        remainingSeconds: Double,
+        withReply reply: @escaping (Bool) -> Void
+    )
 }
