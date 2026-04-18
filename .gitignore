@@ -1,2 +1,3 @@
 tla/states/
 tla/*_TTrace_*
+.worktrees/
