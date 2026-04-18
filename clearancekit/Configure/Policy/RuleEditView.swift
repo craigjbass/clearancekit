@@ -12,6 +12,7 @@ private enum ProcessPickerTarget: Identifiable, Hashable {
     case signature
     case ancestor
     case ancestorSignature
+    case authorizedSignature
     var id: Self { self }
 }
 
@@ -98,6 +99,30 @@ struct RuleEditView: View {
                     Text("When enabled, unsigned and ad-hoc-signed processes are denied even if they match a wildcard rule.")
                         .foregroundStyle(.secondary)
                 }
+                Section {
+                    StringListEditor(values: $draft.authorizedSignatures, placeholder: "teamID:signingID")
+                } header: {
+                    pickerSectionHeader("Require Touch ID", target: .authorizedSignature)
+                } footer: {
+                    Text("Matching processes prompt for Touch ID. A successful prompt opens a session so further accesses do not re-prompt.")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("Require Touch ID for all valid signers", isOn: $draft.requiresAuthorization)
+                } footer: {
+                    Text("Any process with a valid code signature will be prompted for Touch ID. Unsigned processes are still denied outright.")
+                        .foregroundStyle(.secondary)
+                }
+                if !draft.authorizedSignatures.isEmpty || draft.requiresAuthorization {
+                    Section("Session inactivity") {
+                        Picker("Duration", selection: $draft.authorizationSessionDuration) {
+                            Text("1 minute").tag(TimeInterval(60))
+                            Text("5 minutes").tag(TimeInterval(300))
+                            Text("15 minutes").tag(TimeInterval(900))
+                            Text("1 hour").tag(TimeInterval(3600))
+                        }
+                    }
+                }
             }
             .formStyle(.grouped)
 
@@ -130,6 +155,8 @@ struct RuleEditView: View {
                     draft.allowedAncestorSignatures.append(sig)
                 case .ancestorSignature:
                     draft.allowedAncestorSignatures.append(sig)
+                case .authorizedSignature:
+                    draft.authorizedSignatures.append(sig)
                 }
                 processPicker = nil
             } onCancel: {
@@ -172,6 +199,9 @@ private struct DraftRule {
     var allowedAncestorSignatures: [String] = []
     var enforceOnWriteOnly: Bool = false
     var requireValidSigning: Bool = false
+    var authorizedSignatures: [String] = []
+    var requiresAuthorization: Bool = false
+    var authorizationSessionDuration: TimeInterval = 300
 
     init() {}
 
@@ -183,6 +213,9 @@ private struct DraftRule {
         self.allowedAncestorSignatures = rule.allowedAncestorSignatures.map(\.description)
         self.enforceOnWriteOnly = rule.enforceOnWriteOnly
         self.requireValidSigning = rule.requireValidSigning
+        self.authorizedSignatures = rule.authorizedSignatures.map(\.description)
+        self.requiresAuthorization = rule.requiresAuthorization
+        self.authorizationSessionDuration = rule.authorizationSessionDuration
     }
 
     func toRule(preservingID id: UUID?) -> FAARule {
@@ -203,7 +236,10 @@ private struct DraftRule {
             allowedAncestorProcessPaths: nonEmpty(allowedAncestorProcessPaths),
             allowedAncestorSignatures: nonEmpty(allowedAncestorSignatures).compactMap(parseSignature),
             enforceOnWriteOnly: enforceOnWriteOnly,
-            requireValidSigning: requireValidSigning
+            requireValidSigning: requireValidSigning,
+            authorizedSignatures: nonEmpty(authorizedSignatures).compactMap(parseSignature),
+            requiresAuthorization: requiresAuthorization,
+            authorizationSessionDuration: authorizationSessionDuration
         )
     }
 }
