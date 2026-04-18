@@ -164,6 +164,10 @@ public struct FAARule: Identifiable, Codable, Equatable {
     /// entry such as *:*.
     public let requireValidSigning: Bool
 
+    public var authorizedSignatures: [ProcessSignature]
+    public let requiresAuthorization: Bool
+    public let authorizationSessionDuration: TimeInterval
+
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
     }
@@ -177,7 +181,10 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedAncestorProcessPaths: [String] = [],
         allowedAncestorSignatures: [ProcessSignature] = [],
         enforceOnWriteOnly: Bool = false,
-        requireValidSigning: Bool = false
+        requireValidSigning: Bool = false,
+        authorizedSignatures: [ProcessSignature] = [],
+        requiresAuthorization: Bool = false,
+        authorizationSessionDuration: TimeInterval = 300
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -188,10 +195,16 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.allowedAncestorSignatures = allowedAncestorSignatures
         self.enforceOnWriteOnly = enforceOnWriteOnly
         self.requireValidSigning = requireValidSigning
+        self.authorizedSignatures = authorizedSignatures
+        self.requiresAuthorization = requiresAuthorization
+        self.authorizationSessionDuration = authorizationSessionDuration
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures, enforceOnWriteOnly, requireValidSigning
+        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures,
+             allowedAncestorProcessPaths, allowedAncestorSignatures,
+             enforceOnWriteOnly, requireValidSigning,
+             authorizedSignatures, requiresAuthorization, authorizationSessionDuration
     }
 
     public init(from decoder: Decoder) throws {
@@ -205,14 +218,17 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedAncestorSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedAncestorSignatures)) ?? []
         enforceOnWriteOnly = (try? c.decode(Bool.self, forKey: .enforceOnWriteOnly)) ?? false
         requireValidSigning = (try? c.decode(Bool.self, forKey: .requireValidSigning)) ?? false
+        authorizedSignatures = (try? c.decode([ProcessSignature].self, forKey: .authorizedSignatures)) ?? []
+        requiresAuthorization = (try? c.decode(Bool.self, forKey: .requiresAuthorization)) ?? false
+        authorizationSessionDuration = (try? c.decode(TimeInterval.self, forKey: .authorizationSessionDuration)) ?? 300
     }
 
-    /// Custom encoder that omits `enforceOnWriteOnly` when it equals the
-    /// default (`false`). This is load-bearing for `Database.canonicalRulesJSON`
-    /// signature compatibility: existing user databases were signed by a
-    /// build whose FAARule had no such field, so the only way the old
-    /// signatures still verify after upgrade is for the canonical JSON
-    /// of a default-false rule to remain byte-identical to the v1 shape.
+    /// Custom encoder that omits fields when they equal their defaults. This is
+    /// load-bearing for `Database.canonicalRulesJSON` signature compatibility:
+    /// existing user databases were signed by a build whose FAARule had fewer
+    /// fields, so the only way the old signatures still verify after upgrade is
+    /// for the canonical JSON of a default-valued rule to remain byte-identical
+    /// to the shape it had when originally signed.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -227,6 +243,15 @@ public struct FAARule: Identifiable, Codable, Equatable {
         }
         if requireValidSigning {
             try c.encode(requireValidSigning, forKey: .requireValidSigning)
+        }
+        if !authorizedSignatures.isEmpty {
+            try c.encode(authorizedSignatures, forKey: .authorizedSignatures)
+        }
+        if requiresAuthorization {
+            try c.encode(requiresAuthorization, forKey: .requiresAuthorization)
+        }
+        if authorizationSessionDuration != 300 {
+            try c.encode(authorizationSessionDuration, forKey: .authorizationSessionDuration)
         }
     }
 }
