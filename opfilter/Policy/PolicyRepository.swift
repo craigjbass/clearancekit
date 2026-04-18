@@ -52,6 +52,7 @@ final class PolicyRepository: @unchecked Sendable {
         var pendingSuspectUserAllowlist: [AllowlistEntry]?
         var featureFlags: [FeatureFlag] = []
         var mcpEnabled: Bool = false
+        var bundleUpdaterSignatures: [BundleUpdaterSignature] = []
     }
 
     private let storage: OSAllocatedUnfairLock<State>
@@ -112,6 +113,13 @@ final class PolicyRepository: @unchecked Sendable {
             logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server")
             initialState.featureFlags = [FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false)]
             initialState.mcpEnabled = false
+        }
+
+        switch database.loadBundleUpdaterSignaturesResult() {
+        case .ok(let signatures):
+            initialState.bundleUpdaterSignatures = signatures
+        case .suspect(let signatures):
+            logger.warning("PolicyRepository: Signature issue for bundle_updater_signatures — discarding \(signatures.count) suspect signature(s)")
         }
 
         self.storage = OSAllocatedUnfairLock(initialState: initialState)
@@ -278,6 +286,25 @@ final class PolicyRepository: @unchecked Sendable {
             return state.featureFlags
         }
         database.saveFeatureFlags(flags)
+    }
+
+    // MARK: - Bundle updater signatures
+
+    func bundleUpdaterSignatures() -> [BundleUpdaterSignature] {
+        storage.withLock { $0.bundleUpdaterSignatures }
+    }
+
+    func setBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
+        storage.withLock { $0.bundleUpdaterSignatures = signatures }
+        database.saveBundleUpdaterSignatures(signatures)
+    }
+
+    func encodedBundleUpdaterSignatures() -> NSData {
+        let signatures = storage.withLock { $0.bundleUpdaterSignatures }
+        guard let data = try? JSONEncoder().encode(signatures) else {
+            fatalError("PolicyRepository: Failed to encode bundle updater signatures — this is a bug")
+        }
+        return data as NSData
     }
 
     // MARK: - Signature issue
