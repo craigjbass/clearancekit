@@ -89,4 +89,48 @@ struct CanonicalRulesEncodingTests {
 
         #expect(json.contains("\"enforceOnWriteOnly\":true"))
     }
+
+    @Test("default-false requireValidSigning is omitted from canonical JSON")
+    func defaultFalseRequireValidSigningIsOmitted() {
+        let rule = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+            protectedPathPrefix: "/etc/hosts",
+            source: .user,
+            allowedProcessPaths: ["/bin/cat"]
+        )
+        let json = String(data: canonicalRulesJSON([rule]), encoding: .utf8) ?? ""
+
+        #expect(!json.contains("requireValidSigning"))
+    }
+
+    @Test("requireValidSigning true survives canonical encode/decode")
+    func requireValidSigningTrueRoundTrips() throws {
+        let original = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+            protectedPathPrefix: "/protected",
+            source: .user,
+            allowedSignatures: [ProcessSignature(teamID: "*", signingID: "*")],
+            requireValidSigning: true
+        )
+
+        let encoded = canonicalRulesJSON([original])
+        let decoded = try JSONDecoder().decode([FAARule].self, from: encoded)
+
+        #expect(decoded.count == 1)
+        #expect(decoded[0].requireValidSigning == true)
+        #expect(decoded[0] == original)
+    }
+
+    @Test("requireValidSigning true canonical encoding includes the key")
+    func requireValidSigningTrueCanonicalIncludesKey() {
+        let rule = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000006")!,
+            protectedPathPrefix: "/protected",
+            source: .user,
+            requireValidSigning: true
+        )
+        let json = String(data: canonicalRulesJSON([rule]), encoding: .utf8) ?? ""
+
+        #expect(json.contains("\"requireValidSigning\":true"))
+    }
 }

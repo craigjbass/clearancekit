@@ -1225,3 +1225,72 @@ struct CheckFAAPolicyDualPathTests {
         }
     }
 }
+
+// MARK: - requireValidSigning
+
+@Suite("FAARule.requireValidSigning")
+struct RequireValidSigningTests {
+    private let ruleID = UUID()
+
+    private func rule(requireValidSigning: Bool, enforceOnWriteOnly: Bool = false) -> FAARule {
+        FAARule(
+            id: ruleID,
+            protectedPathPrefix: "/protected",
+            allowedSignatures: [ProcessSignature(teamID: "*", signingID: "*")],
+            enforceOnWriteOnly: enforceOnWriteOnly,
+            requireValidSigning: requireValidSigning
+        )
+    }
+
+    private func decide(
+        rules: [FAARule],
+        teamID: String,
+        accessKind: AccessKind = .write
+    ) async -> PolicyDecision {
+        await evaluateAccess(
+            rules: rules,
+            allowlist: [],
+            path: "/protected/file",
+            processPath: "/bin/test",
+            teamID: teamID,
+            signingID: "",
+            accessKind: accessKind,
+            ancestryProvider: { [] }
+        )
+    }
+
+    @Test("requireValidSigning false: unsigned process with *:* wildcard is allowed")
+    func unsignedAllowedWhenFlagOff() async {
+        let decision = await decide(rules: [rule(requireValidSigning: false)], teamID: "")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("requireValidSigning true: unsigned process is denied")
+    func unsignedDeniedWhenFlagOn() async {
+        let decision = await decide(rules: [rule(requireValidSigning: true)], teamID: "")
+        #expect(!decision.isAllowed)
+        #expect(decision.matchedRuleID == ruleID)
+    }
+
+    @Test("requireValidSigning true: Apple platform binary is allowed")
+    func applePlatformBinaryAllowed() async {
+        let decision = await decide(rules: [rule(requireValidSigning: true)], teamID: appleTeamID)
+        #expect(decision.isAllowed)
+    }
+
+    @Test("requireValidSigning true: third-party signed process is allowed")
+    func thirdPartySignedAllowed() async {
+        let decision = await decide(rules: [rule(requireValidSigning: true)], teamID: "ABC123")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("requireValidSigning true + enforceOnWriteOnly true: unsigned process reading is noRuleApplies")
+    func writeOnlyRuleSkippedForReads() async {
+        let writeOnlyRule = rule(requireValidSigning: true, enforceOnWriteOnly: true)
+        let decision = await decide(rules: [writeOnlyRule], teamID: "", accessKind: .read)
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies — write-only rule must be skipped before requireValidSigning is checked")
+            return
+        }
+    }
+}

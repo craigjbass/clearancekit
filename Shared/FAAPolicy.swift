@@ -159,6 +159,11 @@ public struct FAARule: Identifiable, Codable, Equatable {
     /// any process may read files under the protected path.
     public let enforceOnWriteOnly: Bool
 
+    /// When true, processes with no real code signature (empty team ID, not a
+    /// platform binary) are denied even if they match a wildcard allowedSignatures
+    /// entry such as *:*.
+    public let requireValidSigning: Bool
+
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
     }
@@ -171,7 +176,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedSignatures: [ProcessSignature] = [],
         allowedAncestorProcessPaths: [String] = [],
         allowedAncestorSignatures: [ProcessSignature] = [],
-        enforceOnWriteOnly: Bool = false
+        enforceOnWriteOnly: Bool = false,
+        requireValidSigning: Bool = false
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -181,10 +187,11 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.allowedAncestorProcessPaths = allowedAncestorProcessPaths
         self.allowedAncestorSignatures = allowedAncestorSignatures
         self.enforceOnWriteOnly = enforceOnWriteOnly
+        self.requireValidSigning = requireValidSigning
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures, enforceOnWriteOnly
+        case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures, allowedAncestorProcessPaths, allowedAncestorSignatures, enforceOnWriteOnly, requireValidSigning
     }
 
     public init(from decoder: Decoder) throws {
@@ -197,6 +204,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
         allowedAncestorProcessPaths = (try? c.decode([String].self, forKey: .allowedAncestorProcessPaths)) ?? []
         allowedAncestorSignatures = (try? c.decode([ProcessSignature].self, forKey: .allowedAncestorSignatures)) ?? []
         enforceOnWriteOnly = (try? c.decode(Bool.self, forKey: .enforceOnWriteOnly)) ?? false
+        requireValidSigning = (try? c.decode(Bool.self, forKey: .requireValidSigning)) ?? false
     }
 
     /// Custom encoder that omits `enforceOnWriteOnly` when it equals the
@@ -216,6 +224,9 @@ public struct FAARule: Identifiable, Codable, Equatable {
         try c.encode(allowedAncestorSignatures, forKey: .allowedAncestorSignatures)
         if enforceOnWriteOnly {
             try c.encode(enforceOnWriteOnly, forKey: .enforceOnWriteOnly)
+        }
+        if requireValidSigning {
+            try c.encode(requireValidSigning, forKey: .requireValidSigning)
         }
     }
 }
@@ -349,6 +360,15 @@ public func checkFAAPolicy(
 
     for (_, rule) in sorted {
         if rule.enforceOnWriteOnly && accessKind == .read { continue }
+
+        if rule.requireValidSigning && teamID.isEmpty {
+            return .denied(
+                ruleID: rule.id,
+                ruleName: rule.protectedPathPrefix,
+                ruleSource: rule.source,
+                allowedCriteria: "valid code signature required"
+            )
+        }
 
         if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
             return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
