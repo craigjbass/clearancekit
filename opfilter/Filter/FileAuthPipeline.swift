@@ -39,6 +39,7 @@ final class FileAuthPipeline: @unchecked Sendable {
     private let eventSignal: DispatchSemaphore
     private let slowSignal: DispatchSemaphore
     private let metricsStorage: OSAllocatedUnfairLock<PipelineMetrics>
+    private let bundleProtectionEvaluator: BundleProtectionEvaluator?
 
     init(
         processTree: ProcessTreeProtocol,
@@ -54,7 +55,8 @@ final class FileAuthPipeline: @unchecked Sendable {
         slowWorkerQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.slow", qos: .userInitiated, attributes: .concurrent),
         slowWorkerSemaphore: DispatchSemaphore = DispatchSemaphore(value: 2),
         eventSignal: DispatchSemaphore = DispatchSemaphore(value: 0),
-        slowSignal: DispatchSemaphore = DispatchSemaphore(value: 0)
+        slowSignal: DispatchSemaphore = DispatchSemaphore(value: 0),
+        bundleProtectionEvaluator: BundleProtectionEvaluator? = nil
     ) {
         self.eventBuffer = BoundedQueue(capacity: eventBufferCapacity)
         self.slowQueue = BoundedQueue(capacity: slowQueueCapacity)
@@ -71,6 +73,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         self.eventSignal = eventSignal
         self.slowSignal = slowSignal
         self.metricsStorage = OSAllocatedUnfairLock(initialState: PipelineMetrics())
+        self.bundleProtectionEvaluator = bundleProtectionEvaluator
     }
 
     // MARK: - Lifecycle
@@ -132,6 +135,30 @@ final class FileAuthPipeline: @unchecked Sendable {
         }
 
         let rules = rulesProvider()
+
+        if let evaluator = bundleProtectionEvaluator,
+           evaluator.isBundleWrite(path: event.path, accessKind: event.accessKind) {
+            let workItem = SlowWorkItem(
+                fileEvent: event,
+                rules: rules,
+                allowlist: allowlist,
+                ancestorAllowlist: ancestorAllowlist
+            )
+            switch slowQueue.tryEnqueue(workItem) {
+            case .enqueued:
+                metricsStorage.withLock { $0.slowQueueEnqueueCount += 1 }
+                slowSignal.signal()
+            case .full:
+                metricsStorage.withLock { $0.slowQueueDropCount += 1 }
+                logger.warning("SLOW-DROP cid=\(event.correlationID) pid=\(event.processID) path=\(event.path, privacy: .public) ttdMs=\(MachTime.millisecondsToDeadline(event.deadline))")
+                event.respond(true, false)
+                metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
+                let ancestors = processTree.ancestors(of: event.processIdentity)
+                postRespondHandler(event, .noRuleApplies, ancestors, 0)
+            }
+            return
+        }
+
         let classification = classifyPaths(event.path, secondaryPath: event.secondaryPath, rules: rules)
 
         switch classification {
@@ -205,6 +232,19 @@ final class FileAuthPipeline: @unchecked Sendable {
         let dwellNanoseconds = waitForProcess(event.processIdentity, deadline: event.deadline)
 
         let ancestors = processTree.ancestors(of: event.processIdentity)
+
+        if let evaluator = bundleProtectionEvaluator,
+           let decision = evaluator.evaluate(
+               accessPath: event.path,
+               processTeamID: event.teamID,
+               processSigningID: event.signingID,
+               accessKind: event.accessKind
+           ) {
+            event.respond(decision.isAllowed, false)
+            postRespondHandler(event, decision, ancestors, dwellNanoseconds)
+            return
+        }
+
         let decision = evaluateAccess(
             rules: workItem.rules,
             allowlist: workItem.allowlist,

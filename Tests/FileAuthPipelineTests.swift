@@ -427,4 +427,144 @@ struct FileAuthPipelineTests {
 
         #expect(allowedResult == false)
     }
+
+    // MARK: - Bundle protection integration
+
+    private func makeBundleEvaluator(allowExternalUpdater: Bool) -> BundleProtectionEvaluator {
+        let cache = BundleCodesignCache(
+            ttl: 60,
+            executableEnumerator: { _ in ["/Applications/Foo.app/Contents/MacOS/Foo"] },
+            signatureReader: { _ in (teamID: "BUNDLE_TEAM", signingID: "com.example.app") }
+        )
+        return BundleProtectionEvaluator(
+            cache: cache,
+            updaterSignaturesProvider: {
+                allowExternalUpdater
+                    ? [BundleUpdaterSignature(teamID: "UPDATER_TEAM", signingID: "com.updater.tool")]
+                    : []
+            }
+        )
+    }
+
+    @Test("bundle write routes to slow path, evaluator allows external updater")
+    func bundleWriteRoutesToSlowPath() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: true)
+
+        let responded = DispatchSemaphore(value: 0)
+        var allowedResult = false
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        var postRespondDecision: PolicyDecision?
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, decision, _, _ in
+                postRespondDecision = decision
+                postRespondCalled.signal()
+            },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        let event = fileAuthEvent(
+            path: "/Applications/Foo.app/Contents/MacOS/Foo",
+            teamID: "UPDATER_TEAM",
+            signingID: "com.updater.tool",
+            accessKind: .write
+        ) { allowed, _ in
+            allowedResult = allowed
+            responded.signal()
+        }
+
+        pipeline.submit(event)
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult == true)
+        if case .allowed(_, _, _, let criterion) = postRespondDecision {
+            #expect(criterion == "external updater")
+        } else {
+            Issue.record("Expected .allowed from evaluator, got \(String(describing: postRespondDecision))")
+        }
+    }
+
+    @Test("bundle write with mismatching process identity: denied by evaluator")
+    func bundleWriteDeniedByEvaluator() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: false)
+
+        let responded = DispatchSemaphore(value: 0)
+        var allowedResult = true
+        let postRespondCalled = DispatchSemaphore(value: 0)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        let event = fileAuthEvent(
+            path: "/Applications/Foo.app/Contents/MacOS/Foo",
+            teamID: "WRONG_TEAM",
+            signingID: "com.wrong.process",
+            accessKind: .write
+        ) { allowed, _ in
+            allowedResult = allowed
+            responded.signal()
+        }
+
+        pipeline.submit(event)
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult == false)
+    }
+
+    @Test("bundle read is NOT routed to slow path by isBundleWrite")
+    func bundleReadNotRouted() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        var postRespondDecision: PolicyDecision?
+
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: true)
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, decision, _, _ in
+                postRespondDecision = decision
+                postRespondCalled.signal()
+            },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        let event = fileAuthEvent(
+            path: "/Applications/Foo.app/Contents/MacOS/Foo",
+            accessKind: .read
+        ) { _, _ in responded.signal() }
+
+        pipeline.submit(event)
+        responded.wait()
+        postRespondCalled.wait()
+
+        if case .noRuleApplies = postRespondDecision {
+            // correct — read events fall through to normal policy
+        } else {
+            Issue.record("Expected .noRuleApplies for read, got \(String(describing: postRespondDecision))")
+        }
+    }
 }
