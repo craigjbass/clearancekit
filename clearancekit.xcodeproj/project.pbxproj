@@ -93,6 +93,7 @@
 				Configure/AppProtections/Presets/Signal.swift,
 				Configure/AppProtections/Presets/Slack.swift,
 				Configure/AppProtections/Presets/SpotlightProtection.swift,
+				Configure/AppProtections/Presets/SSHConfigProtection.swift,
 				Configure/AppProtections/Presets/SSHKeys.swift,
 				Configure/AppProtections/PresetsView.swift,
 				Configure/AppProtections/ProtectionDraft.swift,

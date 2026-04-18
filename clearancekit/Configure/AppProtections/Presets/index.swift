@@ -32,4 +32,5 @@ let builtInPresets: [AppPreset] = [
     audioPluginProtectionPreset,
     inMemoryCodeProtectionPreset,
     awsCredentialProtectionPreset,
+    sshConfigProtectionPreset,
 ]
