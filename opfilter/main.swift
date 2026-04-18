@@ -52,6 +52,12 @@ let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
 let allowlistState = AllowlistState()
 let authorizationGate = AuthorizationGate()
 
+let bundleCodesignCache = BundleCodesignCache()
+let bundleProtectionEvaluator = BundleProtectionEvaluator(
+    cache: bundleCodesignCache,
+    updaterSignaturesProvider: { policyRepository.bundleUpdaterSignatures() }
+)
+
 let faaInteractorRef = WeakBox<FAAFilterInteractor>()
 let pipeline = FileAuthPipeline(
     processTree: processTree,
@@ -60,6 +66,10 @@ let pipeline = FileAuthPipeline(
     ancestorAllowlistProvider: { allowlistState.currentAncestorAllowlist() },
     postRespond: { event, decision, ancestors, dwell in
         postRespondHandler.postRespond(fileEvent: event, decision: decision, ancestors: ancestors, dwellNanoseconds: dwell)
+        if event.path.contains("/_CodeSignature/"),
+           let bundlePath = BundlePath.extract(from: event.path) {
+            bundleCodesignCache.invalidate(bundlePath: bundlePath)
+        }
     },
     authorizationGate: authorizationGate,
     authorizationHandler: { event, duration, rulePrefix, ancestors in
@@ -78,7 +88,8 @@ let pipeline = FileAuthPipeline(
     slowWorkerQueue: slowWorkerQueue,
     slowWorkerSemaphore: slowWorkerSemaphore,
     eventSignal: eventSignal,
-    slowSignal: slowSignal
+    slowSignal: slowSignal,
+    bundleProtectionEvaluator: bundleProtectionEvaluator
 )
 let faaInteractor = FAAFilterInteractor(
     initialRules: faaPolicy,
