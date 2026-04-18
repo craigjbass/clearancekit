@@ -367,6 +367,10 @@ public protocol ServiceProtocol {
 
     // Returns a snapshot of recent tamper attempt events.
     func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void)
+
+    // Bundle updater signature mutations (GUI → opfilter). Opfilter stores, signs,
+    // and pushes the updated list to all GUI clients.
+    func saveBundleUpdaterSignatures(_ signaturesData: NSData, withReply reply: @escaping (Bool) -> Void)
 }
 
 // MARK: - Client Protocol (exported by the GUI app for opfilter callbacks)
@@ -401,6 +405,9 @@ public protocol ClientProtocol {
     // Opfilter pushes false when a client connects before initialisation completes,
     // and true once the initial policy snapshot has been delivered.
     func serviceReady(_ isReady: Bool)
+    // Opfilter pushes the current bundle updater signatures on connect and
+    // whenever the list changes.
+    func bundleUpdaterSignaturesUpdated(_ signaturesData: NSData)
     /// Opfilter calls this to request a Touch ID authorization decision from
     /// the GUI. The GUI must respond with `true` (allow and open a session)
     /// or `false` (deny) within `remainingSeconds`, otherwise opfilter fails
