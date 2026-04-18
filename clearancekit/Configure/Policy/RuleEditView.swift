@@ -120,6 +120,7 @@ struct RuleEditView: View {
                             Text("1 minute").tag(TimeInterval(60))
                             Text("5 minutes").tag(TimeInterval(300))
                             Text("15 minutes").tag(TimeInterval(900))
+                            Text("20 minutes").tag(TimeInterval(1200))
                             Text("1 hour").tag(TimeInterval(3600))
                         }
                     }
