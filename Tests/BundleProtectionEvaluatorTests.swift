@@ -9,11 +9,11 @@ import Foundation
 @Suite("BundleProtectionEvaluator")
 struct BundleProtectionEvaluatorTests {
 
-    private func makeCache(teamID: String = "TEAM123", signingIDs: Set<String> = ["com.example.app"]) -> BundleCodesignCache {
+    private func makeCache(teamID: String = "TEAM123") -> BundleCodesignCache {
         BundleCodesignCache(
             ttl: 60,
             executableEnumerator: { _ in ["/fake/App.app/Contents/MacOS/App"] },
-            signatureReader: { _ in (teamID: teamID, signingID: signingIDs.first ?? "") }
+            signatureReader: { _ in teamID }
         )
     }
 
@@ -60,7 +60,7 @@ struct BundleProtectionEvaluatorTests {
 
     @Test("bundle root itself returns nil from evaluate (moving the app is not a bundle tamper)")
     func bundleRootReturnsNilFromEvaluate() {
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]))
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
         #expect(evaluator.evaluate(
             accessPath: "/Applications/Foo.app",
             processTeamID: "WRONGTEAM", processSigningID: "evil.process",
@@ -95,7 +95,7 @@ struct BundleProtectionEvaluatorTests {
 
     @Test("team ID mismatch returns denied")
     func teamIDMismatchReturnsDenied() {
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]))
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "WRONGTEAM", processSigningID: "com.example.app",
@@ -104,20 +104,20 @@ struct BundleProtectionEvaluatorTests {
         #expect(decision?.isAllowed == false)
     }
 
-    @Test("team ID match but signing ID not in set returns denied")
-    func signingIDNotInSetReturnsDenied() {
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]))
+    @Test("same team ID with any signing ID returns allowed (team-level trust)")
+    func sameTeamAnySigningIDReturnsAllowed() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
-            processTeamID: "TEAM123", processSigningID: "com.example.other",
+            processTeamID: "TEAM123", processSigningID: "com.example.updater",
             accessKind: .write
         )
-        #expect(decision?.isAllowed == false)
+        #expect(decision?.isAllowed == true)
     }
 
-    @Test("team ID match and signing ID in set returns allowed with bundle self-signer criterion")
+    @Test("team ID match returns allowed with bundle self-signer criterion")
     func selfSignerReturnsAllowed() {
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]))
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.app",
@@ -133,7 +133,7 @@ struct BundleProtectionEvaluatorTests {
     @Test("external updater exact match returns allowed with external updater criterion")
     func externalUpdaterReturnsAllowed() {
         let updater = BundleUpdaterSignature(teamID: "SPARKLE", signingID: "org.sparkle-project.Sparkle")
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]), updaters: [updater])
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"), updaters: [updater])
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.Sparkle",
@@ -149,7 +149,7 @@ struct BundleProtectionEvaluatorTests {
     @Test("external updater team ID match but wrong signing ID returns denied")
     func externalUpdaterWrongSigningIDReturnsDenied() {
         let updater = BundleUpdaterSignature(teamID: "SPARKLE", signingID: "org.sparkle-project.Sparkle")
-        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]), updaters: [updater])
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"), updaters: [updater])
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.OtherTool",

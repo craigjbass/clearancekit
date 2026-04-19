@@ -434,7 +434,7 @@ struct FileAuthPipelineTests {
         let cache = BundleCodesignCache(
             ttl: 60,
             executableEnumerator: { _ in ["/Applications/Foo.app/Contents/MacOS/Foo"] },
-            signatureReader: { _ in (teamID: "BUNDLE_TEAM", signingID: "com.example.app") }
+            signatureReader: { _ in "BUNDLE_TEAM" }
         )
         return BundleProtectionEvaluator(
             cache: cache,

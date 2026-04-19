@@ -52,7 +52,7 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
             )
         }
 
-        if processTeamID == bundleSignatures.teamID && bundleSignatures.signingIDs.contains(processSigningID) {
+        if processTeamID == bundleSignatures.teamID {
             return .allowed(
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,

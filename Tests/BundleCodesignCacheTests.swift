@@ -12,9 +12,7 @@ struct BundleCodesignCacheTests {
     private func makeCache(
         ttl: TimeInterval = 60,
         executables: [String] = ["/fake/App.app/Contents/MacOS/App"],
-        reader: @escaping (String) -> (teamID: String, signingID: String)? = { _ in
-            (teamID: "TEAM123", signingID: "com.example.app")
-        }
+        reader: @escaping (String) -> String? = { _ in "TEAM123" }
     ) -> BundleCodesignCache {
         BundleCodesignCache(
             ttl: ttl,
@@ -28,11 +26,10 @@ struct BundleCodesignCacheTests {
         var callCount = 0
         let cache = makeCache(reader: { _ in
             callCount += 1
-            return (teamID: "TEAM123", signingID: "com.example.app")
+            return "TEAM123"
         })
         let result = cache.signatures(forBundlePath: "/fake/App.app")
         #expect(result?.teamID == "TEAM123")
-        #expect(result?.signingIDs.contains("com.example.app") == true)
         #expect(callCount == 1)
     }
 
@@ -41,7 +38,7 @@ struct BundleCodesignCacheTests {
         var callCount = 0
         let cache = makeCache(reader: { _ in
             callCount += 1
-            return (teamID: "TEAM123", signingID: "com.example.app")
+            return "TEAM123"
         })
         _ = cache.signatures(forBundlePath: "/fake/App.app")
         _ = cache.signatures(forBundlePath: "/fake/App.app")
@@ -53,7 +50,7 @@ struct BundleCodesignCacheTests {
         var callCount = 0
         let cache = makeCache(ttl: 0.01, reader: { _ in
             callCount += 1
-            return (teamID: "TEAM123", signingID: "com.example.app")
+            return "TEAM123"
         })
         _ = cache.signatures(forBundlePath: "/fake/App.app")
         Thread.sleep(forTimeInterval: 0.05)
@@ -66,7 +63,7 @@ struct BundleCodesignCacheTests {
         var callCount = 0
         let cache = makeCache(reader: { _ in
             callCount += 1
-            return (teamID: "TEAM123", signingID: "com.example.app")
+            return "TEAM123"
         })
         _ = cache.signatures(forBundlePath: "/fake/App.app")
         cache.invalidate(bundlePath: "/fake/App.app")
@@ -80,8 +77,8 @@ struct BundleCodesignCacheTests {
         #expect(cache.signatures(forBundlePath: "/fake/App.app") == nil)
     }
 
-    @Test("multiple executables with same team ID collect all signing IDs")
-    func multipleExecutablesCollectSigningIDs() {
+    @Test("multiple executables: team ID taken from first signed executable")
+    func multipleExecutablesUsesFirst() {
         let cache = BundleCodesignCache(
             ttl: 60,
             executableEnumerator: { _ in [
@@ -89,33 +86,30 @@ struct BundleCodesignCacheTests {
                 "/fake/App.app/Contents/XPCServices/Helper.xpc/Contents/MacOS/Helper"
             ]},
             signatureReader: { path in
-                if path.hasSuffix("/App") { return (teamID: "TEAM123", signingID: "com.example.app") }
-                if path.hasSuffix("/Helper") { return (teamID: "TEAM123", signingID: "com.example.helper") }
+                if path.hasSuffix("/App") { return "TEAM123" }
+                if path.hasSuffix("/Helper") { return "TEAM123" }
                 return nil
             }
         )
         let result = cache.signatures(forBundlePath: "/fake/App.app")
         #expect(result?.teamID == "TEAM123")
-        #expect(result?.signingIDs == ["com.example.app", "com.example.helper"])
     }
 
-    @Test("executables with mixed team IDs: only primary team ID signing IDs included")
-    func mixedTeamIDsUsesPrimaryOnly() {
+    @Test("first unsigned executable skipped; team ID taken from first signed one")
+    func skipsUnsignedExecutables() {
         let cache = BundleCodesignCache(
             ttl: 60,
             executableEnumerator: { _ in [
-                "/fake/App.app/Contents/MacOS/App",
-                "/fake/App.app/Contents/MacOS/Other"
+                "/fake/App.app/Contents/MacOS/Unsigned",
+                "/fake/App.app/Contents/MacOS/App"
             ]},
             signatureReader: { path in
-                if path.hasSuffix("/App") { return (teamID: "TEAM123", signingID: "com.example.app") }
-                if path.hasSuffix("/Other") { return (teamID: "DIFFERENT", signingID: "com.other.thing") }
+                if path.hasSuffix("/Unsigned") { return nil }
+                if path.hasSuffix("/App") { return "TEAM123" }
                 return nil
             }
         )
         let result = cache.signatures(forBundlePath: "/fake/App.app")
         #expect(result?.teamID == "TEAM123")
-        #expect(result?.signingIDs == ["com.example.app"])
-        #expect(result?.signingIDs.contains("com.other.thing") == false)
     }
 }

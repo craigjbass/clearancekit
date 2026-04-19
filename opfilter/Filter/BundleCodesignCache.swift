@@ -13,7 +13,6 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 
 struct BundleSignatures {
     let teamID: String
-    let signingIDs: Set<String>
     let expiry: Date
 }
 
@@ -22,13 +21,13 @@ struct BundleSignatures {
 final class BundleCodesignCache: @unchecked Sendable {
     private let ttl: TimeInterval
     private let executableEnumerator: (String) -> [String]
-    private let signatureReader: (String) -> (teamID: String, signingID: String)?
+    private let signatureReader: (String) -> String?
     private let storage: OSAllocatedUnfairLock<[String: BundleSignatures]>
 
     init(
         ttl: TimeInterval = 60,
         executableEnumerator: @escaping (String) -> [String] = BundleCodesignCache.enumerateExecutables(in:),
-        signatureReader: @escaping (String) -> (teamID: String, signingID: String)? = BundleCodesignCache.readSignature(at:)
+        signatureReader: @escaping (String) -> String? = BundleCodesignCache.readTeamID(at:)
     ) {
         self.ttl = ttl
         self.executableEnumerator = executableEnumerator
@@ -57,22 +56,12 @@ final class BundleCodesignCache: @unchecked Sendable {
     // MARK: - Private
 
     private func loadSignatures(for bundlePath: String, now: Date) -> BundleSignatures? {
-        let executables = executableEnumerator(bundlePath)
-        var primaryTeamID = ""
-        var signingIDs: Set<String> = []
-
-        for path in executables {
-            guard let sig = signatureReader(path) else { continue }
-            if primaryTeamID.isEmpty {
-                primaryTeamID = sig.teamID
-            }
-            if sig.teamID == primaryTeamID {
-                signingIDs.insert(sig.signingID)
+        for path in executableEnumerator(bundlePath) {
+            if let teamID = signatureReader(path) {
+                return BundleSignatures(teamID: teamID, expiry: now.addingTimeInterval(ttl))
             }
         }
-
-        guard !primaryTeamID.isEmpty else { return nil }
-        return BundleSignatures(teamID: primaryTeamID, signingIDs: signingIDs, expiry: now.addingTimeInterval(ttl))
+        return nil
     }
 
     // MARK: - Real implementations (defaults)
@@ -111,7 +100,7 @@ final class BundleCodesignCache: @unchecked Sendable {
         return paths
     }
 
-    static func readSignature(at executablePath: String) -> (teamID: String, signingID: String)? {
+    static func readTeamID(at executablePath: String) -> String? {
         var code: SecStaticCode?
         let url = URL(fileURLWithPath: executablePath)
         guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
@@ -119,8 +108,6 @@ final class BundleCodesignCache: @unchecked Sendable {
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dict = info as? [String: Any] else { return nil }
-        guard let signingID = dict[kSecCodeInfoIdentifier as String] as? String,
-              let teamID = dict[kSecCodeInfoTeamIdentifier as String] as? String else { return nil }
-        return (teamID: teamID, signingID: signingID)
+        return dict[kSecCodeInfoTeamIdentifier as String] as? String
     }
 }
