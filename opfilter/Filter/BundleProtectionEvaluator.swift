@@ -23,7 +23,11 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
 
     /// Hot-path gate: returns true when the event should be forced to the slow path.
     func isBundleWrite(path: String, accessKind: AccessKind) -> Bool {
-        accessKind == .write && BundlePath.extract(from: path) != nil
+        guard accessKind == .write else { return false }
+        guard let bundlePath = BundlePath.extract(from: path) else { return false }
+        // Renaming/moving the bundle root itself (e.g. Squirrel swapping the whole .app) is not
+        // a tamper event — that operation is governed by FAA policy rules, not bundle protection.
+        return path != bundlePath
     }
 
     /// Slow-path evaluation. Returns nil → not a bundle write or bundle is unsigned → fall through.
@@ -35,6 +39,7 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
     ) -> PolicyDecision? {
         guard let bundlePath = BundlePath.extract(from: accessPath) else { return nil }
         guard accessKind == .write else { return nil }
+        guard accessPath != bundlePath else { return nil }
         guard let bundleSignatures = cache.signatures(forBundlePath: bundlePath) else { return nil }
 
         let updaters = updaterSignaturesProvider()

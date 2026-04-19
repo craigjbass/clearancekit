@@ -44,12 +44,28 @@ struct BundleProtectionEvaluatorTests {
         #expect(evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo", accessKind: .write))
     }
 
+    @Test("bundle root itself returns false from isBundleWrite (moving the app, not writing inside it)")
+    func bundleRootReturnsFalseFromIsBundleWrite() {
+        let evaluator = makeEvaluator(cache: makeCache())
+        #expect(!evaluator.isBundleWrite(path: "/Applications/Foo.app", accessKind: .write))
+    }
+
     // MARK: - evaluate
 
     @Test("non-bundle path returns nil")
     func nonBundlePathReturnsNil() {
         let evaluator = makeEvaluator(cache: makeCache())
         #expect(evaluator.evaluate(accessPath: "/usr/bin/git", processTeamID: "T", processSigningID: "s", accessKind: .write) == nil)
+    }
+
+    @Test("bundle root itself returns nil from evaluate (moving the app is not a bundle tamper)")
+    func bundleRootReturnsNilFromEvaluate() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123", signingIDs: ["com.example.app"]))
+        #expect(evaluator.evaluate(
+            accessPath: "/Applications/Foo.app",
+            processTeamID: "WRONGTEAM", processSigningID: "evil.process",
+            accessKind: .write
+        ) == nil)
     }
 
     @Test("read access to bundle returns nil")
