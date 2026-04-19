@@ -238,6 +238,7 @@ final class FileAuthPipeline: @unchecked Sendable {
                accessPath: event.path,
                processTeamID: event.teamID,
                processSigningID: event.signingID,
+               processUID: event.uid,
                accessKind: event.accessKind
            ) {
             event.respond(decision.isAllowed, false)

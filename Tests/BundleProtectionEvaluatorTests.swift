@@ -49,7 +49,7 @@ struct BundleProtectionEvaluatorTests {
     @Test("non-bundle path returns nil")
     func nonBundlePathReturnsNil() {
         let evaluator = makeEvaluator(cache: makeCache())
-        #expect(evaluator.evaluate(accessPath: "/usr/bin/git", processTeamID: "T", processSigningID: "s", accessKind: .write) == nil)
+        #expect(evaluator.evaluate(accessPath: "/usr/bin/git", processTeamID: "T", processSigningID: "s", processUID: 501, accessKind: .write) == nil)
     }
 
     @Test("bundle root rename by wrong team is denied")
@@ -58,6 +58,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app",
             processTeamID: "WRONGTEAM", processSigningID: "evil.process",
+            processUID: 501,
             accessKind: .write
         )
         #expect(decision?.isAllowed == false)
@@ -69,6 +70,7 @@ struct BundleProtectionEvaluatorTests {
         #expect(evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.app",
+            processUID: 501,
             accessKind: .read
         ) == nil)
     }
@@ -84,6 +86,7 @@ struct BundleProtectionEvaluatorTests {
         #expect(evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "ANYTEAM", processSigningID: "any.signing.id",
+            processUID: 501,
             accessKind: .write
         ) == nil)
     }
@@ -94,6 +97,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "WRONGTEAM", processSigningID: "com.example.app",
+            processUID: 501,
             accessKind: .write
         )
         #expect(decision?.isAllowed == false)
@@ -105,6 +109,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.updater",
+            processUID: 501,
             accessKind: .write
         )
         #expect(decision?.isAllowed == true)
@@ -116,6 +121,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.app",
+            processUID: 501,
             accessKind: .write
         )
         if case .allowed(_, _, _, let criterion) = decision {
@@ -132,6 +138,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.Sparkle",
+            processUID: 501,
             accessKind: .write
         )
         if case .allowed(_, _, _, let criterion) = decision {
@@ -148,6 +155,49 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.OtherTool",
+            processUID: 501,
+            accessKind: .write
+        )
+        #expect(decision?.isAllowed == false)
+    }
+
+    // MARK: - system file helper
+
+    @Test("DesktopServicesHelper as platform binary running as root returns allowed with system file helper criterion")
+    func desktopServicesHelperRootAllowed() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: appleTeamID, processSigningID: "com.apple.DesktopServicesHelper",
+            processUID: 0,
+            accessKind: .write
+        )
+        if case .allowed(_, _, _, let criterion) = decision {
+            #expect(criterion == "system file helper")
+        } else {
+            Issue.record("Expected .allowed, got \(String(describing: decision))")
+        }
+    }
+
+    @Test("DesktopServicesHelper as platform binary running as non-root is denied")
+    func desktopServicesHelperNonRootDenied() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: appleTeamID, processSigningID: "com.apple.DesktopServicesHelper",
+            processUID: 501,
+            accessKind: .write
+        )
+        #expect(decision?.isAllowed == false)
+    }
+
+    @Test("DesktopServicesHelper with non-platform teamID is denied even as root")
+    func desktopServicesHelperSpoofedTeamIDDenied() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: "FAKETEAM", processSigningID: "com.apple.DesktopServicesHelper",
+            processUID: 0,
             accessKind: .write
         )
         #expect(decision?.isAllowed == false)

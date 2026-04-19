@@ -31,6 +31,7 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
         accessPath: String,
         processTeamID: String,
         processSigningID: String,
+        processUID: uid_t,
         accessKind: AccessKind
     ) -> PolicyDecision? {
         guard let bundlePath = BundlePath.extract(from: accessPath) else { return nil }
@@ -44,6 +45,15 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleName: bundlePath,
                 ruleSource: .builtin,
                 matchedCriterion: "external updater"
+            )
+        }
+
+        if processTeamID == appleTeamID && processSigningID == "com.apple.DesktopServicesHelper" && processUID == 0 {
+            return .allowed(
+                ruleID: BundleProtectionEvaluator.sentinelRuleID,
+                ruleName: bundlePath,
+                ruleSource: .builtin,
+                matchedCriterion: "system file helper"
             )
         }
 
