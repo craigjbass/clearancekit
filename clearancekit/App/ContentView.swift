@@ -34,7 +34,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .presets:     return "lock.app.dashed"
         case .jail:        return "lock.rectangle.on.rectangle"
         case .allowlist:      return "checkmark.shield"
-        case .bundleUpdaters: return "lock.app.dashed.trianglebadge.exclamationmark"
+        case .bundleUpdaters: return "arrow.down.app"
         case .processes:   return "cpu"
         case .processTree: return "list.bullet.indent"
         case .metrics:     return "chart.xyaxis.line"
