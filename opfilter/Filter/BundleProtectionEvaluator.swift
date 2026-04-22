@@ -32,19 +32,30 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
         processTeamID: String,
         processSigningID: String,
         processUID: uid_t,
-        accessKind: AccessKind
+        accessKind: AccessKind,
+        ancestors: [AncestorInfo]
     ) -> PolicyDecision? {
         guard let bundlePath = BundlePath.extract(from: accessPath) else { return nil }
         guard accessKind == .write else { return nil }
         guard let bundleSignatures = cache.signatures(forBundlePath: bundlePath) else { return nil }
 
         let updaters = updaterSignaturesProvider()
-        if updaters.contains(where: { $0.teamID == processTeamID && $0.signingID == processSigningID }) {
+
+        if updaters.contains(where: { $0.matches(teamID: processTeamID, signingID: processSigningID) }) {
             return .allowed(
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
                 matchedCriterion: "external updater"
+            )
+        }
+
+        if ancestors.contains(where: { ancestor in updaters.contains(where: { $0.matches(teamID: ancestor.teamID, signingID: ancestor.signingID) }) }) {
+            return .allowed(
+                ruleID: BundleProtectionEvaluator.sentinelRuleID,
+                ruleName: bundlePath,
+                ruleSource: .builtin,
+                matchedCriterion: "ancestor updater"
             )
         }
 
@@ -63,6 +74,15 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleName: bundlePath,
                 ruleSource: .builtin,
                 matchedCriterion: "bundle self-signer"
+            )
+        }
+
+        if ancestors.contains(where: { $0.teamID == bundleSignatures.teamID }) {
+            return .allowed(
+                ruleID: BundleProtectionEvaluator.sentinelRuleID,
+                ruleName: bundlePath,
+                ruleSource: .builtin,
+                matchedCriterion: "ancestor self-signer"
             )
         }
 

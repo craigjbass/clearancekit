@@ -239,7 +239,8 @@ final class FileAuthPipeline: @unchecked Sendable {
                processTeamID: event.teamID,
                processSigningID: event.signingID,
                processUID: event.uid,
-               accessKind: event.accessKind
+               accessKind: event.accessKind,
+               ancestors: ancestors
            ) {
             event.respond(decision.isAllowed, false)
             postRespondHandler(event, decision, ancestors, dwellNanoseconds)
