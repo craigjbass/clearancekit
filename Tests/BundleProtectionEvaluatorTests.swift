@@ -25,7 +25,7 @@ struct BundleProtectionEvaluatorTests {
     }
 
     private func ancestor(teamID: String, signingID: String) -> AncestorInfo {
-        AncestorInfo(path: "/fake/path", teamID: teamID, signingID: signingID)
+        AncestorInfo(path: "", teamID: teamID, signingID: signingID)
     }
 
     // MARK: - isBundleWrite

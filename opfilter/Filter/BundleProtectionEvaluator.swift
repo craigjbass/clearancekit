@@ -50,7 +50,10 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
             )
         }
 
-        if ancestors.contains(where: { ancestor in updaters.contains(where: { $0.matches(teamID: ancestor.teamID, signingID: ancestor.signingID) }) }) {
+        let trustedByAncestorUpdater = ancestors.contains { ancestor in
+            updaters.contains { $0.matches(teamID: ancestor.teamID, signingID: ancestor.signingID) }
+        }
+        if trustedByAncestorUpdater {
             return .allowed(
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
