@@ -71,6 +71,15 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
             )
         }
 
+        if processTeamID == appleTeamID && processSigningID == "com.apple.MobileInstallationHelperService" {
+            return .allowed(
+                ruleID: BundleProtectionEvaluator.sentinelRuleID,
+                ruleName: bundlePath,
+                ruleSource: .builtin,
+                matchedCriterion: "app store installer"
+            )
+        }
+
         if processTeamID == bundleSignatures.teamID {
             return .allowed(
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,

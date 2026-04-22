@@ -212,6 +212,36 @@ struct BundleProtectionEvaluatorTests {
         #expect(decision?.isAllowed == false)
     }
 
+    // MARK: - app store installer
+
+    @Test("MobileInstallationHelperService as platform binary returns allowed with app store installer criterion")
+    func mobileInstallationHelperServiceAllowed() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: appleTeamID, processSigningID: "com.apple.MobileInstallationHelperService",
+            processUID: 501, accessKind: .write,
+            ancestors: []
+        )
+        if case .allowed(_, _, _, let criterion) = decision {
+            #expect(criterion == "app store installer")
+        } else {
+            Issue.record("Expected .allowed, got \(String(describing: decision))")
+        }
+    }
+
+    @Test("MobileInstallationHelperService with non-platform teamID is denied")
+    func mobileInstallationHelperServiceSpoofedTeamIDDenied() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: "FAKETEAM", processSigningID: "com.apple.MobileInstallationHelperService",
+            processUID: 501, accessKind: .write,
+            ancestors: []
+        )
+        #expect(decision?.isAllowed == false)
+    }
+
     // MARK: - wildcard direct match
 
     @Test("wildcard updater matches any signing ID from that team as direct process")
