@@ -15,4 +15,8 @@ public struct BundleUpdaterSignature: Codable, Sendable, Identifiable, Equatable
         self.teamID = teamID
         self.signingID = signingID
     }
+
+    public func matches(teamID: String, signingID: String) -> Bool {
+        self.teamID == teamID && (self.signingID == "*" || self.signingID == signingID)
+    }
 }
