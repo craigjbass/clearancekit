@@ -17,6 +17,7 @@ private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", cat
 final class EventBroadcaster: @unchecked Sendable {
     private struct State {
         var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
+        var allowStreamClients: Set<ObjectIdentifier> = []
         var recentEvents: [FolderOpenEvent] = []
         var recentTamperEvents: [TamperAttemptEvent] = []
     }
@@ -44,9 +45,29 @@ final class EventBroadcaster: @unchecked Sendable {
     @discardableResult
     func removeClient(_ connection: NSXPCConnection) -> Int {
         storage.withLock { state in
-            state.guiClients.removeValue(forKey: ObjectIdentifier(connection))
+            let id = ObjectIdentifier(connection)
+            state.guiClients.removeValue(forKey: id)
+            state.allowStreamClients.remove(id)
             return state.guiClients.count
         }
+    }
+
+    // MARK: - Allow-event stream subscription
+
+    func beginAllowStream(for connection: NSXPCConnection) {
+        storage.withLock { state in
+            state.allowStreamClients.insert(ObjectIdentifier(connection))
+        }
+    }
+
+    func endAllowStream(for connection: NSXPCConnection) {
+        storage.withLock { state in
+            state.allowStreamClients.remove(ObjectIdentifier(connection))
+        }
+    }
+
+    var allowStreamClientCount: Int {
+        storage.withLock { $0.allowStreamClients.count }
     }
 
     // MARK: - Event broadcasting

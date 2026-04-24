@@ -131,4 +131,41 @@ struct EventBroadcasterTests {
         #expect(recent[0].eventID == first.eventID)
         #expect(recent[1].eventID == second.eventID)
     }
+
+    // MARK: - Allow stream subscription
+
+    @Test("beginAllowStream tracks subscribing connection")
+    func beginAllowStreamTracksConnection() {
+        let broadcaster = EventBroadcaster()
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+
+        broadcaster.beginAllowStream(for: conn)
+
+        #expect(broadcaster.allowStreamClientCount == 1)
+    }
+
+    @Test("endAllowStream removes subscribing connection")
+    func endAllowStreamRemovesConnection() {
+        let broadcaster = EventBroadcaster()
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+        broadcaster.beginAllowStream(for: conn)
+
+        broadcaster.endAllowStream(for: conn)
+
+        #expect(broadcaster.allowStreamClientCount == 0)
+    }
+
+    @Test("removeClient also removes from allow stream subscribers")
+    func removeClientCleansUpAllowStream() {
+        let broadcaster = EventBroadcaster()
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+        broadcaster.beginAllowStream(for: conn)
+
+        broadcaster.removeClient(conn)
+
+        #expect(broadcaster.allowStreamClientCount == 0)
+    }
 }
