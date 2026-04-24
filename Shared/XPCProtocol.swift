@@ -351,6 +351,11 @@ public protocol ServiceProtocol {
     func beginDiscovery(withReply reply: @escaping () -> Void)
     func endDiscovery(withReply reply: @escaping () -> Void)
 
+    // Allow-event stream: the GUI subscribes when the events screen is
+    // visible and unsubscribes when the screen leaves view or the window hides.
+    func beginAllowEventStream(withReply reply: @escaping (Bool) -> Void)
+    func endAllowEventStream(withReply reply: @escaping (Bool) -> Void)
+
     // Database signature issue resolution. Called after the GUI presents the
     // issue to the user and obtains Touch ID authorisation. If approved is true,
     // opfilter re-signs the suspect data and loads it. If false, opfilter clears

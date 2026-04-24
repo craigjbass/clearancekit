@@ -195,6 +195,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
         _ = broadcaster.removeClient(connection)
     }
 
+    fileprivate func beginAllowStream(for connection: NSXPCConnection) -> [FolderOpenEvent] {
+        broadcaster.beginAllowStream(for: connection)
+    }
+
+    fileprivate func endAllowStream(for connection: NSXPCConnection) {
+        broadcaster.endAllowStream(for: connection)
+    }
+
     fileprivate func recentEvents() -> [FolderOpenEvent] {
         broadcaster.recentEvents()
     }
@@ -643,6 +651,33 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         server.serverQueue.async {
             server.endDiscovery()
             reply()
+        }
+    }
+
+    func beginAllowEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            let backfill = server.beginAllowStream(for: conn)
+            guard let proxy = conn.remoteObjectProxy as? ClientProtocol else {
+                reply(true)
+                return
+            }
+            let batchSize = 50
+            for batchStart in stride(from: 0, to: backfill.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, backfill.count)
+                for event in backfill[batchStart..<batchEnd] {
+                    proxy.folderOpened(event)
+                }
+            }
+            reply(true)
+        }
+    }
+
+    func endAllowEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            server.endAllowStream(for: conn)
+            reply(true)
         }
     }
 
