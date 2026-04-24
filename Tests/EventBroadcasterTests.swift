@@ -171,6 +171,27 @@ struct EventBroadcasterTests {
 
     // MARK: - Allow event filtering
 
+    @Test("beginAllowStream returns allow-only events from ring buffer newest-first")
+    func beginAllowStreamReturnsBackfill() {
+        let broadcaster = EventBroadcaster()
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+
+        let deny = FolderOpenEvent(path: "/deny", timestamp: Date(timeIntervalSince1970: 1), processID: 1, processPath: "/p", accessAllowed: false)
+        let allowOld = FolderOpenEvent(path: "/old", timestamp: Date(timeIntervalSince1970: 2), processID: 2, processPath: "/p", accessAllowed: true)
+        let allowNew = FolderOpenEvent(path: "/new", timestamp: Date(timeIntervalSince1970: 3), processID: 3, processPath: "/p", accessAllowed: true)
+
+        broadcaster.broadcast(deny)
+        broadcaster.broadcast(allowOld)
+        broadcaster.broadcast(allowNew)
+
+        let backfill = broadcaster.beginAllowStream(for: conn)
+
+        #expect(backfill.count == 2)
+        #expect(backfill[0].eventID == allowNew.eventID)
+        #expect(backfill[1].eventID == allowOld.eventID)
+    }
+
     @Test("allow events are stored in ring buffer even without subscribers")
     func allowEventsStoredInRingBufferWithoutSubscribers() {
         let broadcaster = EventBroadcaster()

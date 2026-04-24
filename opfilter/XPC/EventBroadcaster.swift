@@ -54,9 +54,11 @@ final class EventBroadcaster: @unchecked Sendable {
 
     // MARK: - Allow-event stream subscription
 
-    func beginAllowStream(for connection: NSXPCConnection) {
+    @discardableResult
+    func beginAllowStream(for connection: NSXPCConnection) -> [FolderOpenEvent] {
         storage.withLock { state in
             state.allowStreamClients.insert(ObjectIdentifier(connection))
+            return state.recentEvents.filter(\.accessAllowed).reversed()
         }
     }
 
