@@ -168,4 +168,23 @@ struct EventBroadcasterTests {
 
         #expect(broadcaster.allowStreamClientCount == 0)
     }
+
+    // MARK: - Allow event filtering
+
+    @Test("allow events are stored in ring buffer even without subscribers")
+    func allowEventsStoredInRingBufferWithoutSubscribers() {
+        let broadcaster = EventBroadcaster()
+        let event = FolderOpenEvent(
+            path: "/test",
+            timestamp: Date(),
+            processID: 100,
+            processPath: "/usr/bin/test",
+            accessAllowed: true
+        )
+
+        broadcaster.broadcast(event)
+
+        #expect(broadcaster.recentEvents().count == 1)
+        #expect(broadcaster.recentEvents()[0].eventID == event.eventID)
+    }
 }

@@ -72,16 +72,25 @@ final class EventBroadcaster: @unchecked Sendable {
 
     // MARK: - Event broadcasting
 
-    /// Appends the event to the history ring buffer and delivers it to all registered clients.
+    /// Appends the event to the history ring buffer and delivers it to registered clients.
+    /// Deny events are delivered to all clients; allow events are delivered only to clients that have subscribed via beginAllowStream.
     func broadcast(_ event: FolderOpenEvent) {
-        let clients = storage.withLock { state -> [NSXPCConnection] in
+        let (denyClients, allowClients) = storage.withLock { state -> ([NSXPCConnection], [NSXPCConnection]) in
             state.recentEvents.append(event)
             if state.recentEvents.count > maxHistoryCount {
                 state.recentEvents.removeFirst(state.recentEvents.count - maxHistoryCount)
             }
-            return Array(state.guiClients.values)
+            let allClients = Array(state.guiClients.values)
+            guard event.accessAllowed else {
+                return (allClients, [])
+            }
+            let subscribed = allClients.filter { state.allowStreamClients.contains(ObjectIdentifier($0)) }
+            return ([], subscribed)
         }
-        for conn in clients {
+        for conn in denyClients {
+            (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
+        }
+        for conn in allowClients {
             (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
         }
     }
