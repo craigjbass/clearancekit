@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -47,6 +51,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 }
 
+private struct WindowAccessor: NSViewRepresentable {
+    let onClose: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.delegate = context.coordinator
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onClose: onClose)
+    }
+
+    final class Coordinator: NSObject, NSWindowDelegate {
+        let onClose: () -> Void
+
+        init(onClose: @escaping () -> Void) {
+            self.onClose = onClose
+        }
+
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            onClose()
+            return false
+        }
+    }
+}
+
 @main
 struct clearancekitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -57,6 +93,9 @@ struct clearancekitApp: App {
     var body: some Scene {
         Window("clearancekit", id: "main") {
             ContentView()
+                .background(WindowAccessor(onClose: {
+                    hideWindow()
+                }))
         }
         .onChange(of: nav.highlightedEventID) { _, eventID in
             if eventID != nil {
@@ -93,8 +132,19 @@ struct clearancekitApp: App {
     }
 
     private func showWindow() {
+        NSApp.setActivationPolicy(.regular)
         openWindow(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
+        NavigationState.shared.windowVisible = true
+    }
+
+    private func hideWindow() {
+        NavigationState.shared.windowVisible = false
+        XPCClient.shared.endAllowEventStream()
+        NSApp.keyWindow?.orderOut(nil)
+        DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     private var menuBarIconName: String {
