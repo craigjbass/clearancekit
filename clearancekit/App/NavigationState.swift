@@ -12,11 +12,16 @@ final class NavigationState: ObservableObject {
 
     @Published var selection: SidebarItem = .events
     @Published var highlightedEventID: UUID? = nil
+    @Published var windowVisible = false
 
     private init() {}
 
     func navigate(toEventID eventID: UUID) {
         selection = .events
         highlightedEventID = eventID
+    }
+
+    var isEventsScreenActive: Bool {
+        windowVisible && selection == .events
     }
 }

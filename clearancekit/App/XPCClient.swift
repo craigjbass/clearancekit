@@ -463,6 +463,26 @@ final class XPCClient: NSObject, ObservableObject {
         service.endDiscovery { }
     }
 
+    // MARK: - Allow event stream
+
+    func beginAllowEventStream() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: beginAllowEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.beginAllowEventStream { success in
+            if !success { logger.error("XPCClient: beginAllowEventStream rejected by service") }
+        }
+    }
+
+    func endAllowEventStream() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: endAllowEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.endAllowEventStream { success in
+            if !success { logger.error("XPCClient: endAllowEventStream rejected by service") }
+        }
+    }
+
     // MARK: - Signature issue resolution
 
     func resolveSignatureIssue(approved: Bool) {

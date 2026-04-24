@@ -39,7 +39,10 @@ struct EventsWindowView: View {
             eventList
         }
         .onAppear {
-            xpcClient.fetchHistoricEvents()
+            xpcClient.beginAllowEventStream()
+        }
+        .onDisappear {
+            xpcClient.endAllowEventStream()
         }
     }
 
