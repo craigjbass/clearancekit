@@ -39,6 +39,8 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
     @Published private(set) var mcpEnabled = false
 
+    var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
+
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 5.0
@@ -184,6 +186,9 @@ final class XPCClient: NSObject, ObservableObject {
                     self?.stopReconnectTimer()
                     self?.fetchVersionInfo()
                     self?.requestResync()
+                    if self?.shouldResumeAllowEventStream() == true {
+                        self?.beginAllowEventStream()
+                    }
                 } else {
                     logger.error("XPCClient: Failed to register with service")
                     self?.handleDisconnection()
