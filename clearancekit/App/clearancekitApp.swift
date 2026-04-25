@@ -92,6 +92,7 @@ struct clearancekitApp: App {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var xpcClient = XPCClient.shared
+    @State private var mcpDotOpacity: Double = 1.0
 
     var body: some Scene {
         Window("clearancekit", id: "main") {
@@ -131,6 +132,19 @@ struct clearancekitApp: App {
         } label: {
             Image(systemName: menuBarIconName)
                 .foregroundStyle(menuBarIconColor)
+                .overlay {
+                    if xpcClient.mcpEnabled {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 7, height: 7)
+                            .opacity(mcpDotOpacity)
+                    }
+                }
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                        mcpDotOpacity = 0.4
+                    }
+                }
         }
     }
 
