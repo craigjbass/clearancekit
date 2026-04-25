@@ -356,6 +356,12 @@ public protocol ServiceProtocol {
     func beginAllowEventStream(withReply reply: @escaping (Bool) -> Void)
     func endAllowEventStream(withReply reply: @escaping (Bool) -> Void)
 
+    // Metrics-event stream: the GUI subscribes when the metrics screen is
+    // visible and unsubscribes when it leaves view or the window hides.
+    // Opfilter halts the 1Hz sampling timer when no client is subscribed.
+    func beginMetricsEventStream(withReply reply: @escaping (Bool) -> Void)
+    func endMetricsEventStream(withReply reply: @escaping (Bool) -> Void)
+
     // Database signature issue resolution. Called after the GUI presents the
     // issue to the user and obtains Touch ID authorisation. If approved is true,
     // opfilter re-signs the suspect data and loads it. If false, opfilter clears

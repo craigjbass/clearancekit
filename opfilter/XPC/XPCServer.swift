@@ -36,6 +36,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     private var listener: NSXPCListener?
     private let broadcaster: EventBroadcaster
+    private let metricsBroadcaster: MetricsBroadcaster
     fileprivate let serverQueue: DispatchQueue
     /// Protected by contextLock so it can be read from main.swift after configure()
     /// without waiting for the serverQueue dispatch to complete.
@@ -46,9 +47,11 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     init(
         broadcaster: EventBroadcaster,
+        metricsBroadcaster: MetricsBroadcaster,
         serverQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.xpc-server", qos: .userInitiated)
     ) {
         self.broadcaster = broadcaster
+        self.metricsBroadcaster = metricsBroadcaster
         self.serverQueue = serverQueue
         super.init()
     }
@@ -109,7 +112,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
             timestamp:               timestamp
         )
         serverQueue.async { [self] in
-            broadcaster.broadcastToAllClients { $0.metricsUpdated(snapshot) }
+            metricsBroadcaster.broadcast(snapshot)
         }
     }
 
@@ -180,6 +183,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func addGUIClient(_ connection: NSXPCConnection) {
         _ = broadcaster.addClient(connection)
+        _ = metricsBroadcaster.addClient(connection)
         guard let context else {
             (connection.remoteObjectProxy as? ClientProtocol)?.serviceReady(false)
             return
@@ -193,6 +197,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func removeClient(_ connection: NSXPCConnection) {
         _ = broadcaster.removeClient(connection)
+        _ = metricsBroadcaster.removeClient(connection)
     }
 
     fileprivate func beginAllowStream(for connection: NSXPCConnection) -> [FolderOpenEvent] {
@@ -201,6 +206,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func endAllowStream(for connection: NSXPCConnection) {
         broadcaster.endAllowStream(for: connection)
+    }
+
+    fileprivate func beginMetricsStream(for connection: NSXPCConnection) {
+        metricsBroadcaster.beginStream(for: connection)
+    }
+
+    fileprivate func endMetricsStream(for connection: NSXPCConnection) {
+        metricsBroadcaster.endStream(for: connection)
     }
 
     fileprivate func recentEvents() -> [FolderOpenEvent] {
@@ -677,6 +690,22 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let conn = connection, let server else { reply(false); return }
         server.serverQueue.async {
             server.endAllowStream(for: conn)
+            reply(true)
+        }
+    }
+
+    func beginMetricsEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            server.beginMetricsStream(for: conn)
+            reply(true)
+        }
+    }
+
+    func endMetricsEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            server.endMetricsStream(for: conn)
             reply(true)
         }
     }

@@ -29,7 +29,39 @@ let dataDirectory = URL(fileURLWithPath: "/Library/Application Support/clearance
 // Start the XPC server before the slow process-tree scan so the GUI can connect
 // immediately and show a loading state while opfilter finishes initialising.
 let broadcaster = EventBroadcaster()
-let server = XPCServer(broadcaster: broadcaster, serverQueue: xpcServerQueue)
+let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
+
+// The metrics timer is constructed before the server so we can hand its
+// controller to the metrics broadcaster, but its sample handler captures
+// `server`, so we wire `server` into the closure via a holder.
+final class MetricsServerHolder: @unchecked Sendable {
+    var server: XPCServer?
+}
+let serverHolder = MetricsServerHolder()
+
+let metricsTimer = DispatchSourceMetricsTimer(queue: metricsQueue) {
+    let sampleDate = Date(timeIntervalSince1970: Double(clock_gettime_nsec_np(CLOCK_REALTIME)) / 1_000_000_000)
+    let m = pipeline.metrics()
+    let jm = jailInteractor.jailMetrics()
+    serverHolder.server?.pushMetrics(m, jail: jm, timestamp: sampleDate)
+    metricsLogger.info("""
+    pipeline_metrics \
+    ts=\(sampleDate.timeIntervalSince1970, privacy: .public) \
+    eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
+    eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
+    hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
+    hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
+    slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
+    slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
+    slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public) \
+    jailEvaluatedCount=\(jm.jailEvaluatedCount, privacy: .public) \
+    jailDenyCount=\(jm.jailDenyCount, privacy: .public)
+    """)
+}
+let metricsBroadcaster = MetricsBroadcaster(timerController: metricsTimer)
+
+let server = XPCServer(broadcaster: broadcaster, metricsBroadcaster: metricsBroadcaster, serverQueue: xpcServerQueue)
+serverHolder.server = server
 server.start()
 
 let processTree = ProcessTree(evictionQueue: evictionQueue)
@@ -136,29 +168,5 @@ adapter.start(initialRules: initialRules, onXProtectChanged: { server.handleXPro
 server.applyPolicyToFilter()
 server.applyAllowlistToFilter()
 server.applyJailRulesToFilter()
-
-let metricsLogger = Logger(subsystem: "uk.craigbass.clearancekit.metrics", category: "metrics")
-let metricsTimer = DispatchSource.makeTimerSource(queue: metricsQueue)
-metricsTimer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
-metricsTimer.setEventHandler {
-    let sampleDate = Date(timeIntervalSince1970: Double(clock_gettime_nsec_np(CLOCK_REALTIME)) / 1_000_000_000)
-    let m = pipeline.metrics()
-    let jm = jailInteractor.jailMetrics()
-    server.pushMetrics(m, jail: jm, timestamp: sampleDate)
-    metricsLogger.info("""
-    pipeline_metrics \
-    ts=\(sampleDate.timeIntervalSince1970, privacy: .public) \
-    eventBufferEnqueueCount=\(m.eventBufferEnqueueCount, privacy: .public) \
-    eventBufferDropCount=\(m.eventBufferDropCount, privacy: .public) \
-    hotPathProcessedCount=\(m.hotPathProcessedCount, privacy: .public) \
-    hotPathRespondedCount=\(m.hotPathRespondedCount, privacy: .public) \
-    slowQueueEnqueueCount=\(m.slowQueueEnqueueCount, privacy: .public) \
-    slowQueueDropCount=\(m.slowQueueDropCount, privacy: .public) \
-    slowPathProcessedCount=\(m.slowPathProcessedCount, privacy: .public) \
-    jailEvaluatedCount=\(jm.jailEvaluatedCount, privacy: .public) \
-    jailDenyCount=\(jm.jailDenyCount, privacy: .public)
-    """)
-}
-metricsTimer.resume()
 
 dispatchMain()
