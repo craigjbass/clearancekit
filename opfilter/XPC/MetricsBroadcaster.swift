@@ -27,4 +27,28 @@ final class MetricsBroadcaster: @unchecked Sendable {
         self.storage = OSAllocatedUnfairLock(initialState: State())
         self.timerController = timerController
     }
+
+    @discardableResult
+    func addClient(_ connection: NSXPCConnection) -> Int {
+        storage.withLock { state in
+            state.guiClients[ObjectIdentifier(connection)] = connection
+            return state.guiClients.count
+        }
+    }
+
+    @discardableResult
+    func beginStream(for connection: NSXPCConnection) -> Bool {
+        let shouldStart = storage.withLock { state -> Bool in
+            let id = ObjectIdentifier(connection)
+            let wasEmpty = state.streamClients.isEmpty
+            state.streamClients.insert(id)
+            if wasEmpty && !state.timerRunning {
+                state.timerRunning = true
+                return true
+            }
+            return false
+        }
+        if shouldStart { timerController.start() }
+        return true
+    }
 }
