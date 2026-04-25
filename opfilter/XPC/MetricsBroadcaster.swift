@@ -51,4 +51,18 @@ final class MetricsBroadcaster: @unchecked Sendable {
         if shouldStart { timerController.start() }
         return true
     }
+
+    @discardableResult
+    func endStream(for connection: NSXPCConnection) -> Bool {
+        let shouldStop = storage.withLock { state -> Bool in
+            state.streamClients.remove(ObjectIdentifier(connection))
+            if state.streamClients.isEmpty && state.timerRunning {
+                state.timerRunning = false
+                return true
+            }
+            return false
+        }
+        if shouldStop { timerController.stop() }
+        return true
+    }
 }

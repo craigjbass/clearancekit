@@ -45,4 +45,22 @@ struct MetricsBroadcasterTests {
 
         #expect(timer.startCount == 1)
     }
+
+    @Test("last unsubscribe stops the timer")
+    func lastUnsubscribeStopsTimer() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let connA = NSXPCConnection()
+        let connB = NSXPCConnection()
+        broadcaster.addClient(connA)
+        broadcaster.addClient(connB)
+        broadcaster.beginStream(for: connA)
+        broadcaster.beginStream(for: connB)
+
+        broadcaster.endStream(for: connA)
+        #expect(timer.stopCount == 0)
+
+        broadcaster.endStream(for: connB)
+        #expect(timer.stopCount == 1)
+    }
 }
