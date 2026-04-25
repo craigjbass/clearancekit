@@ -144,6 +144,7 @@ struct clearancekitApp: App {
     private func hideWindow() {
         NavigationState.shared.windowVisible = false
         XPCClient.shared.endAllowEventStream()
+        XPCClient.shared.endMetricsEventStream()
         NSApp.keyWindow?.orderOut(nil)
         DispatchQueue.main.async {
             NSApp.setActivationPolicy(.accessory)
