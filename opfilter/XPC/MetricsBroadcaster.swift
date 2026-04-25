@@ -81,4 +81,16 @@ final class MetricsBroadcaster: @unchecked Sendable {
         if shouldStop { timerController.stop() }
         return clientCount
     }
+
+    /// Fans out the snapshot to every connected GUI client whenever ≥1 client is
+    /// subscribed. Returns immediately when the subscriber set is empty.
+    func broadcast(_ snapshot: PipelineMetricsSnapshot) {
+        let connections = storage.withLock { state -> [NSXPCConnection] in
+            guard !state.streamClients.isEmpty else { return [] }
+            return Array(state.guiClients.values)
+        }
+        for conn in connections {
+            (conn.remoteObjectProxy as? ClientProtocol)?.metricsUpdated(snapshot)
+        }
+    }
 }

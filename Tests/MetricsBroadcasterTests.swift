@@ -106,4 +106,34 @@ struct MetricsBroadcasterTests {
 
         #expect(timer.stopCount == 1)
     }
+
+    private func makeSnapshot() -> PipelineMetricsSnapshot {
+        PipelineMetricsSnapshot(
+            eventBufferEnqueueCount: 0,
+            eventBufferDropCount: 0,
+            hotPathProcessedCount: 0,
+            hotPathRespondedCount: 0,
+            slowQueueEnqueueCount: 0,
+            slowQueueDropCount: 0,
+            slowPathProcessedCount: 0,
+            jailEvaluatedCount: 0,
+            jailDenyCount: 0,
+            timestamp: Date()
+        )
+    }
+
+    @Test("broadcast with no subscribers does not throw")
+    func broadcastWithNoSubscribersDoesNotThrow() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+
+        broadcaster.broadcast(makeSnapshot())
+
+        // Subscriber set was empty so no proxy fan-out occurred — broadcast must
+        // tolerate that path without crashing or affecting timer state.
+        #expect(timer.startCount == 0)
+        #expect(timer.stopCount == 0)
+    }
 }
