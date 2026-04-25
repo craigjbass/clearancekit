@@ -40,6 +40,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var mcpEnabled = false
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
+    var shouldResumeMetricsStream: @MainActor () -> Bool = { false }
 
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
@@ -188,6 +189,12 @@ final class XPCClient: NSObject, ObservableObject {
                     self?.requestResync()
                     if self?.shouldResumeAllowEventStream() == true {
                         self?.beginAllowEventStream()
+                    }
+                    if self?.shouldResumeMetricsStream() == true {
+                        // Reset the ref-count so the resume issues a fresh server-side
+                        // subscription rather than being swallowed by stale state.
+                        self?.metricsStreamRefCount = 0
+                        self?.beginMetricsEventStream()
                     }
                 } else {
                     logger.error("XPCClient: Failed to register with service")
@@ -485,6 +492,35 @@ final class XPCClient: NSObject, ObservableObject {
         }) as? ServiceProtocol else { return }
         service.endAllowEventStream { success in
             if !success { logger.error("XPCClient: endAllowEventStream rejected by service") }
+        }
+    }
+
+    // MARK: - Metrics event stream
+
+    /// Tracks how many SwiftUI views have asked to be subscribed. Allows duplicate
+    /// onAppear/onDisappear pairs without desyncing server-side state.
+    private var metricsStreamRefCount = 0
+
+    func beginMetricsEventStream() {
+        metricsStreamRefCount += 1
+        guard metricsStreamRefCount == 1 else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: beginMetricsEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.beginMetricsEventStream { success in
+            if !success { logger.error("XPCClient: beginMetricsEventStream rejected by service") }
+        }
+    }
+
+    func endMetricsEventStream() {
+        guard metricsStreamRefCount > 0 else { return }
+        metricsStreamRefCount -= 1
+        guard metricsStreamRefCount == 0 else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: endMetricsEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.endMetricsEventStream { success in
+            if !success { logger.error("XPCClient: endMetricsEventStream rejected by service") }
         }
     }
 
