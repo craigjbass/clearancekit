@@ -24,6 +24,12 @@ struct MetricsView: View {
             }
         }
         .navigationTitle("Metrics")
+        .onAppear {
+            xpcClient.beginMetricsEventStream()
+        }
+        .onDisappear {
+            xpcClient.endMetricsEventStream()
+        }
     }
 
     // MARK: - Subviews
