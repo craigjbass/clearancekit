@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         XPCClient.shared.shouldResumeAllowEventStream = { NavigationState.shared.isEventsScreenActive }
+        XPCClient.shared.shouldResumeMetricsStream = { NavigationState.shared.isMetricsScreenActive }
 
         mcpEnabledCancellable = XPCClient.shared.$mcpEnabled
             .receive(on: mcpQueue)
