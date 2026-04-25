@@ -65,4 +65,20 @@ final class MetricsBroadcaster: @unchecked Sendable {
         if shouldStop { timerController.stop() }
         return true
     }
+
+    @discardableResult
+    func removeClient(_ connection: NSXPCConnection) -> Int {
+        let (clientCount, shouldStop) = storage.withLock { state -> (Int, Bool) in
+            let id = ObjectIdentifier(connection)
+            state.guiClients.removeValue(forKey: id)
+            let didRemoveSubscriber = state.streamClients.remove(id) != nil
+            let shouldStop = didRemoveSubscriber
+                && state.streamClients.isEmpty
+                && state.timerRunning
+            if shouldStop { state.timerRunning = false }
+            return (state.guiClients.count, shouldStop)
+        }
+        if shouldStop { timerController.stop() }
+        return clientCount
+    }
 }

@@ -63,4 +63,33 @@ struct MetricsBroadcasterTests {
         broadcaster.endStream(for: connB)
         #expect(timer.stopCount == 1)
     }
+
+    @Test("removeClient unsubscribes and stops the timer")
+    func removeClientUnsubscribesAndStopsTimer() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+        broadcaster.beginStream(for: conn)
+
+        broadcaster.removeClient(conn)
+
+        #expect(timer.stopCount == 1)
+    }
+
+    @Test("removeClient for a non-subscriber leaves the timer running")
+    func removeClientForNonSubscriberLeavesTimerRunning() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let connA = NSXPCConnection()
+        let connB = NSXPCConnection()
+        broadcaster.addClient(connA)
+        broadcaster.addClient(connB)
+        broadcaster.beginStream(for: connA)
+
+        broadcaster.removeClient(connB)
+
+        #expect(timer.stopCount == 0)
+        #expect(timer.startCount == 1)
+    }
 }
