@@ -92,7 +92,6 @@ struct clearancekitApp: App {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var xpcClient = XPCClient.shared
-    @State private var mcpDotOpacity: Double = 1.0
 
     var body: some Scene {
         Window("clearancekit", id: "main") {
@@ -125,26 +124,19 @@ struct clearancekitApp: App {
                 components?.queryItems = [URLQueryItem(name: "sha", value: cleanHash)]
                 if let url = components?.url { NSWorkspace.shared.open(url) }
             }
+            if xpcClient.mcpEnabled {
+                Divider()
+                Text("MCP server enabled")
+                Button("Disable MCP server") {
+                    XPCClient.shared.setMCPEnabled(false)
+                }
+            }
             Divider()
             Button("Quit GUI") {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
-            Image(systemName: menuBarIconName)
-                .foregroundStyle(menuBarIconColor)
-                .overlay {
-                    if xpcClient.mcpEnabled {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 7, height: 7)
-                            .opacity(mcpDotOpacity)
-                    }
-                }
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                        mcpDotOpacity = 0.4
-                    }
-                }
+            Image(nsImage: composedMenuBarImage())
         }
     }
 
@@ -165,6 +157,30 @@ struct clearancekitApp: App {
         }
     }
 
+    @MainActor
+    private func composedMenuBarImage() -> NSImage {
+        let content = ZStack {
+            Image(systemName: menuBarIconName)
+                .foregroundStyle(menuBarIconColor)
+            if xpcClient.mcpEnabled {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 9, height: 9)
+                    .opacity(0.8)
+            }
+        }
+        .font(.system(size: 14))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        if let nsImage = renderer.nsImage {
+            nsImage.isTemplate = false
+            return nsImage
+        }
+        let fallback = NSImage(size: NSSize(width: 22, height: 22))
+        fallback.isTemplate = false
+        return fallback
+    }
+
     private var menuBarIconName: String {
         switch menuBarStatus {
         case .healthy:      return "checkmark.shield"
@@ -175,7 +191,7 @@ struct clearancekitApp: App {
 
     private var menuBarIconColor: Color {
         switch menuBarStatus {
-        case .healthy:      return .primary
+        case .healthy:      return .white
         case .outdated:     return .orange
         case .disconnected: return .red
         }

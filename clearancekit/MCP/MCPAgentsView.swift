@@ -56,7 +56,18 @@ private struct MCPSecurityWarningView: View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle(isOn: Binding(
                 get: { xpcClient.mcpEnabled },
-                set: { xpcClient.setMCPEnabled($0) }
+                set: { newValue in
+                    if newValue {
+                        Task { @MainActor in
+                            do {
+                                try await BiometricAuth.authenticate(reason: "Enable the MCP server")
+                                xpcClient.setMCPEnabled(true)
+                            } catch {}
+                        }
+                    } else {
+                        xpcClient.setMCPEnabled(false)
+                    }
+                }
             )) {
                 Label("Enable MCP Server", systemImage: "network")
                     .font(.headline)
