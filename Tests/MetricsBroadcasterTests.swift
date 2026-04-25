@@ -30,4 +30,19 @@ struct MetricsBroadcasterTests {
         #expect(timer.startCount == 1)
         #expect(timer.stopCount == 0)
     }
+
+    @Test("second subscriber does not restart the timer")
+    func secondSubscriberDoesNotRestartTimer() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let connA = NSXPCConnection()
+        let connB = NSXPCConnection()
+        broadcaster.addClient(connA)
+        broadcaster.addClient(connB)
+
+        broadcaster.beginStream(for: connA)
+        broadcaster.beginStream(for: connB)
+
+        #expect(timer.startCount == 1)
+    }
 }
