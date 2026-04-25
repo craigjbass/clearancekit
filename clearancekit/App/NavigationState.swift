@@ -24,4 +24,8 @@ final class NavigationState: ObservableObject {
     var isEventsScreenActive: Bool {
         windowVisible && selection == .events
     }
+
+    var isMetricsScreenActive: Bool {
+        windowVisible && selection == .metrics
+    }
 }
