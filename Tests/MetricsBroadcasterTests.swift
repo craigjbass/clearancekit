@@ -92,4 +92,18 @@ struct MetricsBroadcasterTests {
         #expect(timer.stopCount == 0)
         #expect(timer.startCount == 1)
     }
+
+    @Test("double endStream is idempotent")
+    func doubleEndStreamIsIdempotent() {
+        let timer = FakeMetricsTimer()
+        let broadcaster = MetricsBroadcaster(timerController: timer)
+        let conn = NSXPCConnection()
+        broadcaster.addClient(conn)
+        broadcaster.beginStream(for: conn)
+
+        broadcaster.endStream(for: conn)
+        broadcaster.endStream(for: conn)
+
+        #expect(timer.stopCount == 1)
+    }
 }
