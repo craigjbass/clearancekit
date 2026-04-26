@@ -160,7 +160,11 @@ struct clearancekitApp: App {
     @MainActor
     private func composedMenuBarImage() -> NSImage {
         let content = ZStack {
-            Image(systemName: menuBarIconName)
+            Image("MenuBarShield")
+                .resizable()
+                .renderingMode(.template)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
                 .foregroundStyle(menuBarIconColor)
             if xpcClient.mcpEnabled {
                 Circle()
@@ -169,7 +173,6 @@ struct clearancekitApp: App {
                     .opacity(0.8)
             }
         }
-        .font(.system(size: 14))
         let renderer = ImageRenderer(content: content)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
         if let nsImage = renderer.nsImage {
@@ -179,14 +182,6 @@ struct clearancekitApp: App {
         let fallback = NSImage(size: NSSize(width: 22, height: 22))
         fallback.isTemplate = false
         return fallback
-    }
-
-    private var menuBarIconName: String {
-        switch menuBarStatus {
-        case .healthy:      return "checkmark.shield"
-        case .outdated:     return "exclamationmark.shield"
-        case .disconnected: return "shield.slash"
-        }
     }
 
     private var menuBarIconColor: Color {

@@ -62,7 +62,6 @@
 				App/NavigationState.swift,
 				App/SystemExtensionManager.swift,
 				Assets.xcassets,
-				clearancekit.icon,
 				Configure/Allowlist/AllowlistView.swift,
 				Configure/BundleUpdaters/BundleUpdaterAllowlistView.swift,
 				Configure/AppProtections/AppPickerView.swift,
@@ -586,7 +585,7 @@
 		468256482F2832C500839A1A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = clearancekit;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
@@ -637,7 +636,7 @@
 		468256492F2832C500839A1A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = clearancekit;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_ENTITLEMENTS = clearancekit/clearancekit.entitlements;
