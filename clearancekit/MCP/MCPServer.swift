@@ -242,13 +242,23 @@ private final class MCPSocketConnection: @unchecked Sendable {
     private let fd: Int32
     private let queue: DispatchQueue
     private var sessionID: UUID?
+    private var pendingCommit: MCPSessionCommit?
     private let closeLock = OSAllocatedUnfairLock(initialState: false)
+    private let aliveLock = OSAllocatedUnfairLock(initialState: true)
     private let onClosed: @Sendable (Int32) -> Void
 
     init(fd: Int32, queue: DispatchQueue, onClosed: @escaping @Sendable (Int32) -> Void) {
         self.fd = fd
         self.queue = queue
         self.onClosed = onClosed
+    }
+
+    func isAlive() -> Bool {
+        aliveLock.withLock { $0 }
+    }
+
+    private func markDead() {
+        aliveLock.withLock { $0 = false }
     }
 
     func start() {
@@ -264,6 +274,7 @@ private final class MCPSocketConnection: @unchecked Sendable {
             return false
         }
         guard !alreadyClosed else { return }
+        markDead()
         Darwin.close(fd)
         onClosed(fd)
     }
@@ -292,17 +303,19 @@ private final class MCPSocketConnection: @unchecked Sendable {
         let capFd = fd
         return AsyncStream { continuation in
             let source = DispatchSource.makeReadSource(fileDescriptor: capFd, queue: queue)
-            source.setEventHandler {
+            source.setEventHandler { [weak self] in
                 var buf = [UInt8](repeating: 0, count: 4096)
                 let n = Darwin.read(capFd, &buf, buf.count)
                 if n > 0 {
                     continuation.yield(Data(buf[0..<n]))
                 } else if n == 0 {
+                    self?.markDead()
                     continuation.finish()
                     source.cancel()
                 } else if errno == EINTR || errno == EAGAIN {
                     return  // transient — wait for next readiness notification
                 } else {
+                    self?.markDead()
                     continuation.finish()
                     source.cancel()
                 }
@@ -320,18 +333,31 @@ private final class MCPSocketConnection: @unchecked Sendable {
             return
         }
 
-        let (response, newSessionID) = await MCPDispatcher.dispatch(
+        let outcome = await MCPDispatcher.dispatch(
             request,
             sessionID: sessionID,
+            hasPendingCommit: pendingCommit != nil,
+            isStillConnected: { [weak self] in self?.isAlive() ?? false },
             closeFn: { [weak self] in self?.closeOnce() }
         )
 
-        if let ns = newSessionID { sessionID = ns }
+        if let ns = outcome.newSessionID { sessionID = ns }
+        if let pc = outcome.pendingCommit { pendingCommit = pc }
 
-        guard let responseData = try? JSONEncoder().encode(response) else { return }
-        var line = responseData
-        line.append(UInt8(ascii: "\n"))
-        writeAll(line)
+        // JSON-RPC notifications (requests without `id`) MUST NOT receive a
+        // response. Sending one causes strict clients to fail schema
+        // validation and drop the connection.
+        if request.id != nil {
+            guard let responseData = try? JSONEncoder().encode(outcome.response) else { return }
+            var line = responseData
+            line.append(UInt8(ascii: "\n"))
+            guard writeAll(line) else { return }
+        }
+
+        if outcome.runPendingCommit, let pc = pendingCommit {
+            await pc()
+            pendingCommit = nil
+        }
     }
 
     private func sendParseError() {
@@ -339,12 +365,15 @@ private final class MCPSocketConnection: @unchecked Sendable {
         guard let responseData = try? JSONEncoder().encode(parseError) else { return }
         var line = responseData
         line.append(UInt8(ascii: "\n"))
-        writeAll(line)
+        _ = writeAll(line)
     }
 
-    private func writeAll(_ data: Data) {
+    /// Returns `true` if all bytes were written; `false` if the peer closed or
+    /// another write error occurred (in which case `closeOnce` has been called).
+    private func writeAll(_ data: Data) -> Bool {
+        var success = true
         data.withUnsafeBytes { ptr in
-            guard let base = ptr.baseAddress else { return }
+            guard let base = ptr.baseAddress else { success = false; return }
             var offset = 0
             while offset < ptr.count {
                 let n = Darwin.write(fd, base.advanced(by: offset), ptr.count - offset)
@@ -353,11 +382,12 @@ private final class MCPSocketConnection: @unchecked Sendable {
                 } else if n < 0 && errno == EINTR {
                     continue
                 } else {
-                    // EPIPE or other write error — peer closed or broken pipe
                     closeOnce()
+                    success = false
                     return
                 }
             }
         }
+        return success
     }
 }

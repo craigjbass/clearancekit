@@ -7,45 +7,107 @@ import Foundation
 
 // MARK: - MCPDispatcher
 
+typealias MCPSessionCommit = @MainActor @Sendable () -> Void
+
+struct MCPDispatchOutcome {
+    /// Response to write back to the client.
+    let response: MCPResponse
+    /// New session ID assigned to the connection on a successful `initialize`.
+    /// The session is not yet visible in the UI — the connection holds the
+    /// returned `pendingCommit` until the client confirms the handshake by
+    /// sending `notifications/initialized`.
+    let newSessionID: UUID?
+    /// Commit closure issued on `initialize`. Stored on the connection and run
+    /// only when `runPendingCommit` is true on a later call (i.e. the client
+    /// completed the handshake).
+    let pendingCommit: MCPSessionCommit?
+    /// Set to true on `notifications/initialized` when there is a pending
+    /// commit to run.
+    let runPendingCommit: Bool
+}
+
 enum MCPDispatcher {
-    /// Returns (MCPResponse, newSessionID).
-    /// newSessionID is non-nil only on a successful `initialize` (the session was just created).
     @MainActor
     static func dispatch(
         _ request: MCPRequest,
         sessionID: UUID?,
+        hasPendingCommit: Bool,
+        isStillConnected: @escaping @Sendable () -> Bool,
         closeFn: @escaping @Sendable () -> Void
-    ) async -> (MCPResponse, UUID?) {
+    ) async -> MCPDispatchOutcome {
         switch request.method {
         case "initialize":
-            return await handleInitialize(request, closeFn: closeFn)
+            return await handleInitialize(request, isStillConnected: isStillConnected, closeFn: closeFn)
 
         case "notifications/initialized":
-            // One-way notification — only valid within an authenticated session.
-            guard let id = sessionID, MCPSessionStore.shared.isValid(id) else {
-                return (unauthorizedResponse(id: request.id), nil)
+            // Handshake confirmation. The session must already have been issued
+            // (sessionID set) by a prior `initialize`. Either the session was
+            // already committed (re-sent notification) or there is a pending
+            // commit waiting to be run.
+            guard sessionID != nil else {
+                return MCPDispatchOutcome(
+                    response: unauthorizedResponse(id: request.id),
+                    newSessionID: nil,
+                    pendingCommit: nil,
+                    runPendingCommit: false
+                )
             }
-            return (MCPResponse(result: .null, id: request.id), nil)
+            return MCPDispatchOutcome(
+                response: MCPResponse(result: .null, id: request.id),
+                newSessionID: nil,
+                pendingCommit: nil,
+                runPendingCommit: hasPendingCommit
+            )
 
         case "tools/list":
             guard let id = sessionID, MCPSessionStore.shared.isValid(id) else {
-                return (unauthorizedResponse(id: request.id), nil)
+                return MCPDispatchOutcome(
+                    response: unauthorizedResponse(id: request.id),
+                    newSessionID: nil,
+                    pendingCommit: nil,
+                    runPendingCommit: false
+                )
             }
-            return (MCPResponse(result: .object(["tools": .array(toolDefinitions)]), id: request.id), nil)
+            return MCPDispatchOutcome(
+                response: MCPResponse(result: .object(["tools": .array(toolDefinitions)]), id: request.id),
+                newSessionID: nil,
+                pendingCommit: nil,
+                runPendingCommit: false
+            )
 
         case "tools/call":
             guard let id = sessionID, MCPSessionStore.shared.isValid(id) else {
-                return (unauthorizedResponse(id: request.id), nil)
+                return MCPDispatchOutcome(
+                    response: unauthorizedResponse(id: request.id),
+                    newSessionID: nil,
+                    pendingCommit: nil,
+                    runPendingCommit: false
+                )
             }
             guard let name = request.params?["name"]?.stringValue else {
-                return (MCPResponse(error: MCPRPCError(code: -32602, message: "Missing tool name"), id: request.id), nil)
+                return MCPDispatchOutcome(
+                    response: MCPResponse(error: MCPRPCError(code: -32602, message: "Missing tool name"), id: request.id),
+                    newSessionID: nil,
+                    pendingCommit: nil,
+                    runPendingCommit: false
+                )
             }
             let args = request.params?["arguments"]?.objectValue ?? [:]
             let response = await callTool(name: name, args: args, sessionID: id, requestID: request.id)
-            return (response, nil)
+            return MCPDispatchOutcome(
+                response: response,
+                newSessionID: nil,
+                pendingCommit: nil,
+                runPendingCommit: false
+            )
 
         default:
-            return (MCPResponse(error: MCPRPCError(code: -32601, message: "Method not found: \(request.method)"), id: request.id), nil)
+            return MCPDispatchOutcome(
+                response: MCPResponse(error: MCPRPCError(code: -32601, message: "Method not found: \(request.method)"), id: request.id),
+                newSessionID: nil,
+                pendingCommit: nil,
+                runPendingCommit: false
+            )
         }
     }
 
@@ -54,23 +116,41 @@ enum MCPDispatcher {
     @MainActor
     private static func handleInitialize(
         _ request: MCPRequest,
+        isStillConnected: @escaping @Sendable () -> Bool,
         closeFn: @escaping @Sendable () -> Void
-    ) async -> (MCPResponse, UUID?) {
+    ) async -> MCPDispatchOutcome {
         let clientName    = request.params?["clientInfo"]?["name"]?.stringValue    ?? "Unknown"
         let clientVersion = request.params?["clientInfo"]?["version"]?.stringValue ?? ""
 
         do {
             let sessionID = try await MCPSessionStore.shared.issueSession(
                 clientName: clientName,
-                clientVersion: clientVersion,
-                closeFn: closeFn
+                isStillConnected: isStillConnected
             )
-            return (MCPResponse(result: initializeResult, id: request.id), sessionID)
+            let commit: MCPSessionCommit = {
+                MCPSessionStore.shared.commitSession(
+                    id: sessionID,
+                    clientName: clientName,
+                    clientVersion: clientVersion,
+                    closeFn: closeFn
+                )
+            }
+            return MCPDispatchOutcome(
+                response: MCPResponse(result: initializeResult, id: request.id),
+                newSessionID: sessionID,
+                pendingCommit: commit,
+                runPendingCommit: false
+            )
         } catch {
-            return (MCPResponse(
-                error: MCPRPCError(code: -32600, message: "Authentication failed: \(error.localizedDescription)"),
-                id: request.id
-            ), nil)
+            return MCPDispatchOutcome(
+                response: MCPResponse(
+                    error: MCPRPCError(code: -32600, message: "Authentication failed: \(error.localizedDescription)"),
+                    id: request.id
+                ),
+                newSessionID: nil,
+                pendingCommit: nil,
+                runPendingCommit: false
+            )
         }
     }
 

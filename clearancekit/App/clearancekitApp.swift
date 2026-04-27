@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Darwin
 import UserNotifications
 import Combine
 
@@ -17,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+
+        // Writing to a closed Unix socket (e.g. MCP peer disconnected mid-RPC)
+        // would otherwise terminate the GUI via SIGPIPE. EPIPE is still
+        // returned to the writer so the connection can be cleaned up normally.
+        Darwin.signal(SIGPIPE, SIG_IGN)
+
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }

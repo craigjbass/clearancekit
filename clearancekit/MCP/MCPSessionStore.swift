@@ -24,16 +24,33 @@ final class MCPSessionStore: ObservableObject {
 
     @Published private(set) var activeSessions: [MCPSession] = []
 
-    /// Prompts for authentication, then registers the connection as an active session.
-    /// Throws if authentication is cancelled or fails.
+    /// Prompts for authentication and returns a fresh session ID. Does NOT add the
+    /// session to `activeSessions` — the caller must call `commitSession` once the
+    /// initialize response has been written and the client has confirmed the
+    /// handshake. This avoids briefly showing a session row in the UI for a peer
+    /// that has already disconnected.
     func issueSession(
+        clientName: String,
+        isStillConnected: @Sendable () -> Bool
+    ) async throws -> UUID {
+        try await BiometricAuth.authenticate(reason: "Allow \"\(clientName)\" to connect to ClearanceKit MCP")
+        guard isStillConnected() else {
+            throw MCPSessionError.connectionClosedDuringAuthentication
+        }
+        return UUID()
+    }
+
+    /// Adds a previously-issued session to `activeSessions`, making it visible in
+    /// the UI and accepted by `isValid`. Must only be called after the MCP
+    /// `notifications/initialized` confirms the handshake.
+    func commitSession(
+        id: UUID,
         clientName: String,
         clientVersion: String,
         closeFn: @escaping @Sendable () -> Void
-    ) async throws -> UUID {
-        try await BiometricAuth.authenticate(reason: "Allow \"\(clientName)\" to connect to ClearanceKit MCP")
+    ) {
         let session = MCPSession(
-            id: UUID(),
+            id: id,
             clientName: clientName,
             clientVersion: clientVersion,
             connectedAt: Date(),
@@ -43,7 +60,6 @@ final class MCPSessionStore: ObservableObject {
             closeFn: closeFn
         )
         activeSessions.append(session)
-        return session.id
     }
 
     func isValid(_ id: UUID) -> Bool {
@@ -66,5 +82,16 @@ final class MCPSessionStore: ObservableObject {
     /// Called when the remote end closes the connection normally.
     func connectionClosed(_ id: UUID) {
         activeSessions.removeAll { $0.id == id }
+    }
+}
+
+enum MCPSessionError: LocalizedError {
+    case connectionClosedDuringAuthentication
+
+    var errorDescription: String? {
+        switch self {
+        case .connectionClosedDuringAuthentication:
+            return "Connection closed before authentication completed"
+        }
     }
 }
