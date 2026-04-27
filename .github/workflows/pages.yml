@@ -31,11 +31,6 @@ jobs:
       - name: Copy screenshots into site
         run: cp Screenshots/recording.gif Screenshots/app-protections.png docs/
 
-      - name: Convert app icon for site
-        run: |
-          pip install --require-hashes --no-deps -r .github/workflows/pages-requirements.txt
-          python3 -c "from PIL import Image; img = Image.open('clearancekit/clearancekit.icon/Assets/ChatGPT Image Jan 26, 2026 at 11_46_59 PM.png'); img.resize((512, 512), Image.LANCZOS).save('docs/logo.png', 'PNG', optimize=True)"
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
