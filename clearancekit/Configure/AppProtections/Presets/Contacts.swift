@@ -13,6 +13,7 @@ private let contactsCoreSignatures: [ProcessSignature] = [
     apple("com.apple.AddressBookSourceSync"),
     apple("com.apple.ABAssistantService"),
     apple("com.apple.MobileSMS"),
+    apple("com.apple.internetAccountsMigrator"),
 ]
 
 let contactsPreset = AppPreset(

@@ -13,6 +13,8 @@ private let messagesCoreSignatures: [ProcessSignature] = [
     apple("com.apple.imtranscoding.IMTranscoderAgent"),
     apple("com.apple.MessagesBlastDoorService"),
     apple("com.apple.AddressBook"),
+    apple("com.apple.messages.AssistantExtension"),
+    apple("com.apple.IMAutomaticHistoryDeletionAgent"),
 ]
 
 private let messagesSpotlightSignatures: [ProcessSignature] = [
@@ -22,6 +24,12 @@ private let messagesSpotlightSignatures: [ProcessSignature] = [
 private let messagesQuickLookSignatures: [ProcessSignature] = [
     apple("com.apple.quicklook.ThumbnailsAgent"),
     apple("com.apple.quicklook.thumbnail.ImageExtension"),
+    apple("com.apple.quicklook.QuickLookUIService"),
+]
+
+private let messagesMediaSignatures: [ProcessSignature] = [
+    apple("com.apple.mediaanalysisd"),
+    apple("com.apple.photolibraryd"),
 ]
 
 let messagesPreset = AppPreset(
@@ -33,7 +41,7 @@ let messagesPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0007-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Messages",
-            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures + messagesQuickLookSignatures
+            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures + messagesQuickLookSignatures + messagesMediaSignatures
         ),
     ]
 )

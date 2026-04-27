@@ -36,6 +36,8 @@ let discordPreset = AppPreset(
             allowedSignatures: [
                 sig("53Q6R32WPB", "com.hnc.Discord"),
                 sig(appleTeamID, "com.apple.ditto"),
+                sig(appleTeamID, "com.apple.xpc.proxy"),
+                sig("53Q6R32WPB", "ShipIt"),
             ]
         ),
     ]
