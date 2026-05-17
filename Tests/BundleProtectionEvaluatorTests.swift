@@ -242,6 +242,48 @@ struct BundleProtectionEvaluatorTests {
         #expect(decision?.isAllowed == false)
     }
 
+    // MARK: - system installer daemon
+
+    @Test("installd as platform binary running as root returns allowed with system installer daemon criterion")
+    func installdRootAllowed() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: appleTeamID, processSigningID: "com.apple.installd",
+            processUID: 0, accessKind: .write,
+            ancestors: []
+        )
+        if case .allowed(_, _, _, let criterion) = decision {
+            #expect(criterion == "system installer daemon")
+        } else {
+            Issue.record("Expected .allowed, got \(String(describing: decision))")
+        }
+    }
+
+    @Test("installd as platform binary running as non-root is denied")
+    func installdNonRootDenied() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: appleTeamID, processSigningID: "com.apple.installd",
+            processUID: 501, accessKind: .write,
+            ancestors: []
+        )
+        #expect(decision?.isAllowed == false)
+    }
+
+    @Test("installd with non-platform teamID is denied even as root")
+    func installdSpoofedTeamIDDenied() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"))
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: "FAKETEAM", processSigningID: "com.apple.installd",
+            processUID: 0, accessKind: .write,
+            ancestors: []
+        )
+        #expect(decision?.isAllowed == false)
+    }
+
     // MARK: - wildcard direct match
 
     @Test("wildcard updater matches any signing ID from that team as direct process")

@@ -62,21 +62,14 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
             )
         }
 
-        if processTeamID == appleTeamID && processSigningID == "com.apple.DesktopServicesHelper" && processUID == 0 {
+        if let allow = builtInBundleAllows.first(where: {
+            $0.matches(processTeamID: processTeamID, processSigningID: processSigningID, processUID: processUID)
+        }) {
             return .allowed(
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: "system file helper"
-            )
-        }
-
-        if processTeamID == appleTeamID && processSigningID == "com.apple.MobileInstallationHelperService" {
-            return .allowed(
-                ruleID: BundleProtectionEvaluator.sentinelRuleID,
-                ruleName: bundlePath,
-                ruleSource: .builtin,
-                matchedCriterion: "app store installer"
+                matchedCriterion: allow.criterion
             )
         }
 
