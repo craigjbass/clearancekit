@@ -625,8 +625,36 @@
     return m ? parseVersion(m[1]) : null;
   }
 
+  // Strip a leading "v" so tag names like "v5.0.10-beta-abc" align with the
+  // advisory's version strings ("5.0.10-beta-abc").
+  function normalizeTag(tag) {
+    return (tag || '').replace(/^v/, '').trim();
+  }
+
+  // Returns true if `tag` is listed as an explicit `= X.Y.Z-beta-sha` clause in
+  // `rangeStr`. Beta builds share the same numeric major.minor.patch as the
+  // upcoming stable, so they cannot be distinguished by the semver-compare
+  // path; the advisory ships them as exact-version entries.
+  function rangeContainsExactTag(rangeStr, tag) {
+    if (!rangeStr) return false;
+    const cleanTag = normalizeTag(tag);
+    if (!cleanTag) return false;
+    return rangeStr.split(',').some(clause => {
+      const eq = clause.trim().match(/^=\s*(.+)$/);
+      return eq != null && eq[1].trim() === cleanTag;
+    });
+  }
+
   // 'affected' | 'patched' | 'unknown'
   function advisoryStatus(advisory, currentTag) {
+    // Exact beta listings take precedence — the numeric compare below cannot
+    // tell `5.0.10-beta-eab3c5d` apart from `5.0.10-beta-481a53f`.
+    for (const vuln of (advisory.vulnerabilities || [])) {
+      if (rangeContainsExactTag(vuln.vulnerable_version_range, currentTag)) {
+        return 'affected';
+      }
+    }
+
     const current = parseVersion(currentTag);
     if (!current) return 'unknown';
     for (const vuln of (advisory.vulnerabilities || [])) {
