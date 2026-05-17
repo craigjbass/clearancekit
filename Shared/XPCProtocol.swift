@@ -373,6 +373,12 @@ public protocol ServiceProtocol {
     // all user rules and allowlist entries.
     func resolveSignatureIssue(approved: Bool, withReply reply: @escaping () -> Void)
 
+    // Returns the current pending signature-issue notification, or nil if no
+    // suspect data is waiting for user resolution. The GUI calls this on every
+    // successful connect so the suspect dialog reliably surfaces after opfilter
+    // restarts, regardless of broadcast-timing races with the connection setup.
+    func fetchPendingSignatureIssue(withReply reply: @escaping (SignatureIssueNotification?) -> Void)
+
     // Jail feature toggle. When enabled, opfilter creates the jail ES client;
     // when disabled, it tears it down. Default is disabled.
     func setJailEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)

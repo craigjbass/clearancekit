@@ -117,6 +117,12 @@ final class XPCClient: NSObject, ObservableObject {
             argumentIndex: 0,
             ofReply: true
         )
+        remoteInterface.setClasses(
+            NSSet(array: [SignatureIssueNotification.self, NSData.self]) as! Set<AnyHashable>,
+            for: #selector(ServiceProtocol.fetchPendingSignatureIssue(withReply:)),
+            argumentIndex: 0,
+            ofReply: true
+        )
         conn.remoteObjectInterface = remoteInterface
 
         conn.exportedInterface = NSXPCInterface(with: ClientProtocol.self)
@@ -189,6 +195,7 @@ final class XPCClient: NSObject, ObservableObject {
                     self?.stopReconnectTimer()
                     self?.fetchVersionInfo()
                     self?.requestResync()
+                    self?.fetchPendingSignatureIssueAfterConnect()
                     if self?.shouldResumeAllowEventStream() == true {
                         self?.beginAllowEventStream()
                     }
@@ -545,6 +552,20 @@ final class XPCClient: NSObject, ObservableObject {
     }
 
     // MARK: - Signature issue resolution
+
+    /// Polls opfilter for any current signature-issue notification and surfaces
+    /// it via `pendingSignatureIssue`. Called after every successful
+    /// `registerClient` so the suspect dialog appears reliably across opfilter
+    /// restarts, including while the GUI is already running and reconnects.
+    private func fetchPendingSignatureIssueAfterConnect() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: fetchPendingSignatureIssue error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.fetchPendingSignatureIssue { [weak self] notification in
+            guard let notification else { return }
+            self?.signatureIssueDetected(notification)
+        }
+    }
 
     func resolveSignatureIssue(approved: Bool) {
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in

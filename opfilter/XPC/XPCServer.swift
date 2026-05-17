@@ -42,6 +42,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
     /// without waiting for the serverQueue dispatch to complete.
     private let contextLock = OSAllocatedUnfairLock<ServerContext?>(initialState: nil)
     private var context: ServerContext? { contextLock.withLock { $0 } }
+    fileprivate var contextForProxy: ServerContext? { context }
 
     // MARK: - Init
 
@@ -201,9 +202,10 @@ final class XPCServer: NSObject, @unchecked Sendable {
             return
         }
         guard let proxy = connection.remoteObjectProxy as? ClientProtocol else { return }
-        if let notification = context.policyRepository.pendingSignatureIssueNotification() {
-            proxy.signatureIssueDetected(notification)
-        }
+        // The pending signature-issue notification is intentionally NOT pushed
+        // here. The GUI calls `fetchPendingSignatureIssue` immediately after
+        // `registerClient` succeeds; the explicit pull avoids broadcast-timing
+        // races where the push could be dropped during connection setup.
         pushPolicySnapshot(to: proxy, context: context)
     }
 
@@ -750,6 +752,14 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         server.serverQueue.async {
             server.resolveSignatureIssue(approved: approved)
             reply()
+        }
+    }
+
+    func fetchPendingSignatureIssue(withReply reply: @escaping (SignatureIssueNotification?) -> Void) {
+        guard let server else { reply(nil); return }
+        server.serverQueue.async {
+            guard let context = server.contextForProxy else { reply(nil); return }
+            reply(context.policyRepository.pendingSignatureIssueNotification())
         }
     }
 
