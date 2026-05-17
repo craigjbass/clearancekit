@@ -52,6 +52,9 @@ struct ContentView: View {
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var signatureIssue: PendingSignatureIssue? = nil
+    @AppStorage("advancedMode") private var advancedMode = false
+
+    private static let basicItems: Set<SidebarItem> = [.events, .presets, .setup]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,43 +64,57 @@ struct ContentView: View {
                 }
             }
             NavigationSplitView {
-                List(selection: $nav.selection) {
-                    Section("Monitor") {
-                        Label(SidebarItem.events.rawValue, systemImage: SidebarItem.events.icon)
-                            .tag(SidebarItem.events)
-                        Label(SidebarItem.tamperEvents.rawValue, systemImage: SidebarItem.tamperEvents.icon)
-                            .tag(SidebarItem.tamperEvents)
-                        Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
-                            .tag(SidebarItem.processes)
-                        Label(SidebarItem.processTree.rawValue, systemImage: SidebarItem.processTree.icon)
-                            .tag(SidebarItem.processTree)
-                        Label(SidebarItem.metrics.rawValue, systemImage: SidebarItem.metrics.icon)
-                            .tag(SidebarItem.metrics)
-                    }
-                    Section("Configure") {
-                        Label(SidebarItem.policy.rawValue, systemImage: SidebarItem.policy.icon)
-                            .tag(SidebarItem.policy)
-                        Label(SidebarItem.presets.rawValue, systemImage: SidebarItem.presets.icon)
-                            .tag(SidebarItem.presets)
-                        Label(SidebarItem.jail.rawValue, systemImage: SidebarItem.jail.icon)
-                            .tag(SidebarItem.jail)
-                        Label(SidebarItem.allowlist.rawValue, systemImage: SidebarItem.allowlist.icon)
-                            .tag(SidebarItem.allowlist)
-                        Label(SidebarItem.bundleUpdaters.rawValue, systemImage: SidebarItem.bundleUpdaters.icon)
-                            .tag(SidebarItem.bundleUpdaters)
-                        Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
-                            .tag(SidebarItem.setup)
-                        Label(SidebarItem.mcpAgents.rawValue, systemImage: SidebarItem.mcpAgents.icon)
-                            .tag(SidebarItem.mcpAgents)
-                    }
-                    Section("Export as\u{2026}") {
-                        Label(SidebarItem.exportSanta.rawValue, systemImage: SidebarItem.exportSanta.icon)
-                            .tag(SidebarItem.exportSanta)
-                        Label(SidebarItem.exportClearanceKit.rawValue, systemImage: SidebarItem.exportClearanceKit.icon)
-                            .tag(SidebarItem.exportClearanceKit)
+                VStack(spacing: 0) {
+                    advancedModeToggle
+                    Divider()
+                    List(selection: $nav.selection) {
+                        Section("Monitor") {
+                            Label(SidebarItem.events.rawValue, systemImage: SidebarItem.events.icon)
+                                .tag(SidebarItem.events)
+                            if advancedMode {
+                                Label(SidebarItem.tamperEvents.rawValue, systemImage: SidebarItem.tamperEvents.icon)
+                                    .tag(SidebarItem.tamperEvents)
+                                Label(SidebarItem.processes.rawValue, systemImage: SidebarItem.processes.icon)
+                                    .tag(SidebarItem.processes)
+                                Label(SidebarItem.processTree.rawValue, systemImage: SidebarItem.processTree.icon)
+                                    .tag(SidebarItem.processTree)
+                                Label(SidebarItem.metrics.rawValue, systemImage: SidebarItem.metrics.icon)
+                                    .tag(SidebarItem.metrics)
+                            }
+                        }
+                        Section("Configure") {
+                            if advancedMode {
+                                Label(SidebarItem.policy.rawValue, systemImage: SidebarItem.policy.icon)
+                                    .tag(SidebarItem.policy)
+                            }
+                            Label(SidebarItem.presets.rawValue, systemImage: SidebarItem.presets.icon)
+                                .tag(SidebarItem.presets)
+                            if advancedMode {
+                                Label(SidebarItem.jail.rawValue, systemImage: SidebarItem.jail.icon)
+                                    .tag(SidebarItem.jail)
+                                Label(SidebarItem.allowlist.rawValue, systemImage: SidebarItem.allowlist.icon)
+                                    .tag(SidebarItem.allowlist)
+                                Label(SidebarItem.bundleUpdaters.rawValue, systemImage: SidebarItem.bundleUpdaters.icon)
+                                    .tag(SidebarItem.bundleUpdaters)
+                            }
+                            Label(SidebarItem.setup.rawValue, systemImage: SidebarItem.setup.icon)
+                                .tag(SidebarItem.setup)
+                            if advancedMode {
+                                Label(SidebarItem.mcpAgents.rawValue, systemImage: SidebarItem.mcpAgents.icon)
+                                    .tag(SidebarItem.mcpAgents)
+                            }
+                        }
+                        if advancedMode {
+                            Section("Export as\u{2026}") {
+                                Label(SidebarItem.exportSanta.rawValue, systemImage: SidebarItem.exportSanta.icon)
+                                    .tag(SidebarItem.exportSanta)
+                                Label(SidebarItem.exportClearanceKit.rawValue, systemImage: SidebarItem.exportClearanceKit.icon)
+                                    .tag(SidebarItem.exportClearanceKit)
+                            }
+                        }
                     }
                 }
-                .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220)
             } detail: {
                 switch nav.selection {
                 case .events:       EventsWindowView()
@@ -120,6 +137,10 @@ struct ContentView: View {
         .frame(minWidth: 720, minHeight: 480)
         .onAppear {
             xpcClient.connect()
+            ensureSelectionVisible()
+        }
+        .onChange(of: advancedMode) { _, _ in
+            ensureSelectionVisible()
         }
         .onChange(of: xpcClient.pendingSignatureIssue) { _, issue in
             signatureIssue = issue
@@ -139,6 +160,26 @@ struct ContentView: View {
                 .frame(minWidth: 500)
                 .interactiveDismissDisabled()
         }
+    }
+
+    private var advancedModeToggle: some View {
+        HStack {
+            Toggle(isOn: $advancedMode) {
+                Text("Advanced")
+                    .font(.headline)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.large)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+    }
+
+    private func ensureSelectionVisible() {
+        guard !advancedMode, !Self.basicItems.contains(nav.selection) else { return }
+        nav.selection = .events
     }
 }
 
