@@ -12,18 +12,22 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
 
     private let cache: BundleCodesignCache
     private let updaterSignaturesProvider: @Sendable () -> [BundleUpdaterSignature]
+    private let enabledProvider: @Sendable () -> Bool
 
     init(
         cache: BundleCodesignCache,
-        updaterSignaturesProvider: @escaping @Sendable () -> [BundleUpdaterSignature]
+        updaterSignaturesProvider: @escaping @Sendable () -> [BundleUpdaterSignature],
+        enabledProvider: @escaping @Sendable () -> Bool = { true }
     ) {
         self.cache = cache
         self.updaterSignaturesProvider = updaterSignaturesProvider
+        self.enabledProvider = enabledProvider
     }
 
     /// Hot-path gate: returns true when the event should be forced to the slow path.
     func isBundleWrite(path: String, accessKind: AccessKind) -> Bool {
-        accessKind == .write && BundlePath.extract(from: path) != nil
+        guard enabledProvider() else { return false }
+        return accessKind == .write && BundlePath.extract(from: path) != nil
     }
 
     /// Slow-path evaluation. Returns nil → not a bundle write or bundle is unsigned → fall through.
@@ -35,6 +39,7 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
         accessKind: AccessKind,
         ancestors: [AncestorInfo]
     ) -> PolicyDecision? {
+        guard enabledProvider() else { return nil }
         guard let bundlePath = BundlePath.extract(from: accessPath) else { return nil }
         guard accessKind == .write else { return nil }
         guard let bundleSignatures = cache.signatures(forBundlePath: bundlePath) else { return nil }

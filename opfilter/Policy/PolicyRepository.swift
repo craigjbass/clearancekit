@@ -52,6 +52,7 @@ final class PolicyRepository: @unchecked Sendable {
         var pendingSuspectUserAllowlist: [AllowlistEntry]?
         var featureFlags: [FeatureFlag] = []
         var mcpEnabled: Bool = false
+        var bundleProtectionEnabled: Bool = true
         var bundleUpdaterSignatures: [BundleUpdaterSignature] = []
     }
 
@@ -108,11 +109,18 @@ final class PolicyRepository: @unchecked Sendable {
         case .ok(let flags):
             initialState.featureFlags = flags
             initialState.mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
+            initialState.bundleProtectionEnabled = flags.first(where: { $0.id == FeatureFlagID.bundleProtectionEnabled })?.enabled ?? true
         case .suspect:
-            // Signature failure on feature flags: disable MCP (safe default)
-            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server")
-            initialState.featureFlags = [FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false)]
+            // Signature failure on feature flags: disable MCP (safe default) and
+            // keep bundle protection ON (kill-switch should default to maximum
+            // protection if the row is missing or tampered with).
+            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled")
+            initialState.featureFlags = [
+                FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false),
+                FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: true),
+            ]
             initialState.mcpEnabled = false
+            initialState.bundleProtectionEnabled = true
         }
 
         switch database.loadBundleUpdaterSignaturesResult() {
@@ -282,6 +290,23 @@ final class PolicyRepository: @unchecked Sendable {
                 state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: enabled)
             } else {
                 state.featureFlags.append(FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: enabled))
+            }
+            return state.featureFlags
+        }
+        database.saveFeatureFlags(flags)
+    }
+
+    var bundleProtectionEnabled: Bool {
+        storage.withLock { $0.bundleProtectionEnabled }
+    }
+
+    func setBundleProtectionEnabled(_ enabled: Bool) {
+        let flags = storage.withLock { state -> [FeatureFlag] in
+            state.bundleProtectionEnabled = enabled
+            if let index = state.featureFlags.firstIndex(where: { $0.id == FeatureFlagID.bundleProtectionEnabled }) {
+                state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: enabled)
+            } else {
+                state.featureFlags.append(FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: enabled))
             }
             return state.featureFlags
         }

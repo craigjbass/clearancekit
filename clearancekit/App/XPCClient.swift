@@ -38,6 +38,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var pendingSignatureIssue: PendingSignatureIssue? = nil
     @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
     @Published private(set) var mcpEnabled = false
+    @Published private(set) var bundleProtectionEnabled = true
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
     var shouldResumeMetricsStream: @MainActor () -> Bool = { false }
@@ -402,6 +403,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setBundleProtectionEnabled(_ enabled: Bool) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setBundleProtectionEnabled error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setBundleProtectionEnabled(enabled) { success in
+            if !success { logger.error("XPCClient: setBundleProtectionEnabled rejected by service") }
+        }
+    }
+
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
         guard let data = try? JSONEncoder().encode(signatures) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
@@ -749,6 +759,12 @@ extension XPCClient: ClientProtocol {
     nonisolated func mcpEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             self.mcpEnabled = enabled
+        }
+    }
+
+    nonisolated func bundleProtectionEnabledUpdated(_ enabled: Bool) {
+        Task { @MainActor in
+            self.bundleProtectionEnabled = enabled
         }
     }
 

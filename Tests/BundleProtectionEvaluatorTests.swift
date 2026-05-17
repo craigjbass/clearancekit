@@ -19,9 +19,14 @@ struct BundleProtectionEvaluatorTests {
 
     private func makeEvaluator(
         cache: BundleCodesignCache,
-        updaters: [BundleUpdaterSignature] = []
+        updaters: [BundleUpdaterSignature] = [],
+        enabled: Bool = true
     ) -> BundleProtectionEvaluator {
-        BundleProtectionEvaluator(cache: cache, updaterSignaturesProvider: { updaters })
+        BundleProtectionEvaluator(
+            cache: cache,
+            updaterSignaturesProvider: { updaters },
+            enabledProvider: { enabled }
+        )
     }
 
     private func ancestor(teamID: String, signingID: String) -> AncestorInfo {
@@ -240,6 +245,26 @@ struct BundleProtectionEvaluatorTests {
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
+    }
+
+    // MARK: - enabled / disabled
+
+    @Test("when disabled, isBundleWrite returns false even for bundle write")
+    func disabledIsBundleWriteReturnsFalse() {
+        let evaluator = makeEvaluator(cache: makeCache(), enabled: false)
+        #expect(!evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo", accessKind: .write))
+    }
+
+    @Test("when disabled, evaluate returns nil so FAA rules still run")
+    func disabledEvaluateReturnsNil() {
+        let evaluator = makeEvaluator(cache: makeCache(teamID: "TEAM123"), enabled: false)
+        let decision = evaluator.evaluate(
+            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            processTeamID: "WRONGTEAM", processSigningID: "evil.process",
+            processUID: 501, accessKind: .write,
+            ancestors: []
+        )
+        #expect(decision == nil)
     }
 
     // MARK: - system installer daemon

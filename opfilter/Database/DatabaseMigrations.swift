@@ -26,6 +26,7 @@ let allMigrations: [Migration] = [
     Migration(version: 6, name: "Add enforce_on_write_only column to user_rules", up: migration006AddEnforceOnWriteOnlyColumn),
     Migration(version: 7, name: "Add require_valid_signing and authorization columns to user_rules", up: migration007AddAuthorizationColumns),
     Migration(version: 8, name: "Add bundle_updater_signatures table", up: migration008AddBundleUpdaterSignatures),
+    Migration(version: 9, name: "Seed bundle_protection_enabled feature flag", up: migration009SeedBundleProtectionFlag),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -306,4 +307,18 @@ private func migration008AddBundleUpdaterSignatures(_ db: Database) {
         )
     """)
     NSLog("Migration 008: Created bundle_updater_signatures table")
+}
+
+// MARK: - Migration 009: Seed bundle_protection_enabled feature flag
+
+private func migration009SeedBundleProtectionFlag(_ db: Database) {
+    db.execute(
+        "INSERT INTO feature_flags (id, name, enabled) VALUES (?, ?, ?)",
+        bindings: [
+            .text(FeatureFlagID.bundleProtectionEnabled.uuidString),
+            .text("bundle_protection_enabled"),
+            .int(1),
+        ]
+    )
+    NSLog("Migration 009: Seeded bundle_protection_enabled=true")
 }

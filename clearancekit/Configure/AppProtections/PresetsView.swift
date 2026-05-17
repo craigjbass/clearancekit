@@ -31,6 +31,10 @@ struct PresetsView: View {
 
     var body: some View {
         List {
+            Section("App Tamper Protection") {
+                BundleProtectionToggleRow()
+                    .padding(.vertical, 6)
+            }
             Section("Custom") {
                 ForEach(protectionStore.protections) { protection in
                     CustomProtectionRow(protection: protection)
@@ -141,6 +145,70 @@ struct PresetsView: View {
                 try await protectionStore.add(from: url)
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+// MARK: - BundleProtectionToggleRow
+
+private struct BundleProtectionToggleRow: View {
+    @StateObject private var xpcClient = XPCClient.shared
+    @State private var isToggling = false
+    @State private var authError: Error? = nil
+
+    private let description = "Blocks other software from modifying the apps installed on your Mac. Only each app's own signed updater, Apple's installer services, and updaters you've explicitly trusted may overwrite an app's files. Turning this off lets any process write to any application bundle."
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "shield.lefthalf.filled")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 28, height: 28)
+                .foregroundStyle(.tint)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Protect Installed Applications")
+                    .font(.headline)
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { xpcClient.bundleProtectionEnabled },
+                set: { newValue in toggle(on: newValue) }
+            ))
+            .labelsHidden()
+            .disabled(isToggling)
+        }
+        .alert("Authentication Failed", isPresented: Binding(
+            get: { authError != nil },
+            set: { if !$0 { authError = nil } }
+        )) {
+            Button("OK") { authError = nil }
+        } message: {
+            if let error = authError {
+                Text(error.localizedDescription)
+            }
+        }
+    }
+
+    private func toggle(on: Bool) {
+        isToggling = true
+        Task {
+            defer { isToggling = false }
+            do {
+                let reason = on
+                    ? "Turn on App Tamper Protection"
+                    : "Turn off App Tamper Protection"
+                try await BiometricAuth.authenticate(reason: reason)
+                XPCClient.shared.setBundleProtectionEnabled(on)
+            } catch {
+                if !BiometricAuth.isUserCancellation(error) { authError = error }
             }
         }
     }

@@ -87,7 +87,8 @@ let authorizationGate = AuthorizationGate()
 let bundleCodesignCache = BundleCodesignCache()
 let bundleProtectionEvaluator = BundleProtectionEvaluator(
     cache: bundleCodesignCache,
-    updaterSignaturesProvider: { policyRepository.bundleUpdaterSignatures() }
+    updaterSignaturesProvider: { policyRepository.bundleUpdaterSignatures() },
+    enabledProvider: { policyRepository.bundleProtectionEnabled }
 )
 
 let faaInteractorRef = WeakBox<FAAFilterInteractor>()
