@@ -28,6 +28,7 @@ let allMigrations: [Migration] = [
     Migration(version: 8, name: "Add bundle_updater_signatures table", up: migration008AddBundleUpdaterSignatures),
     Migration(version: 9, name: "Seed bundle_protection_enabled feature flag", up: migration009SeedBundleProtectionFlag),
     Migration(version: 10, name: "Seed advanced_mode_enabled feature flag", up: migration010SeedAdvancedModeFlag),
+    Migration(version: 11, name: "Add epoch column to data_signatures for replay protection", up: migration011AddEpochColumn),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -336,4 +337,16 @@ private func migration010SeedAdvancedModeFlag(_ db: Database) {
         ]
     )
     NSLog("Migration 010: Seeded advanced_mode_enabled=false")
+}
+
+// MARK: - Migration 011: Add epoch column to data_signatures
+//
+// Existing signature rows were produced over `content` only, with no epoch
+// binding. The new ALTER defaults epoch to 0 so those rows continue to load
+// via the legacy-verify fallback in Database.checkSignature; the very next
+// save bumps the epoch and re-signs over `content || epoch`.
+
+private func migration011AddEpochColumn(_ db: Database) {
+    db.execute("ALTER TABLE data_signatures ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0")
+    NSLog("Migration 011: Added epoch column to data_signatures (legacy signatures remain valid at epoch=0)")
 }

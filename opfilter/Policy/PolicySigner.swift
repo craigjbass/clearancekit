@@ -21,12 +21,28 @@
 import Foundation
 import Security
 
-private let aclMigrationMarker = URL(fileURLWithPath: "/Library/Application Support/clearancekit/.key-acl-v2")
+/// Legacy marker files used by earlier opfilter builds to track ACL-migration
+/// state on disk. They are now ignored — the keychain version counter is the
+/// sole trust anchor — but we still clean them up on first v3 boot to avoid
+/// leaving stale state in /Library/Application Support/clearancekit.
+private let legacyAclMarkers: [URL] = [
+    URL(fileURLWithPath: "/Library/Application Support/clearancekit/.key-acl-v2"),
+    URL(fileURLWithPath: "/Library/Application Support/clearancekit/.key-acl-v3"),
+]
 
 enum PolicySigner {
     private static let keyTag    = Data("uk.craigbass.clearancekit.policy-signing-key".utf8)
     private static let keyLabel  = "clearancekit policy signing key"
     private static let algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA256
+
+    /// Generic-password keychain item that records which ACL-migration version
+    /// has run. Trust anchor for skipping the marker-file path on subsequent
+    /// boots: once written with a proper ACL it can only be modified by
+    /// opfilter, so an attacker cannot force re-migration by deleting the
+    /// marker file alone.
+    private static let aclVersionService = "uk.craigbass.clearancekit.acl-version"
+    private static let aclVersionAccount = "policy-signing-key"
+    private static let currentAclMigrationVersion = 3
 
     /// Reference to the System Keychain, used for software-backed keys only.
     ///
@@ -74,7 +90,7 @@ enum PolicySigner {
     // MARK: - Key lifecycle
 
     static func loadOrCreateKey() throws -> SecKey {
-        migratePermissiveKeyOnce()
+        rekeyForExplicitPathAclOnce()
         if let key = try? loadKey() { return key }
         return try createSoftwareKey()
     }
@@ -130,14 +146,17 @@ enum PolicySigner {
         return key
     }
 
-    /// Builds a SecAccess that lists only opfilter as a trusted application.
-    /// In Keychain Access this shows as "Confirm before allowing access" with
-    /// opfilter under "Always allow access by these applications".
+    /// Builds a SecAccess that lists only opfilter as a trusted application,
+    /// resolved via the running executable's absolute path. Passing `nil` to
+    /// `SecTrustedApplicationCreateFromPath` was observed to produce an
+    /// empty trusted-apps list when called from a system extension; the
+    /// explicit path forces the API to bind to the running binary's CDHash.
     private static func makeDaemonOnlyAccess() throws -> SecAccess {
+        let executablePath = currentExecutablePath()
         var trustedApp: SecTrustedApplication?
-        let appStatus = SecTrustedApplicationCreateFromPath(nil, &trustedApp)
+        let appStatus = SecTrustedApplicationCreateFromPath(executablePath, &trustedApp)
         guard appStatus == errSecSuccess, let app = trustedApp else {
-            NSLog("PolicySigner: SecTrustedApplicationCreateFromPath failed (%d)", appStatus)
+            NSLog("PolicySigner: SecTrustedApplicationCreateFromPath failed for %@ (%d)", executablePath, appStatus)
             throw PolicySignerError.aclCreationFailed
         }
 
@@ -150,17 +169,40 @@ enum PolicySigner {
         return result
     }
 
+    private static func currentExecutablePath() -> String {
+        var size: UInt32 = 0
+        _ = _NSGetExecutablePath(nil, &size)
+        var buffer = [CChar](repeating: 0, count: Int(size))
+        let status = _NSGetExecutablePath(&buffer, &size)
+        guard status == 0 else {
+            fatalError("PolicySigner: _NSGetExecutablePath failed (\(status)) — cannot bind keychain ACL to opfilter")
+        }
+        return String(cString: buffer)
+    }
+
     // MARK: - One-time migration
 
-    /// Deletes any existing System Keychain key that was created with a
-    /// permissive (allow-all) ACL. Runs once, gated by a marker file.
-    /// The next call to loadOrCreateKey() will create a fresh key with a
-    /// opfilter-only ACL.
-    private static func migratePermissiveKeyOnce() {
-        guard !FileManager.default.fileExists(atPath: aclMigrationMarker.path) else { return }
-        defer {
-            FileManager.default.createFile(atPath: aclMigrationMarker.path, contents: nil)
-        }
+    /// Deletes any existing System Keychain key so that the next call to
+    /// `loadOrCreateKey` rebuilds it with an explicit-executable-path ACL.
+    /// Previous migration (v2) used `SecTrustedApplicationCreateFromPath(nil, …)`
+    /// which observably produced an empty trusted-apps list when called from a
+    /// system extension. v3 forces resolution against `_NSGetExecutablePath`.
+    ///
+    /// The keychain version counter (`aclVersionService`) is the sole trust
+    /// anchor — any state where the counter is below the current version is
+    /// treated as needing migration. Because the counter is written with an
+    /// opfilter-only ACL once v3 is active, an attacker cannot force a
+    /// re-migration by tampering with on-disk markers; the legacy marker
+    /// files written by earlier builds are ignored and cleaned up.
+    ///
+    /// Existing signed tables become unverifiable because the signing key is
+    /// fresh; PolicyRepository's load path quarantines or resets each table:
+    ///   - user_rules / user_allowlist → suspect dialog (Touch ID re-approve)
+    ///   - user_ancestor_allowlist / user_jail_rules / bundle_updater_signatures
+    ///     → silently discarded (existing behavior)
+    ///   - feature_flags → safe defaults (bundle protection ON)
+    private static func rekeyForExplicitPathAclOnce() {
+        if readAclMigrationVersion() >= currentAclMigrationVersion { return }
 
         var query: [CFString: Any] = [
             kSecClass:              kSecClassKey,
@@ -173,11 +215,77 @@ enum PolicySigner {
         let status = SecItemDelete(query as CFDictionary)
         switch status {
         case errSecSuccess:
-            NSLog("PolicySigner: Deleted old System Keychain key with permissive ACL")
+            NSLog("PolicySigner: Deleted prior System Keychain key — re-keying with explicit-path ACL. User rules and allowlist will require Touch ID re-approval via the suspect-signature dialog; jail rules, ancestor allowlist, and bundle updater entries will be reset.")
         case errSecItemNotFound:
-            NSLog("PolicySigner: No old System Keychain key to migrate")
+            NSLog("PolicySigner: No prior System Keychain key — fresh install, new key will be created with explicit-path ACL")
         default:
             NSLog("PolicySigner: Could not delete old key (%d) — it may need manual removal from Keychain Access", status)
+        }
+
+        for marker in legacyAclMarkers {
+            try? FileManager.default.removeItem(at: marker)
+        }
+
+        writeAclMigrationVersion(currentAclMigrationVersion)
+    }
+
+    // MARK: - ACL migration version counter
+
+    private static func readAclMigrationVersion() -> Int {
+        var query: [CFString: Any] = [
+            kSecClass:          kSecClassGenericPassword,
+            kSecAttrService:    aclVersionService,
+            kSecAttrAccount:    aclVersionAccount,
+            kSecReturnData:     true,
+        ]
+        if let kc = systemKeychain { query[kSecMatchSearchList] = [kc] as CFArray }
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return 0 }
+        return Int(String(data: data, encoding: .utf8) ?? "0") ?? 0
+    }
+
+    private static func writeAclMigrationVersion(_ version: Int) {
+        let data = Data(String(version).utf8)
+
+        var matchQuery: [CFString: Any] = [
+            kSecClass:          kSecClassGenericPassword,
+            kSecAttrService:    aclVersionService,
+            kSecAttrAccount:    aclVersionAccount,
+        ]
+        if let kc = systemKeychain { matchQuery[kSecMatchSearchList] = [kc] as CFArray }
+
+        let update: [CFString: Any] = [kSecValueData: data]
+        let updateStatus = SecItemUpdate(matchQuery as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess {
+            NSLog("PolicySigner: Updated ACL migration version to %d in System Keychain", version)
+            return
+        }
+        guard updateStatus == errSecItemNotFound else {
+            NSLog("PolicySigner: SecItemUpdate failed for ACL version counter (%d)", updateStatus)
+            return
+        }
+
+        guard let access = try? makeDaemonOnlyAccess() else {
+            NSLog("PolicySigner: Could not build ACL for migration version counter")
+            return
+        }
+
+        var addQuery: [CFString: Any] = [
+            kSecClass:          kSecClassGenericPassword,
+            kSecAttrService:    aclVersionService,
+            kSecAttrAccount:    aclVersionAccount,
+            kSecValueData:      data,
+            kSecAttrAccess:     access,
+        ]
+        if let kc = systemKeychain { addQuery[kSecUseKeychain] = kc }
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus == errSecSuccess {
+            NSLog("PolicySigner: Wrote ACL migration version=%d to System Keychain with opfilter-only ACL", version)
+        } else {
+            NSLog("PolicySigner: SecItemAdd failed for ACL version counter (%d)", addStatus)
         }
     }
 }

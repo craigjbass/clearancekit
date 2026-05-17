@@ -566,14 +566,35 @@ final class Database {
     }
 
     private func updateSignature(table: String, content: Data) {
-        guard let signature = try? PolicySigner.sign(content) else {
+        let diskEpoch = readDiskEpoch(table: table) ?? 0
+        let keychainEpoch = EpochRatchet.epoch(forTable: table) ?? 0
+        let newEpoch = max(diskEpoch, keychainEpoch) &+ 1
+        guard let signature = try? PolicySigner.sign(signedPayload(content: content, epoch: newEpoch)) else {
             NSLog("Database: Failed to sign %@ content", table)
             return
         }
         execute(
-            "INSERT OR REPLACE INTO data_signatures (table_name, signature) VALUES (?, ?)",
-            bindings: [.text(table), .blob(signature)]
+            "INSERT OR REPLACE INTO data_signatures (table_name, signature, epoch) VALUES (?, ?, ?)",
+            bindings: [.text(table), .blob(signature), .int(Int(bitPattern: UInt(newEpoch)))]
         )
+        EpochRatchet.setEpoch(newEpoch, forTable: table)
+    }
+
+    private func readDiskEpoch(table: String) -> UInt64? {
+        var epoch: UInt64?
+        query("SELECT epoch FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
+            epoch = UInt64(bitPattern: Int64(sqlite3_column_int64(stmt, 0)))
+        }
+        return epoch
+    }
+
+    private func signedPayload(content: Data, epoch: UInt64) -> Data {
+        var payload = content
+        var bigEndian = epoch.bigEndian
+        withUnsafeBytes(of: &bigEndian) { raw in
+            payload.append(contentsOf: raw)
+        }
+        return payload
     }
 
     private func tableHasRows(_ table: String) -> Bool {
@@ -593,10 +614,12 @@ final class Database {
 
     private func checkSignature(table: String, content: Data) -> SignatureCheckResult {
         var signature: Data?
-        query("SELECT signature FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
+        var diskEpoch: UInt64 = 0
+        query("SELECT signature, epoch FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
             guard let blobPtr = sqlite3_column_blob(stmt, 0) else { return }
             let blobLen = sqlite3_column_bytes(stmt, 0)
             signature = Data(bytes: blobPtr, count: Int(blobLen))
+            diskEpoch = UInt64(bitPattern: Int64(sqlite3_column_int64(stmt, 1)))
         }
         guard let sig = signature else {
             guard !tableHasRows(table) else {
@@ -607,11 +630,35 @@ final class Database {
             updateSignature(table: table, content: content)
             return .uninitialized
         }
+
+        var verified = false
         do {
-            try PolicySigner.verify(content, signature: sig)
-            return .verified
+            try PolicySigner.verify(signedPayload(content: content, epoch: diskEpoch), signature: sig)
+            verified = true
         } catch {
-            NSLog("Database: Signature verification FAILED for %@ (%@)", table, "\(error)")
+            // Backward-compat: pre-migration-011 signatures were produced over
+            // `content` alone. Migration 011 defaults their epoch to 0; accept
+            // such legacy signatures so a freshly-upgraded install still loads.
+            // The next save upgrades the format to the epoch-bound signature.
+            if diskEpoch == 0, (try? PolicySigner.verify(content, signature: sig)) != nil {
+                NSLog("Database: Accepted legacy signature for %@ (will upgrade on next save)", table)
+                verified = true
+            }
+        }
+        guard verified else {
+            NSLog("Database: Signature verification FAILED for %@", table)
+            return .suspect
+        }
+
+        let keychainEpoch = EpochRatchet.epoch(forTable: table)
+        switch EpochRatchet.verdict(diskEpoch: diskEpoch, keychainEpoch: keychainEpoch) {
+        case .verified:
+            return .verified
+        case .replay:
+            NSLog(
+                "Database: Epoch ratchet mismatch for %@ — disk=%llu keychain=%llu, treating as suspect (replay)",
+                table, diskEpoch, keychainEpoch ?? 0
+            )
             return .suspect
         }
     }
