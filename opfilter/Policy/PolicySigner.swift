@@ -42,7 +42,14 @@ enum PolicySigner {
     /// marker file alone.
     private static let aclVersionService = "uk.craigbass.clearancekit.acl-version"
     private static let aclVersionAccount = "policy-signing-key"
-    private static let currentAclMigrationVersion = 3
+    /// Bumped to 4 because the v3 migration used a two-step
+    /// `SecKeyCreateRandomKey` + `SecItemAdd(kSecAttrAccess:)` flow, and
+    /// `kSecAttrAccess` is silently ignored for `kSecClassKey` items added
+    /// that way — the persisted key ended up with an unrestricted ACL.
+    /// v4 creates and persists the key in a single `SecKeyCreateRandomKey`
+    /// call with `kSecAttrIsPermanent:true` and `kSecAttrAccess` in the
+    /// same attrs dict, which does correctly bind the ACL.
+    private static let currentAclMigrationVersion = 4
 
     /// Reference to the System Keychain, used for software-backed keys only.
     ///
@@ -151,36 +158,32 @@ enum PolicySigner {
         return (key as! SecKey)
     }
 
-    /// Software-backed key stored in the System Keychain with a opfilter-only ACL.
-    /// The key is created in memory first, then stored via SecItemAdd with an
-    /// explicit System Keychain reference and a SecAccess restricting usage to
-    /// the current process (opfilter).
+    /// Software-backed key stored in the System Keychain with an opfilter-only
+    /// ACL. The key is created and persisted in a single `SecKeyCreateRandomKey`
+    /// call: passing `kSecAttrIsPermanent: true` plus `kSecAttrAccess` and
+    /// `kSecUseKeychain` together binds the access at storage time. The
+    /// previously-used two-step `SecKeyCreateRandomKey` + `SecItemAdd` flow
+    /// silently produced an unrestricted ACL because `kSecAttrAccess` on
+    /// `SecItemAdd(kSecValueRef:)` is observed to be ignored for
+    /// `kSecClassKey` items in the legacy System.keychain.
     private static func createSoftwareKey() throws -> SecKey {
-        let keyAttrs: [CFString: Any] = [
-            kSecAttrKeyType:       kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeySizeInBits: 256,
-        ]
-        var cfError: Unmanaged<CFError>?
-        guard let key = SecKeyCreateRandomKey(keyAttrs as CFDictionary, &cfError) else {
-            throw cfError!.takeRetainedValue()
-        }
-
         let access = try makeDaemonOnlyAccess()
 
-        var addQuery: [CFString: Any] = [
-            kSecClass:              kSecClassKey,
-            kSecValueRef:           key,
+        var attrs: [CFString: Any] = [
+            kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeySizeInBits:  256,
+            kSecAttrIsPermanent:    true,
             kSecAttrApplicationTag: keyTag,
             kSecAttrLabel:          keyLabel,
             kSecAttrAccess:         access,
         ]
-        if let kc = systemKeychain { addQuery[kSecUseKeychain] = kc }
+        if let kc = systemKeychain { attrs[kSecUseKeychain] = kc }
 
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw PolicySignerError.keyStoreFailed(status)
+        var cfError: Unmanaged<CFError>?
+        guard let key = SecKeyCreateRandomKey(attrs as CFDictionary, &cfError) else {
+            throw cfError!.takeRetainedValue()
         }
-        NSLog("PolicySigner: Stored software key in System Keychain with opfilter-only ACL")
+        NSLog("PolicySigner: Created and stored software key in System Keychain with opfilter-only ACL")
         return key
     }
 
