@@ -90,9 +90,47 @@ enum PolicySigner {
     // MARK: - Key lifecycle
 
     static func loadOrCreateKey() throws -> SecKey {
-        rekeyForExplicitPathAclOnce()
         if let key = try? loadKey() { return key }
         return try createSoftwareKey()
+    }
+
+    /// Verifies `signature` against `data` using the currently-loaded signing
+    /// key and reports the result as a Bool, without throwing. Used by
+    /// `migrateAclIfNeeded` to capture tables whose existing signature is
+    /// valid under the old (about-to-be-rotated) key.
+    static func canVerify(_ data: Data, signature: Data) -> Bool {
+        (try? verify(data, signature: signature)) != nil
+    }
+
+    /// Forces the next call to `loadOrCreateKey` to mint a fresh key by
+    /// deleting any existing one. Used only by `migrateAclIfNeeded` after the
+    /// caller has already captured everything they want to re-sign under the
+    /// new key.
+    static func rotateKey() {
+        var query: [CFString: Any] = [
+            kSecClass:              kSecClassKey,
+            kSecAttrApplicationTag: keyTag,
+            kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass:       kSecAttrKeyClassPrivate,
+        ]
+        if let kc = systemKeychain { query[kSecUseKeychain] = kc }
+
+        let status = SecItemDelete(query as CFDictionary)
+        switch status {
+        case errSecSuccess:
+            NSLog("PolicySigner: Rotated System Keychain key")
+        case errSecItemNotFound:
+            NSLog("PolicySigner: rotateKey — no existing key")
+        default:
+            NSLog("PolicySigner: SecItemDelete during rotateKey failed (%d)", status)
+        }
+    }
+
+    static func aclMigrationVersion() -> Int { readAclMigrationVersion() }
+    static func currentAclVersion() -> Int { currentAclMigrationVersion }
+    static func recordAclMigrationVersion() {
+        for marker in legacyAclMarkers { try? FileManager.default.removeItem(at: marker) }
+        writeAclMigrationVersion(currentAclMigrationVersion)
     }
 
     private static func loadKey() throws -> SecKey {
@@ -178,55 +216,6 @@ enum PolicySigner {
             fatalError("PolicySigner: _NSGetExecutablePath failed (\(status)) — cannot bind keychain ACL to opfilter")
         }
         return String(cString: buffer)
-    }
-
-    // MARK: - One-time migration
-
-    /// Deletes any existing System Keychain key so that the next call to
-    /// `loadOrCreateKey` rebuilds it with an explicit-executable-path ACL.
-    /// Previous migration (v2) used `SecTrustedApplicationCreateFromPath(nil, …)`
-    /// which observably produced an empty trusted-apps list when called from a
-    /// system extension. v3 forces resolution against `_NSGetExecutablePath`.
-    ///
-    /// The keychain version counter (`aclVersionService`) is the sole trust
-    /// anchor — any state where the counter is below the current version is
-    /// treated as needing migration. Because the counter is written with an
-    /// opfilter-only ACL once v3 is active, an attacker cannot force a
-    /// re-migration by tampering with on-disk markers; the legacy marker
-    /// files written by earlier builds are ignored and cleaned up.
-    ///
-    /// Existing signed tables become unverifiable because the signing key is
-    /// fresh; PolicyRepository's load path quarantines or resets each table:
-    ///   - user_rules / user_allowlist → suspect dialog (Touch ID re-approve)
-    ///   - user_ancestor_allowlist / user_jail_rules / bundle_updater_signatures
-    ///     → silently discarded (existing behavior)
-    ///   - feature_flags → safe defaults (bundle protection ON)
-    private static func rekeyForExplicitPathAclOnce() {
-        if readAclMigrationVersion() >= currentAclMigrationVersion { return }
-
-        var query: [CFString: Any] = [
-            kSecClass:              kSecClassKey,
-            kSecAttrApplicationTag: keyTag,
-            kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeyClass:       kSecAttrKeyClassPrivate,
-        ]
-        if let kc = systemKeychain { query[kSecUseKeychain] = kc }
-
-        let status = SecItemDelete(query as CFDictionary)
-        switch status {
-        case errSecSuccess:
-            NSLog("PolicySigner: Deleted prior System Keychain key — re-keying with explicit-path ACL. User rules and allowlist will require Touch ID re-approval via the suspect-signature dialog; jail rules, ancestor allowlist, and bundle updater entries will be reset.")
-        case errSecItemNotFound:
-            NSLog("PolicySigner: No prior System Keychain key — fresh install, new key will be created with explicit-path ACL")
-        default:
-            NSLog("PolicySigner: Could not delete old key (%d) — it may need manual removal from Keychain Access", status)
-        }
-
-        for marker in legacyAclMarkers {
-            try? FileManager.default.removeItem(at: marker)
-        }
-
-        writeAclMigrationVersion(currentAclMigrationVersion)
     }
 
     // MARK: - ACL migration version counter

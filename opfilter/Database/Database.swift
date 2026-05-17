@@ -55,6 +55,7 @@ final class Database {
         execute("PRAGMA foreign_keys=ON")
 
         runMigrations()
+        migrateAclIfNeeded()
     }
 
     deinit {
@@ -563,6 +564,125 @@ final class Database {
         case verified
         case uninitialized
         case suspect
+    }
+
+    // MARK: - ACL migration
+
+    /// Captures every signed table whose existing signature verifies under the
+    /// current (about-to-be-rotated) key, rotates the signing key so the next
+    /// load creates a fresh one bound to opfilter's explicit executable path,
+    /// then re-signs every captured table with the new key. Tables whose
+    /// signatures don't verify under the old key are left alone — they'll
+    /// enter the existing `.suspect` flow on next load.
+    private func migrateAclIfNeeded() {
+        guard PolicySigner.aclMigrationVersion() < PolicySigner.currentAclVersion() else { return }
+
+        let captured = captureAllVerifiableTableContent()
+
+        PolicySigner.rotateKey()
+
+        // Force creation of the new key now so re-sign uses it.
+        _ = try? PolicySigner.loadOrCreateKey()
+
+        inTransaction {
+            for (table, content) in captured {
+                updateSignature(table: table, content: content)
+            }
+        }
+
+        PolicySigner.recordAclMigrationVersion()
+        NSLog("Database: ACL migration v%d complete — re-signed %d table(s) with new key", PolicySigner.currentAclVersion(), captured.count)
+    }
+
+    private func captureAllVerifiableTableContent() -> [(String, Data)] {
+        var captured: [(String, Data)] = []
+        for (table, content) in allTablesWithCanonicalContent() {
+            let signature = readSignatureBlob(table: table)
+            guard let sig = signature else { continue }
+            // Existing signatures (pre-epoch migration) are over `content`
+            // alone; the new format is `content || epoch.bigEndian`. At v3
+            // migration time the epoch column was just added with default 0,
+            // so the legacy format applies for every row we encounter here.
+            if PolicySigner.canVerify(content, signature: sig) {
+                captured.append((table, content))
+            }
+        }
+        return captured
+    }
+
+    private func readSignatureBlob(table: String) -> Data? {
+        var signature: Data?
+        query("SELECT signature FROM data_signatures WHERE table_name = ?", bindings: [.text(table)]) { stmt in
+            guard let blobPtr = sqlite3_column_blob(stmt, 0) else { return }
+            let blobLen = sqlite3_column_bytes(stmt, 0)
+            signature = Data(bytes: blobPtr, count: Int(blobLen))
+        }
+        return signature
+    }
+
+    private func allTablesWithCanonicalContent() -> [(String, Data)] {
+        var result: [(String, Data)] = []
+
+        var rules: [FAARule] = []
+        query("""
+            SELECT id, protected_path_prefix,
+                   allowed_process_paths, allowed_signatures,
+                   allowed_ancestor_process_paths, allowed_ancestor_signatures,
+                   enforce_on_write_only, require_valid_signing,
+                   authorized_signatures, requires_authorization,
+                   authorization_session_duration
+            FROM user_rules ORDER BY rowid
+        """) { stmt in
+            if let rule = ruleFromRow(stmt) { rules.append(rule) }
+        }
+        result.append(("user_rules", canonicalRulesJSON(rules)))
+
+        var allowlist: [AllowlistEntry] = []
+        query("""
+            SELECT id, signing_id, process_path, platform_binary, team_id
+            FROM user_allowlist ORDER BY rowid
+        """) { stmt in
+            if let entry = allowlistEntryFromRow(stmt) { allowlist.append(entry) }
+        }
+        result.append(("user_allowlist", canonicalAllowlistJSON(allowlist)))
+
+        var ancestor: [AncestorAllowlistEntry] = []
+        query("""
+            SELECT id, signing_id, process_path, platform_binary, team_id
+            FROM user_ancestor_allowlist ORDER BY rowid
+        """) { stmt in
+            if let entry = ancestorAllowlistEntryFromRow(stmt) { ancestor.append(entry) }
+        }
+        result.append(("user_ancestor_allowlist", canonicalAncestorAllowlistJSON(ancestor)))
+
+        var jail: [JailRule] = []
+        query("""
+            SELECT id, name, jailed_signature, allowed_path_prefixes
+            FROM user_jail_rules ORDER BY rowid
+        """) { stmt in
+            if let rule = jailRuleFromRow(stmt) { jail.append(rule) }
+        }
+        result.append(("user_jail_rules", canonicalJailRulesJSON(jail)))
+
+        var flags: [FeatureFlag] = []
+        query("SELECT id, name, enabled FROM feature_flags ORDER BY rowid") { stmt in
+            if let flag = featureFlagFromRow(stmt) { flags.append(flag) }
+        }
+        result.append(("feature_flags", canonicalFeatureFlagsJSON(flags)))
+
+        var updaterSigs: [BundleUpdaterSignature] = []
+        query("SELECT id, team_id, signing_id FROM bundle_updater_signatures ORDER BY rowid") { stmt in
+            let uuidString = columnText(stmt, 0)
+            guard let id = UUID(uuidString: uuidString) else { return }
+            updaterSigs.append(BundleUpdaterSignature(
+                id: id,
+                teamID: columnText(stmt, 1),
+                signingID: columnText(stmt, 2)
+            ))
+        }
+        result.append(("bundle_updater_signatures", canonicalBundleUpdaterSignaturesJSON(updaterSigs)))
+
+        return result
     }
 
     private func updateSignature(table: String, content: Data) {

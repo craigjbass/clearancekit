@@ -129,7 +129,7 @@ final class XPCClient: NSObject, ObservableObject {
             ofReply: false
         )
         conn.exportedInterface?.setClasses(
-            NSSet(array: [SignatureIssueNotification.self]) as! Set<AnyHashable>,
+            NSSet(array: [SignatureIssueNotification.self, NSData.self]) as! Set<AnyHashable>,
             for: #selector(ClientProtocol.signatureIssueDetected(_:)),
             argumentIndex: 0,
             ofReply: false
