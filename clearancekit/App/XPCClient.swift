@@ -39,6 +39,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var metricsHistory: [PipelineMetricsSnapshot] = []
     @Published private(set) var mcpEnabled = false
     @Published private(set) var bundleProtectionEnabled = true
+    @Published private(set) var advancedModeEnabled = false
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
     var shouldResumeMetricsStream: @MainActor () -> Bool = { false }
@@ -412,6 +413,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setAdvancedModeEnabled(_ enabled: Bool) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setAdvancedModeEnabled error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setAdvancedModeEnabled(enabled) { success in
+            if !success { logger.error("XPCClient: setAdvancedModeEnabled rejected by service") }
+        }
+    }
+
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
         guard let data = try? JSONEncoder().encode(signatures) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
@@ -765,6 +775,12 @@ extension XPCClient: ClientProtocol {
     nonisolated func bundleProtectionEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             self.bundleProtectionEnabled = enabled
+        }
+    }
+
+    nonisolated func advancedModeEnabledUpdated(_ enabled: Bool) {
+        Task { @MainActor in
+            self.advancedModeEnabled = enabled
         }
     }
 

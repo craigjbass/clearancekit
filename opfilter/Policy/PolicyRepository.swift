@@ -53,6 +53,7 @@ final class PolicyRepository: @unchecked Sendable {
         var featureFlags: [FeatureFlag] = []
         var mcpEnabled: Bool = false
         var bundleProtectionEnabled: Bool = true
+        var advancedModeEnabled: Bool = false
         var bundleUpdaterSignatures: [BundleUpdaterSignature] = []
     }
 
@@ -110,17 +111,21 @@ final class PolicyRepository: @unchecked Sendable {
             initialState.featureFlags = flags
             initialState.mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
             initialState.bundleProtectionEnabled = flags.first(where: { $0.id == FeatureFlagID.bundleProtectionEnabled })?.enabled ?? true
+            initialState.advancedModeEnabled = flags.first(where: { $0.id == FeatureFlagID.advancedModeEnabled })?.enabled ?? false
         case .suspect:
-            // Signature failure on feature flags: disable MCP (safe default) and
+            // Signature failure on feature flags: disable MCP (safe default),
             // keep bundle protection ON (kill-switch should default to maximum
-            // protection if the row is missing or tampered with).
-            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled")
+            // protection if the row is missing or tampered with), and turn
+            // advanced mode OFF (matches first-launch default).
+            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled, disabling advanced mode")
             initialState.featureFlags = [
                 FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false),
                 FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: true),
+                FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: false),
             ]
             initialState.mcpEnabled = false
             initialState.bundleProtectionEnabled = true
+            initialState.advancedModeEnabled = false
         }
 
         switch database.loadBundleUpdaterSignaturesResult() {
@@ -307,6 +312,23 @@ final class PolicyRepository: @unchecked Sendable {
                 state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: enabled)
             } else {
                 state.featureFlags.append(FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: enabled))
+            }
+            return state.featureFlags
+        }
+        database.saveFeatureFlags(flags)
+    }
+
+    var advancedModeEnabled: Bool {
+        storage.withLock { $0.advancedModeEnabled }
+    }
+
+    func setAdvancedModeEnabled(_ enabled: Bool) {
+        let flags = storage.withLock { state -> [FeatureFlag] in
+            state.advancedModeEnabled = enabled
+            if let index = state.featureFlags.firstIndex(where: { $0.id == FeatureFlagID.advancedModeEnabled }) {
+                state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: enabled)
+            } else {
+                state.featureFlags.append(FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: enabled))
             }
             return state.featureFlags
         }

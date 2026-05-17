@@ -52,9 +52,17 @@ struct ContentView: View {
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var protectionStore = AppProtectionStore.shared
     @State private var signatureIssue: PendingSignatureIssue? = nil
-    @AppStorage("advancedMode") private var advancedMode = false
 
     private static let basicItems: Set<SidebarItem> = [.events, .presets, .setup]
+
+    private var advancedMode: Bool { xpcClient.advancedModeEnabled }
+
+    private var advancedModeBinding: Binding<Bool> {
+        Binding(
+            get: { xpcClient.advancedModeEnabled },
+            set: { xpcClient.setAdvancedModeEnabled($0) }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -164,7 +172,7 @@ struct ContentView: View {
 
     private var advancedModeToggle: some View {
         HStack {
-            Toggle(isOn: $advancedMode) {
+            Toggle(isOn: advancedModeBinding) {
                 Text("Advanced")
                     .font(.headline)
             }

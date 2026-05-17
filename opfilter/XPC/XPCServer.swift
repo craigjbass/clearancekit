@@ -165,6 +165,12 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.bundleProtectionEnabledUpdated(enabled) }
     }
 
+    fileprivate func setAdvancedModeEnabled(_ enabled: Bool) {
+        guard let context else { return }
+        context.policyRepository.setAdvancedModeEnabled(enabled)
+        broadcaster.broadcastToAllClients { $0.advancedModeEnabledUpdated(enabled) }
+    }
+
     // MARK: - Filter application
 
     func applyPolicyToFilter() {
@@ -408,6 +414,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy.jailEnabledUpdated(isJailEnabled)
         proxy.mcpEnabledUpdated(context.policyRepository.mcpEnabled)
         proxy.bundleProtectionEnabledUpdated(context.policyRepository.bundleProtectionEnabled)
+        proxy.advancedModeEnabledUpdated(context.policyRepository.advancedModeEnabled)
         proxy.bundleUpdaterSignaturesUpdated(context.policyRepository.encodedBundleUpdaterSignatures())
         proxy.serviceReady(true)
     }
@@ -766,6 +773,14 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply(false); return }
         server.serverQueue.async {
             server.setBundleProtectionEnabled(enabled)
+            reply(true)
+        }
+    }
+
+    func setAdvancedModeEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.serverQueue.async {
+            server.setAdvancedModeEnabled(enabled)
             reply(true)
         }
     }

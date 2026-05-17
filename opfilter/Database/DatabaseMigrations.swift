@@ -27,6 +27,7 @@ let allMigrations: [Migration] = [
     Migration(version: 7, name: "Add require_valid_signing and authorization columns to user_rules", up: migration007AddAuthorizationColumns),
     Migration(version: 8, name: "Add bundle_updater_signatures table", up: migration008AddBundleUpdaterSignatures),
     Migration(version: 9, name: "Seed bundle_protection_enabled feature flag", up: migration009SeedBundleProtectionFlag),
+    Migration(version: 10, name: "Seed advanced_mode_enabled feature flag", up: migration010SeedAdvancedModeFlag),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -321,4 +322,18 @@ private func migration009SeedBundleProtectionFlag(_ db: Database) {
         ]
     )
     NSLog("Migration 009: Seeded bundle_protection_enabled=true")
+}
+
+// MARK: - Migration 010: Seed advanced_mode_enabled feature flag
+
+private func migration010SeedAdvancedModeFlag(_ db: Database) {
+    db.execute(
+        "INSERT INTO feature_flags (id, name, enabled) VALUES (?, ?, ?)",
+        bindings: [
+            .text(FeatureFlagID.advancedModeEnabled.uuidString),
+            .text("advanced_mode_enabled"),
+            .int(0),
+        ]
+    )
+    NSLog("Migration 010: Seeded advanced_mode_enabled=false")
 }

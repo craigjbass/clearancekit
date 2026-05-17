@@ -386,6 +386,10 @@ public protocol ServiceProtocol {
     // enabled so the kill switch fails closed.
     func setBundleProtectionEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
 
+    // Advanced-mode UI toggle. Persisted in the feature_flags table. When off
+    // the GUI hides power-user sidebar entries. Defaults to disabled.
+    func setAdvancedModeEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
+
     // Returns a snapshot of recent tamper attempt events.
     func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void)
 
@@ -418,6 +422,9 @@ public protocol ClientProtocol {
     // Opfilter pushes the current bundle-protection feature flag on connect and
     // whenever it changes. The GUI reflects this in the App Tamper Protection toggle.
     func bundleProtectionEnabledUpdated(_ enabled: Bool)
+    // Opfilter pushes the current advanced-mode feature flag on connect and
+    // whenever it changes. The GUI uses this to show/hide power-user sidebar items.
+    func advancedModeEnabledUpdated(_ enabled: Bool)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)
