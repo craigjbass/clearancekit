@@ -176,8 +176,12 @@ struct EventRow: View {
 
     private var formattedTime: String {
         let formatter = DateFormatter()
-        formatter.dateStyle = .none
         formatter.timeStyle = .medium
+        if Calendar.current.isDateInToday(event.timestamp) {
+            formatter.dateStyle = .none
+        } else {
+            formatter.dateStyle = .short
+        }
         return formatter.string(from: event.timestamp)
     }
 
@@ -348,6 +352,9 @@ struct EventRow: View {
     private var processSection: some View {
         HStack {
             Text("PID: \(event.processID)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text("UID: \(event.uid)")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if !event.processPath.isEmpty {

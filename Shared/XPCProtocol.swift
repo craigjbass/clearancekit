@@ -71,6 +71,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let processPath: String
     @objc public let teamID: String
     @objc public let signingID: String
+    @objc public let uid: UInt32
     @objc public let accessAllowed: Bool
     @objc public let decisionReason: String
     @objc public let ancestors: [AncestorInfo]
@@ -86,6 +87,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         processPath: String,
         teamID: String = "",
         signingID: String = "",
+        uid: UInt32 = 0,
         accessAllowed: Bool = true,
         decisionReason: String = "",
         ancestors: [AncestorInfo] = [],
@@ -102,6 +104,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.processPath = processPath
         self.teamID = teamID
         self.signingID = signingID
+        self.uid = uid
         self.accessAllowed = accessAllowed
         self.decisionReason = decisionReason
         self.ancestors = ancestors
@@ -125,6 +128,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.processPath = processPath
         self.teamID = (coder.decodeObject(of: NSString.self, forKey: "teamID") as String?) ?? ""
         self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
+        self.uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
         self.accessAllowed = coder.decodeBool(forKey: "accessAllowed")
         self.decisionReason = (coder.decodeObject(of: NSString.self, forKey: "decisionReason") as String?) ?? ""
         let decoded = coder.decodeObject(of: [NSArray.self, AncestorInfo.self], forKey: "ancestors") as? NSArray
@@ -144,6 +148,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(processPath as NSString, forKey: "processPath")
         coder.encode(teamID as NSString, forKey: "teamID")
         coder.encode(signingID as NSString, forKey: "signingID")
+        coder.encode(Int32(bitPattern: uid), forKey: "uid")
         coder.encode(accessAllowed, forKey: "accessAllowed")
         coder.encode(decisionReason as NSString, forKey: "decisionReason")
         coder.encode(ancestors as NSArray, forKey: "ancestors")

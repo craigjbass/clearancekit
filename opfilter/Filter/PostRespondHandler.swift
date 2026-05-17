@@ -35,6 +35,7 @@ final class PostRespondHandler: @unchecked Sendable {
                 processPath: fileEvent.processPath,
                 teamID: fileEvent.teamID,
                 signingID: fileEvent.signingID,
+                uid: UInt32(fileEvent.uid),
                 accessAllowed: allowed,
                 decisionReason: decision.reason,
                 ancestors: ancestors,
