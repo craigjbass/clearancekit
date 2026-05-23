@@ -11,7 +11,7 @@
   </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ClearanceKit — macOS kernel-level file access control bound to code-signing identity. Protects SSH keys, credentials, and sensitive data from supply chain attacks." />
+  <meta name="description" content="ClearanceKit — macOS kernel-level file access control bound to code-signing identity. Limits each process's file access to paths covered by its code-signing identity. No auto-update. No third-party dependencies." />
   <meta name="google-site-verification" content="S7pD4dvsyath-wtJ7xBcdCfvUPg-L6mMvQWiziWC05w" />
   <title>ClearanceKit — kernel-level file access control for macOS</title>
   <style>
@@ -298,7 +298,7 @@
 <pre class="stats"><span class="k">clients=</span>3<span class="k">  events=</span>10<span class="k">  deps=</span>0<span class="k">  net=</span>0<span class="k">  mdm=</span>yes</pre>
 
     <!-- HOW IT WORKS -->
-    <div class="sh">// how it works</div>
+    <div class="sh" id="how-it-works">// how it works</div>
 <pre class="ascii">┌──────────┐    AUTH_OPEN     ┌─────────┐
 │  process │ ───────────────▶ │ opfilter│
 └──────────┘                  └────┬────┘
@@ -315,7 +315,7 @@
     </ol>
 
     <!-- FEATURES -->
-    <div class="sh">// features</div>
+    <div class="sh" id="features">// features</div>
     <ul class="bullets">
       <li>code-signature policies
         <span class="desc">Rules match the Team ID and Signing ID embedded in the calling binary, not its path or hash. Survive software updates without maintenance.</span>
@@ -338,7 +338,7 @@
     </ul>
 
     <!-- WHAT IS AT RISK -->
-    <div class="sh">// what an unconstrained process can reach</div>
+    <div class="sh" id="threats">// what an unconstrained process can reach</div>
     <p class="dim">A single <code>postinstall</code> script in a compromised package runs with full user-level access. Without per-process policy, it can read:</p>
     <dl class="paths">
       <dt>~/.ssh/id_*</dt>
@@ -385,7 +385,7 @@
     </div>
 
     <!-- INSTALL -->
-    <div class="sh">// install</div>
+    <div class="sh" id="install">// install</div>
 <pre class="shell"><span class="c"># download the latest dmg from the releases page, then:</span>
 <span class="p">$</span> open ~/Downloads/ClearanceKit.dmg
 <span class="p">$</span> cp -R /Volumes/ClearanceKit/ClearanceKit.app /Applications
