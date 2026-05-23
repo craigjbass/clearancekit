@@ -1,6 +1,6 @@
 # Architecture Overview
 
-ClearanceKit is a macOS file-access authorisation tool that places Apple's Endpoint Security framework between every file-system access attempt and the process that triggered it, enforcing policy bound to code-signing identity.
+ClearanceKit is a macOS file-access authorisation tool that places Apple's Endpoint Security API between every file-system access attempt and the process that triggered it, enforcing policy bound to code-signing identity.
 
 ## Process topology
 

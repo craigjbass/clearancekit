@@ -659,7 +659,7 @@ Use `mcp__obsidian-mcp-tools__create_vault_file` with path `ClearanceKit/Archite
 ```markdown
 # ClearanceKit Architecture Overview
 
-ClearanceKit is a macOS File Access Authorization (FAA) tool that intercepts file system events via the Endpoint Security framework and enforces policy rules based on process code signing identity.
+ClearanceKit is a macOS File Access Authorization (FAA) tool that intercepts file system events via the Endpoint Security API and enforces policy rules based on process code signing identity.
 
 ## Process Topology
 
