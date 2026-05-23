@@ -288,14 +288,21 @@
 └───────────────────────────────────────┘</pre>
     <p class="lead">Kernel-level file access control for macOS, bound to code-signing identity.</p>
     <p>
-      <a class="blink" href="#download">download</a>
       <a class="blink" href="documentation.html">docs</a>
       <a class="blink" href="https://github.com/craigjbass/clearancekit">source</a>
     </p>
 
-    <!-- STATS -->
-    <div class="sh">// stats</div>
-<pre class="stats"><span class="k">clients=</span>3<span class="k">  events=</span>10<span class="k">  deps=</span>0<span class="k">  net=</span>0<span class="k">  mdm=</span>yes</pre>
+    <!-- DOWNLOAD -->
+    <div class="sh" id="download">// download</div>
+    <p>
+      <span class="k">version:</span> <a id="version-link" href="https://github.com/craigjbass/clearancekit/releases/latest">latest</a>
+      <span class="sep">·</span>
+      <span class="k">download:</span> <a id="dmg-link" href="https://github.com/craigjbass/clearancekit/releases/latest">latest.dmg</a>
+      <span class="sep">·</span>
+      <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
+      <span class="sep">·</span>
+      <span class="k">license:</span> MIT
+    </p>
 
     <!-- HOW IT WORKS -->
     <div class="sh" id="how-it-works">// how it works</div>
@@ -310,8 +317,8 @@
     <ol class="steps">
       <li>A process attempts <code>open()</code>, <code>rename()</code>, <code>unlink()</code>, or another file-system syscall.</li>
       <li>The kernel forwards the request to opfilter as an Endpoint Security <code>AUTH</code> event.</li>
-      <li>opfilter looks up the calling process's signing identity and matches it against the policy.</li>
-      <li>opfilter responds <code>ALLOW</code> or <code>DENY</code> before the syscall returns.</li>
+      <li>opfilter looks up the calling process's signing identity and matches it against policies.</li>
+      <li>opfilter responds <code>ALLOW</code> or <code>DENY</code>.</li>
     </ol>
 
     <!-- FEATURES -->
@@ -386,30 +393,38 @@
 
     <!-- INSTALL -->
     <div class="sh" id="install">// install</div>
-<pre class="shell"><span class="c"># download the latest dmg from the releases page, then:</span>
-<span class="p">$</span> open ~/Downloads/ClearanceKit.dmg
-<span class="p">$</span> cp -R /Volumes/ClearanceKit/ClearanceKit.app /Applications
-<span class="p">$</span> open /Applications/ClearanceKit.app
-<span class="c"># grant Full Disk Access when prompted, then activate the system extension</span></pre>
+    <p>Open the .dmg, drag clearancekit to Applications, launch it. Grant Full Disk Access when prompted, then activate the system extension.</p>
     <p class="dim">No auto-update. Check the releases page for new versions.</p>
-
-    <!-- DOWNLOAD -->
-    <div class="sh" id="download">// download</div>
-    <p>
-      <span class="k">download:</span> <a href="https://github.com/craigjbass/clearancekit/releases/latest">latest.dmg</a>
-      <span class="sep">·</span>
-      <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
-      <span class="sep">·</span>
-      <span class="k">license:</span> MIT
-    </p>
-    <p class="dim">[ <a href="https://www.youtube.com/watch?v=AgYGwZjcsLo">DEFCON talk on macOS Endpoint Security</a> ]</p>
 
     <div class="foot">
       <span class="k">// license:</span> MIT
       <span class="sep">·</span>
       <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
+      <span class="sep">·</span>
+      <span class="k">version:</span> <a id="version-link-foot" href="https://github.com/craigjbass/clearancekit/releases/latest">latest</a>
     </div>
 
   </div>
+
+<script>
+(function(){
+  fetch('https://api.github.com/repos/craigjbass/clearancekit/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(r){
+      if (!r || !r.tag_name) return;
+      var tag = r.tag_name;
+      var vl = document.getElementById('version-link');
+      var vf = document.getElementById('version-link-foot');
+      if (vl) vl.textContent = tag;
+      if (vf) vf.textContent = tag;
+      var dmg = (r.assets || []).find(function(a){ return /\.dmg$/i.test(a.name); });
+      if (dmg) {
+        var d = document.getElementById('dmg-link');
+        if (d) { d.href = dmg.browser_download_url; d.textContent = dmg.name; }
+      }
+    })
+    .catch(function(){});
+})();
+</script>
 </body>
 </html>
