@@ -11,434 +11,280 @@
   </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ClearanceKit documentation — complete guide to file access policies, app protections, jail rules, wildcarding, process ancestry, allowlists, and MDM deployment." />
+  <meta name="description" content="ClearanceKit documentation — setup, policy rules, jail rules, allowlist, signatures, ancestry, MDM deployment." />
   <title>Documentation — ClearanceKit</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
+    /* ============================================================
+       CLEARANCEKIT DESIGN SYSTEM — canonical CSS
+       Pasted verbatim into index.html, documentation.html, update.html
+       ============================================================ */
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #ffffff;
-      --surface: #f5f3ff;
-      --surface-2: #ede9fe;
-      --border: rgba(109,40,217,0.12);
-      --border-glow: rgba(109,40,217,0.4);
-      --text: #1e1030;
-      --text-muted: #5a4b78;
-      --text-faint: #9e8fb5;
-      --accent: #7c3aed;
-      --accent-bright: #8b5cf6;
-      --accent-glow: rgba(124,58,237,0.25);
-      --danger: #ef4444;
-      --green: #16a34a;
-      --orange: #ea580c;
-      --radius: 14px;
+      --bg:     #0a0a0a;
+      --fg:     #e7e7e7;
+      --dim:    #888888;
+      --faint:  #555555;
+      --green:  #9fef00;
+      --red:    #ef4444;
+      --border: #222222;
     }
 
-    html { scroll-behavior: smooth; }
-
-    body {
+    html, body {
       background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
+      color: var(--fg);
+      font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
       -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
     }
 
-    /* ── NAV ── */
-    nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 100;
-      padding: 16px 40px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: rgba(255,255,255,0.88);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .nav-logo {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text);
-      text-decoration: none;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .nav-logo img { flex-shrink: 0; border-radius: 6px; }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 32px;
-      list-style: none;
-    }
-
-    .nav-links a {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-      transition: color 0.2s;
-    }
-
-    .nav-links a:hover { color: var(--text); }
-    .nav-links a.active { color: var(--accent); }
-
-    /* ── LAYOUT ── */
-    .docs-layout {
-      display: flex;
-      max-width: 1280px;
+    .page {
+      max-width: 720px;
       margin: 0 auto;
-      padding-top: 65px;
+      padding: 24px 20px 80px;
     }
 
-    /* ── SIDEBAR ── */
-    .docs-sidebar {
-      position: sticky;
-      top: 65px;
-      width: 260px;
-      flex-shrink: 0;
-      height: calc(100vh - 65px);
-      overflow-y: auto;
-      padding: 32px 24px 48px 32px;
-      border-right: 1px solid var(--border);
+    /* nav */
+    .nav {
+      font-size: 12px;
+      color: var(--dim);
+      padding: 4px 0 32px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
     }
-
-    .docs-sidebar::-webkit-scrollbar { width: 4px; }
-    .docs-sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-    .sidebar-group { margin-bottom: 28px; }
-
-    .sidebar-group-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-faint);
-      margin-bottom: 10px;
-    }
-
-    .sidebar-group ul { list-style: none; }
-
-    .sidebar-group li a {
-      display: block;
-      font-size: 13.5px;
-      font-weight: 450;
-      color: var(--text-muted);
+    .nav a {
+      color: var(--fg);
       text-decoration: none;
-      padding: 4px 0;
-      transition: color 0.15s;
+    }
+    .nav a:hover { color: var(--green); }
+    .sep { color: var(--faint); margin: 0 8px; }
+    .nav a[aria-current="page"] { color: var(--dim); }
+
+    /* section header */
+    .sh {
+      color: var(--dim);
+      font-size: 12px;
+      margin: 40px 0 14px;
     }
 
-    .sidebar-group li a:hover { color: var(--text); }
-
-    /* ── MAIN CONTENT ── */
-    .docs-content {
-      flex: 1;
-      min-width: 0;
-      padding: 48px 56px 120px;
+    /* document headings (used by documentation.html) */
+    h1, h2, h3, h4 {
+      color: var(--fg);
+      font-weight: normal;
+      margin: 32px 0 14px;
     }
+    h1 { font-size: 18px; }
+    h2 { font-size: 15px; }
+    h3 { font-size: 13px; }
+    h4 { font-size: 13px; }
+    h2::before { content: "## "; color: var(--dim); }
+    h3::before { content: "### "; color: var(--dim); }
 
-    .docs-content h1 {
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.15;
-      margin-bottom: 12px;
+    /* prose */
+    p { margin: 0 0 14px; max-width: 80ch; }
+    p.lead { color: var(--fg); font-size: 15px; margin-bottom: 24px; }
+    p.dim { color: var(--dim); }
+
+    /* links */
+    a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+    a:hover { color: var(--green); }
+
+    /* bracketed link */
+    .blink {
+      color: var(--fg);
+      text-decoration: none;
+      margin-right: 14px;
+      display: inline-block;
     }
+    .blink::before { content: "[ "; color: var(--dim); }
+    .blink::after  { content: " ]"; color: var(--dim); }
+    .blink:hover { color: var(--green); }
+    .blink:hover::before, .blink:hover::after { color: var(--green); }
 
-    .docs-content > .lead {
-      font-size: 17px;
-      color: var(--text-muted);
-      margin-bottom: 48px;
-      line-height: 1.65;
-      max-width: 640px;
+    /* ascii box / diagram */
+    pre.ascii {
+      color: var(--green);
+      line-height: 1.4;
+      margin: 0 0 18px;
+      white-space: pre;
+      overflow-x: auto;
+      border-left: none;
+      padding: 0;
     }
+    pre.ascii.fg { color: var(--fg); }
 
-    .docs-content h2 {
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-top: 64px;
-      margin-bottom: 16px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border);
+    /* stats line */
+    .stats {
+      color: var(--fg);
+      margin: 0 0 24px;
+      white-space: pre;
+      font-family: inherit;
     }
+    .k { color: var(--dim); }
 
-    .docs-content h2:first-of-type { margin-top: 0; border-top: none; padding-top: 0; }
-
-    .docs-content h3 {
-      font-size: 18px;
-      font-weight: 650;
-      margin-top: 40px;
-      margin-bottom: 12px;
+    /* numbered steps */
+    ol.steps {
+      list-style: none;
+      counter-reset: step;
+      margin: 0 0 18px;
     }
-
-    .docs-content h4 {
-      font-size: 15px;
-      font-weight: 650;
-      margin-top: 28px;
+    ol.steps li {
+      counter-increment: step;
+      padding-left: 32px;
+      position: relative;
       margin-bottom: 8px;
     }
-
-    .docs-content p {
-      margin-bottom: 16px;
-      color: var(--text);
-      line-height: 1.7;
+    ol.steps li::before {
+      content: counter(step) ".";
+      position: absolute;
+      left: 0;
+      color: var(--dim);
     }
 
-    .docs-content ul, .docs-content ol {
-      margin-bottom: 16px;
-      padding-left: 24px;
+    /* bullet list */
+    ul.bullets {
+      list-style: none;
+      margin: 0 0 18px;
+    }
+    ul.bullets > li {
+      padding-left: 16px;
+      position: relative;
+      margin-bottom: 14px;
+    }
+    ul.bullets > li::before {
+      content: "-";
+      position: absolute;
+      left: 0;
+      color: var(--dim);
+    }
+    ul.bullets > li > .desc {
+      color: var(--dim);
+      display: block;
+      margin-top: 2px;
     }
 
-    .docs-content li {
-      margin-bottom: 6px;
-      line-height: 1.65;
-    }
-
-    .docs-content code {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.88em;
-      background: var(--surface);
-      padding: 2px 6px;
-      border-radius: 5px;
-      border: 1px solid var(--border);
-    }
-
-    .docs-content pre {
-      background: #1e1030;
-      color: #e8e0f0;
-      padding: 20px 24px;
-      border-radius: 10px;
-      overflow-x: auto;
-      margin-bottom: 20px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13.5px;
-      line-height: 1.65;
-    }
-
-    .docs-content pre code {
-      background: none;
-      padding: 0;
-      border: none;
-      color: inherit;
-      font-size: inherit;
-    }
-
-    .docs-content table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 24px;
-      font-size: 14px;
-    }
-
-    .docs-content th {
-      text-align: left;
-      font-weight: 600;
-      padding: 10px 14px;
-      border-bottom: 2px solid var(--border);
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    .docs-content td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-muted);
-    }
-
-    .docs-content td code {
-      font-size: 12.5px;
-    }
-
-    .docs-content tr:last-child td { border-bottom: none; }
-
-    .callout {
-      padding: 16px 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      font-size: 14.5px;
-      line-height: 1.6;
-    }
-
-    .callout p { margin-bottom: 0; }
-    .callout p + p { margin-top: 8px; }
-
-    .callout-info {
-      background: rgba(124,58,237,0.08);
-      border: 1px solid rgba(124,58,237,0.2);
-    }
-
-    .callout-warning {
-      background: rgba(234,88,12,0.08);
-      border: 1px solid rgba(234,88,12,0.2);
-    }
-
-    .callout-title {
-      font-weight: 650;
-      margin-bottom: 4px;
-    }
-
-    .badge {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 100px;
-      vertical-align: middle;
-    }
-
-    .badge-purple {
-      background: rgba(124,58,237,0.12);
-      color: var(--accent);
-      border: 1px solid rgba(124,58,237,0.25);
-    }
-
-    .badge-green {
-      background: rgba(22,163,74,0.10);
+    /* definition list (paths + descriptions) */
+    dl.paths { margin: 0 0 18px; }
+    dl.paths dt {
       color: var(--green);
-      border: 1px solid rgba(22,163,74,0.25);
+      margin-top: 14px;
+    }
+    dl.paths dt:first-child { margin-top: 0; }
+    dl.paths dd {
+      color: var(--dim);
+      margin: 2px 0 0;
+      padding-left: 16px;
     }
 
-    .badge-orange {
-      background: rgba(234,88,12,0.10);
-      color: var(--orange);
-      border: 1px solid rgba(234,88,12,0.25);
+    /* two column comparison */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin: 0 0 18px;
     }
-
-    /* ── FOOTER ── */
-    footer {
-      padding: 40px 24px;
-      border-top: 1px solid var(--border);
-      text-align: center;
+    .compare h4 {
+      margin: 0 0 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
     }
-
-    .footer-inner {
-      max-width: 1100px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 24px;
+    .compare ul {
       list-style: none;
     }
-
-    .footer-links a {
-      font-size: 13px;
-      color: var(--text-faint);
-      text-decoration: none;
-      transition: color 0.2s;
+    .compare li {
+      padding-left: 16px;
+      position: relative;
+      margin-bottom: 6px;
+      color: var(--dim);
+    }
+    .compare li::before {
+      content: "-";
+      position: absolute;
+      left: 0;
+      color: var(--faint);
+    }
+    @media (max-width: 768px) {
+      .compare { grid-template-columns: 1fr; gap: 18px; }
     }
 
-    .footer-links a:hover { color: var(--text-muted); }
+    /* shell-prompt block */
+    pre.shell {
+      color: var(--fg);
+      background: transparent;
+      margin: 0 0 14px;
+      white-space: pre;
+      overflow-x: auto;
+      border-left: none;
+      padding: 0;
+    }
+    pre.shell .p { color: var(--green); }
+    pre.shell .c { color: var(--dim); }
 
-    .footer-copy {
-      font-size: 13px;
-      color: var(--text-faint);
+    /* inline code */
+    code {
+      color: var(--green);
+      background: transparent;
     }
 
-    /* ── RESPONSIVE ── */
-    @media (max-width: 900px) {
-      nav { padding: 14px 20px; }
-      .nav-links li { display: none; }
-      .nav-links li.nav-docs { display: block; }
-      .docs-sidebar { display: none; }
-      .docs-content { padding: 32px 20px 80px; }
-      .docs-content h1 { font-size: 28px; }
-      footer { padding: 32px 20px; }
-      .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+    /* code blocks (markdown-rendered fenced blocks) */
+    pre {
+      background: transparent;
+      border-left: 1px solid var(--border);
+      padding: 0 0 0 14px;
+      margin: 0 0 14px;
+      overflow-x: auto;
+      color: var(--fg);
+    }
+    pre code { color: inherit; }
+
+    /* tables (used by documentation.html for managed-policy schemas) */
+    table {
+      border-collapse: collapse;
+      margin: 0 0 18px;
+      font-size: 13px;
+      width: 100%;
+    }
+    th, td {
+      text-align: left;
+      padding: 6px 14px 6px 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      color: var(--fg);
+    }
+    th { color: var(--dim); font-weight: normal; }
+
+    /* footer */
+    .foot {
+      color: var(--dim);
+      font-size: 12px;
+      padding: 32px 0 0;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    /* toc (documentation only) */
+    .toc {
+      margin: 0 0 32px;
+      color: var(--dim);
+      line-height: 1.8;
     }
   </style>
 </head>
 <body>
+  <div class="page">
 
-<!-- NAV -->
-<nav>
-  <a href="./" class="nav-logo">
-    <img src="logo.png" width="22" height="22" alt="ClearanceKit logo" />
-    ClearanceKit
-  </a>
-  <ul class="nav-links">
-    <li><a href="./#features">Features</a></li>
-    <li class="nav-docs"><a href="./documentation.html" class="active">Docs</a></li>
-    <li><a href="./#download">Download</a></li>
-    <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
-  </ul>
-</nav>
+    <div class="nav">
+      <a href="index.html">clearancekit</a><span class="sep">·</span><a href="index.html">home</a><span class="sep">·</span><a href="documentation.html" aria-current="page">docs</a><span class="sep">·</span><a href="https://github.com/craigjbass/clearancekit/releases/latest">download</a><span class="sep">·</span><a href="https://github.com/craigjbass/clearancekit">source</a>
+    </div>
 
-<div class="docs-layout">
+    <div class="sh">// documentation</div>
 
-<!-- SIDEBAR -->
-<aside class="docs-sidebar">
-  <div class="sidebar-group">
-    <div class="sidebar-group-title">Getting started</div>
-    <ul>
-      <li><a href="#setup">Setup</a></li>
-      <li><a href="#typical-workflow">Typical workflow</a></li>
-    </ul>
-  </div>
-  <div class="sidebar-group">
-    <div class="sidebar-group-title">Monitor</div>
-    <ul>
-      <li><a href="#events">Events</a></li>
-      <li><a href="#processes">Processes</a></li>
-      <li><a href="#process-tree">Process Tree</a></li>
-      <li><a href="#metrics">Metrics</a></li>
-    </ul>
-  </div>
-  <div class="sidebar-group">
-    <div class="sidebar-group-title">Configure</div>
-    <ul>
-      <li><a href="#policy-rules">Policy rules</a></li>
-      <li><a href="#app-protections">App Protections</a></li>
-      <li><a href="#built-in-presets">Built-in presets</a></li>
-      <li><a href="#jail-rules">Jail rules</a></li>
-      <li><a href="#allowlist">Allowlist</a></li>
-      <li><a href="#security-products">Security products</a></li>
-    </ul>
-  </div>
-  <div class="sidebar-group">
-    <div class="sidebar-group-title">Reference</div>
-    <ul>
-      <li><a href="#wildcards">Wildcard patterns</a></li>
-      <li><a href="#signatures">Code signatures</a></li>
-      <li><a href="#process-ancestry">Process ancestry</a></li>
-      <li><a href="#policy-evaluation">Policy evaluation order</a></li>
-      <li><a href="#touch-id">Touch ID</a></li>
-    </ul>
-  </div>
-  <div class="sidebar-group">
-    <div class="sidebar-group-title">Enterprise</div>
-    <ul>
-      <li><a href="#mdm">MDM deployment</a></li>
-      <li><a href="#export">Exporting policies</a></li>
-      <li><a href="#mcp">MCP agents</a></li>
-    </ul>
-  </div>
-</aside>
+    <div class="toc">
+      <a class="blink" href="#setup">setup</a><a class="blink" href="#typical-workflow">workflow</a><a class="blink" href="#events">events</a><a class="blink" href="#processes">processes</a><a class="blink" href="#process-tree">process tree</a><a class="blink" href="#metrics">metrics</a><a class="blink" href="#policy-rules">policy rules</a><a class="blink" href="#app-protections">app protections</a><a class="blink" href="#built-in-presets">presets</a><a class="blink" href="#jail-rules">jail rules</a><a class="blink" href="#allowlist">allowlist</a><a class="blink" href="#wildcards">wildcards</a><a class="blink" href="#signatures">signatures</a><a class="blink" href="#process-ancestry">ancestry</a><a class="blink" href="#policy-evaluation">evaluation order</a><a class="blink" href="#touch-id">touch id</a><a class="blink" href="#mdm">mdm</a><a class="blink" href="#export">export</a><a class="blink" href="#mcp">mcp</a>
+    </div>
 
-<!-- CONTENT -->
-<main class="docs-content">
-
-<h1>Documentation</h1>
 <p class="lead">
   Complete guide to configuring ClearanceKit's file access policies, app protections, jail rules,
   process ancestry, allowlists, and MDM deployment.
@@ -497,10 +343,7 @@
 <h3>Inline allowlisting</h3>
 <p>When viewing an expanded denied event, code signatures for the process and its ancestors appear as clickable links. Clicking a signature opens a dialog to add it to the global allowlist or as an allowed process for the relevant rule. This is the fastest way to build policy from observed behaviour.</p>
 
-<div class="callout callout-info">
-  <p class="callout-title">Baseline and managed events</p>
-  <p>Events matched by baseline (built-in Apple process) or managed (MDM-delivered) rules are collapsed into compact rows with a <span class="badge badge-green">baseline</span> or <span class="badge badge-purple">managed</span> badge. Expand them to see the full decision context.</p>
-</div>
+<p class="dim">// note: <strong>Baseline and managed events.</strong> Events matched by baseline (built-in Apple process) or managed (MDM-delivered) rules are collapsed into compact rows with a <code>baseline</code> or <code>managed</code> badge. Expand them to see the full decision context.</p>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="processes">Processes</h2>
@@ -560,8 +403,8 @@
 <h3>Rule tiers</h3>
 <table>
   <tr><th>Tier</th><th>Source</th><th>Editable</th></tr>
-  <tr><td><span class="badge badge-green">baseline</span></td><td>Compiled into the app</td><td>No</td></tr>
-  <tr><td><span class="badge badge-purple">managed</span></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
+  <tr><td><code>baseline</code></td><td>Compiled into the app</td><td>No</td></tr>
+  <tr><td><code>managed</code></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
   <tr><td>User</td><td>Created in the GUI</td><td>Yes</td></tr>
 </table>
 
@@ -601,7 +444,7 @@
 <h3>Enabling a preset</h3>
 <p>Navigate to <strong>App Protections</strong>. The Built-in section lists all <a href="#built-in-presets">presets</a>. Toggle any preset on to immediately protect that app's data. Touch ID is required.</p>
 
-<p>If a preset shows <span class="badge badge-orange">update available</span>, its active rules have drifted from the built-in definition — either because a newer version of ClearanceKit ships updated rules, or because you have modified the preset's rules manually. Click <strong>Update</strong> to reset the preset to the current built-in definition, or use <strong>Update All</strong> in the toolbar.</p>
+<p>If a preset shows <code>update available</code>, its active rules have drifted from the built-in definition — either because a newer version of ClearanceKit ships updated rules, or because you have modified the preset's rules manually. Click <strong>Update</strong> to reset the preset to the current built-in definition, or use <strong>Update All</strong> in the toolbar.</p>
 
 <h3>Adding a custom app protection</h3>
 <ol>
@@ -710,10 +553,7 @@
   </tr>
 </table>
 
-<div class="callout callout-info">
-  <p class="callout-title">Path notation</p>
-  <p>Paths shown as <code>~/Library/...</code> are stored as <code>/Users/*/Library/...</code> in the actual rules, using the <code>*</code> wildcard to match any username.</p>
-</div>
+<p class="dim">// note: <strong>Path notation.</strong> Paths shown as <code>~/Library/...</code> are stored as <code>/Users/*/Library/...</code> in the actual rules, using the <code>*</code> wildcard to match any username.</p>
 
 <p>Each preset allows access only to processes signed by the app's developer. For example, the Safari preset allows <code>apple:com.apple.Safari</code>, <code>apple:com.apple.WebKit.WebContent</code>, <code>apple:com.apple.Safari.History</code>, and other Apple-signed Safari components. A trojanised binary or unrelated process attempting to read Safari's cookies will be denied.</p>
 
@@ -730,10 +570,7 @@
   <li><strong>Child processes inherit their parent's jail.</strong> If a jailed process spawns a child, the child is also confined to the same allowed paths.</li>
 </ul>
 
-<div class="callout callout-warning">
-  <p class="callout-title">Wildcards are not supported in jail signatures</p>
-  <p>The jailed process signature must be exact. You cannot use <code>*</code> as the Signing ID in a jail rule. Wildcards are supported in the allowed path prefixes.</p>
-</div>
+<p class="dim">// warning: <strong>Wildcards are not supported in jail signatures.</strong> The jailed process signature must be exact. You cannot use <code>*</code> as the Signing ID in a jail rule. Wildcards are supported in the allowed path prefixes.</p>
 
 <h3>Creating a jail rule</h3>
 <ol>
@@ -779,8 +616,8 @@
 
 <table>
   <tr><th>Tier</th><th>Source</th><th>Editable</th></tr>
-  <tr><td><span class="badge badge-green">baseline</span></td><td>34 essential Apple system processes (Finder, Spotlight, apfsd, etc.) compiled into the app</td><td>No</td></tr>
-  <tr><td><span class="badge badge-purple">managed</span></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
+  <tr><td><code>baseline</code></td><td>34 essential Apple system processes (Finder, Spotlight, apfsd, etc.) compiled into the app</td><td>No</td></tr>
+  <tr><td><code>managed</code></td><td>Delivered via MDM configuration profile</td><td>No</td></tr>
   <tr><td>User</td><td>Created in the GUI</td><td>Yes</td></tr>
 </table>
 
@@ -810,10 +647,7 @@
 <h3 id="security-products">Security products and network monitors</h3>
 <p>If you run other endpoint security or network monitoring tools alongside ClearanceKit, add them to the global allowlist. These products need to inspect files across the entire file system to function correctly, and ClearanceKit's policy rules will otherwise block them from reading protected paths.</p>
 
-<div class="callout callout-warning">
-  <p class="callout-title">Add your security tools to the allowlist</p>
-  <p>Without an allowlist entry, security products will be denied access to files in protected directories, which may prevent them from detecting threats or monitoring network connections associated with those files.</p>
-</div>
+<p class="dim">// warning: <strong>Add your security tools to the allowlist.</strong> Without an allowlist entry, security products will be denied access to files in protected directories, which may prevent them from detecting threats or monitoring network connections associated with those files.</p>
 
 <p>Common examples:</p>
 
@@ -852,10 +686,7 @@
   </tr>
 </table>
 
-<div class="callout callout-info">
-  <p class="callout-title">Component-boundary matching</p>
-  <p>Paths without wildcards are matched as prefixes at component boundaries. <code>/Library/App/clearancekit</code> matches <code>/Library/App/clearancekit/store.db</code> but does <strong>not</strong> match <code>/Library/App/clearancekit-extra/file</code>. The match stops at the <code>/</code> separator.</p>
-</div>
+<p class="dim">// note: <strong>Component-boundary matching.</strong> Paths without wildcards are matched as prefixes at component boundaries. <code>/Library/App/clearancekit</code> matches <code>/Library/App/clearancekit/store.db</code> but does <strong>not</strong> match <code>/Library/App/clearancekit-extra/file</code>. The match stops at the <code>/</code> separator.</p>
 
 <h3>Allowed process paths</h3>
 <p>The <code>allowedProcessPaths</code> and <code>allowedAncestorProcessPaths</code> fields require <strong>exact matches</strong>. No wildcards or prefix matching is supported.</p>
@@ -937,10 +768,7 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
 
 <p>This means ancestry lookup (which is more expensive) only happens when a rule actually requires it.</p>
 
-<div class="callout callout-warning">
-  <p class="callout-title">Performance note</p>
-  <p>Rules with ancestor criteria require the system extension to look up the process tree and may add latency compared to process-level-only rules. The GUI warns you about this when adding ancestor criteria to a rule. For most workloads this is imperceptible, but avoid adding ancestry criteria to rules that match very high-frequency paths.</p>
-</div>
+<p class="dim">// warning: <strong>Performance note.</strong> Rules with ancestor criteria require the system extension to look up the process tree and may add latency compared to process-level-only rules. The GUI warns you about this when adding ancestor criteria to a rule. For most workloads this is imperceptible, but avoid adding ancestry criteria to rules that match very high-frequency paths.</p>
 
 <h3>Ancestor information</h3>
 <p>Each ancestor record includes:</p>
@@ -1051,7 +879,7 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
 <h3>Profile structure</h3>
 <p>The preferences must be delivered inside a <code>com.apple.ManagedClient.preferences</code> payload targeting the <code>uk.craigbass.clearancekit</code> domain. See the <a href="https://github.com/craigjbass/clearancekit">GitHub repository</a> for a complete example mobileconfig file.</p>
 
-<p>Managed rules appear in the GUI with a <span class="badge badge-purple">managed</span> badge and cannot be edited or deleted by the end user.</p>
+<p>Managed rules appear in the GUI with a <code>managed</code> badge and cannot be edited or deleted by the end user.</p>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2 id="export">Exporting policies</h2>
@@ -1086,21 +914,12 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
 
 <p>The MCP socket path is displayed in the toolbar for configuring your AI agent's connection.</p>
 
-</main>
-</div>
+    <div class="foot">
+      <span class="k">// license:</span> MIT
+      <span class="sep">·</span>
+      <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
+    </div>
 
-<!-- FOOTER -->
-<footer>
-  <div class="footer-inner">
-    <span class="footer-copy">&copy; 2026 Craig J. Bass &mdash; MIT License</span>
-    <ul class="footer-links">
-      <li><a href="https://github.com/craigjbass/clearancekit">GitHub</a></li>
-      <li><a href="https://github.com/craigjbass/clearancekit/releases">Releases</a></li>
-      <li><a href="https://github.com/craigjbass/clearancekit/blob/main/SECURITY.md">Security</a></li>
-      <li><a href="https://ko-fi.com/craigjbass">Support</a></li>
-    </ul>
   </div>
-</footer>
-
 </body>
 </html>
