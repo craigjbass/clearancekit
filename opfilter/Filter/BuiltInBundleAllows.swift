@@ -37,4 +37,10 @@ let builtInBundleAllows: [BuiltInBundleAllow] = [
         requiredUID: 0,
         criterion: "system installer daemon"
     ),
+    BuiltInBundleAllow(
+        teamID: appleTeamID,
+        signingID: "com.apple.package-script-service",
+        requiredUID: 0,
+        criterion: ".pkg installer background process"
+    ),
 ]
