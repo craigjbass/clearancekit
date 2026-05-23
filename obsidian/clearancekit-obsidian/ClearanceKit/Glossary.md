@@ -5,10 +5,10 @@ Domain and infrastructure terms used throughout the ClearanceKit codebase and it
 | Term | Definition |
 |------|------------|
 | FAA | File Access Authorization — macOS Endpoint Security mechanism for intercepting and allowing/denying file operations. |
-| ES | Endpoint Security — Apple kernel framework for system security monitoring and enforcement. |
+| ES | Endpoint Security — Apple kernel API for system security monitoring and enforcement. |
 | AUTH event | Endpoint Security event requiring a synchronous allow/deny response before the deadline. |
 | NOTIFY event | Endpoint Security event delivered post-facto for logging/monitoring; no response required. |
-| opfilter | The ClearanceKit System Extension process that holds the ES client and enforces policy. |
+| opfilter | The ClearanceKit System Extension process that holds the ES clients (FAA, jail, tamper-resistance) and enforces policy. |
 | clearancekit | The ClearanceKit GUI app (menu bar) that allows users to manage policy rules. |
 | XPC | Cross-Process Communication — macOS IPC mechanism used between clearancekit and opfilter. |
 | audit token | Kernel-provided unforgeable process identity token; safer than PID for authentication. |

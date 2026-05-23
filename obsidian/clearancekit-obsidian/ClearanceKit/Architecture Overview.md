@@ -6,7 +6,7 @@ ClearanceKit is a macOS file-access authorisation tool that places Apple's Endpo
 
 Two code-signed binaries run in separate processes:
 
-- **`opfilter`** — a system extension (bundle ID `uk.craigbass.clearancekit.opfilter`, team ID `37KMK6XFTT`). Holds two Endpoint Security clients, owns the SQLite policy database, and makes allow/deny decisions. No user interface.
+- **`opfilter`** — a system extension (bundle ID `uk.craigbass.clearancekit.opfilter`, team ID `37KMK6XFTT`). Holds three Endpoint Security clients (FAA policy, jail, tamper-resistance), owns the SQLite policy database, and makes allow/deny decisions. No user interface.
 - **`clearancekit`** — a SwiftUI menu-bar application (`uk.craigbass.clearancekit`). Connects to `opfilter` over XPC to read events and mutate policy. Has no direct Endpoint Security or SQLite access.
 
 The GUI may crash, restart, or be uninstalled without affecting enforcement: `opfilter` continues to apply policy even with no GUI attached.

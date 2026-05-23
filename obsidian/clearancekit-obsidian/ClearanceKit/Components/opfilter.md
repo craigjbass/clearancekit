@@ -1,6 +1,6 @@
 # opfilter
 
-The system extension (`uk.craigbass.clearancekit.opfilter`) that holds the Endpoint Security client and enforces policy. It is the only binary in ClearanceKit with ES and SQLite access; every policy decision the product makes is made here.
+The system extension (`uk.craigbass.clearancekit.opfilter`) that holds the Endpoint Security clients (FAA policy, jail, tamper-resistance — see [[ADRs/architecture/ADR-A09-accept-three-es-client-slot-cost]]) and enforces policy. It is the only binary in ClearanceKit with ES and SQLite access; every policy decision the product makes is made here.
 
 ## Role
 

@@ -70,7 +70,7 @@ ClearanceKit occupies a specific part of the macOS endpoint security space. Two 
 Two components work together:
 
 - **clearancekit.app** — SwiftUI sidebar app. Manages policies, displays live events, renders a real-time pipeline throughput graph, and communicates with the system extension over XPC.
-- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Runs two Endpoint Security clients: one for path-based policy enforcement that intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`, `AUTH_EXCHANGEDATA`, `AUTH_CLONE`), and a second dedicated jail client that tracks jailed processes by audit token and denies file access outside their allowed path prefixes. Both clients evaluate policies and serve the GUI over XPC.
+- **uk.craigbass.clearancekit.opfilter** — System extension (Endpoint Security). Runs three Endpoint Security clients: one for path-based policy enforcement that intercepts file-system authorization events (`ES_EVENT_TYPE_AUTH_OPEN`, `AUTH_RENAME`, `AUTH_UNLINK`, `AUTH_LINK`, `AUTH_CREATE`, `AUTH_TRUNCATE`, `AUTH_COPYFILE`, `AUTH_READDIR`, `AUTH_EXCHANGEDATA`, `AUTH_CLONE`), a dedicated jail client that tracks jailed processes by audit token and denies file access outside their allowed path prefixes, and a tamper-resistance client that blocks signal- and suspend-based attacks on opfilter itself (`AUTH_SIGNAL`, `AUTH_PROC_SUSPEND_RESUME`). All three evaluate policies and serve the GUI over XPC.
 
 ### Event pipeline
 
@@ -164,6 +164,16 @@ View extension logs:
 ```
 log stream --predicate 'subsystem == "uk.craigbass.clearancekit.opfilter"' --level debug
 ```
+
+### Too many Endpoint Security clients
+
+If `opfilter` logs `ES_NEW_CLIENT_RESULT_ERR_TOO_MANY_CLIENTS` at startup, the system-wide Endpoint Security client limit (48 slots, shared across every ES-based tool on the machine) has been exhausted. ClearanceKit itself takes three of those slots. Enumerate other installed system extensions with:
+
+```
+systemextensionsctl list
+```
+
+and disable or uninstall any ES-based security tools that are not in active use. The slot pool is reclaimed only when the offending extension is unloaded.
 
 ## Managing with MDM
 

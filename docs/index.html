@@ -769,8 +769,8 @@
     <div class="stat-label">ES event types intercepted</div>
   </div>
   <div class="stat">
-    <div class="stat-number">2</div>
-    <div class="stat-label">ES clients — policy + jail</div>
+    <div class="stat-number">3</div>
+    <div class="stat-label">ES clients — policy + jail + tamper</div>
   </div>
   <div class="stat">
     <div class="stat-number">0</div>
@@ -792,7 +792,7 @@
     <p class="section-eyebrow">How it works</p>
     <h2 class="section-title">Enforce policy at the kernel boundary</h2>
     <p class="section-subtitle">
-      ClearanceKit uses Apple's Endpoint Security framework to place itself between every
+      ClearanceKit uses Apple's Endpoint Security API to place itself between every
       file-system operation and the process that triggered it — before the access is granted.
     </p>
     <div class="grid-2">
