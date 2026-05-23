@@ -50,7 +50,7 @@
       text-decoration: none;
     }
     .nav a:hover { color: var(--green); }
-    .nav .sep { color: var(--faint); margin: 0 8px; }
+    .sep { color: var(--faint); margin: 0 8px; }
     .nav a[aria-current="page"] { color: var(--dim); }
 
     /* section header */
@@ -101,6 +101,8 @@
       margin: 0 0 18px;
       white-space: pre;
       overflow-x: auto;
+      border-left: none;
+      padding: 0;
     }
     pre.ascii.fg { color: var(--fg); }
 
@@ -108,8 +110,10 @@
     .stats {
       color: var(--fg);
       margin: 0 0 24px;
+      white-space: pre;
+      font-family: inherit;
     }
-    .stats .k { color: var(--dim); }
+    .k { color: var(--dim); }
 
     /* numbered steps */
     ol.steps {
@@ -173,9 +177,6 @@
       margin: 0 0 18px;
     }
     .compare h4 {
-      color: var(--fg);
-      font-size: 13px;
-      font-weight: normal;
       margin: 0 0 10px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 6px;
@@ -206,6 +207,8 @@
       margin: 0 0 14px;
       white-space: pre;
       overflow-x: auto;
+      border-left: none;
+      padding: 0;
     }
     pre.shell .p { color: var(--green); }
     pre.shell .c { color: var(--dim); }
@@ -251,7 +254,6 @@
       border-top: 1px solid var(--border);
       margin-top: 48px;
     }
-    .foot .sep { color: var(--faint); margin: 0 8px; }
 
     /* toc (documentation only) */
     .toc {
@@ -281,13 +283,7 @@
     </p>
 
     <div class="sh">// stats</div>
-    <p class="stats">
-      <span class="k">clients=</span>3
-      <span class="k">  events=</span>10
-      <span class="k">  deps=</span>0
-      <span class="k">  net=</span>0
-      <span class="k">  mdm=</span>yes
-    </p>
+    <pre class="stats"><span class="k">clients=</span>3<span class="k">  events=</span>10<span class="k">  deps=</span>0<span class="k">  net=</span>0<span class="k">  mdm=</span>yes</pre>
 
     <div class="sh">// how it works</div>
 <pre class="ascii">┌──────────┐    AUTH_OPEN     ┌─────────┐
@@ -357,19 +353,53 @@
 
     <div class="sh">// download</div>
     <p>
-      <span class="k" style="color:var(--dim)">download:</span> <a href="#">latest.dmg</a>
-      <span class="sep" style="color:var(--faint);margin:0 8px;">·</span>
-      <span class="k" style="color:var(--dim)">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
-      <span class="sep" style="color:var(--faint);margin:0 8px;">·</span>
-      <span class="k" style="color:var(--dim)">license:</span> MIT
+      <span class="k">download:</span> <a href="#">latest.dmg</a>
+      <span class="sep">·</span>
+      <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
+      <span class="sep">·</span>
+      <span class="k">license:</span> MIT
     </p>
 
+    <div class="sh">// documentation-only components (also defined in canonical CSS)</div>
+
+    <div class="toc">
+      [ <a href="#h1-example">h1</a> ]
+      [ <a href="#h2-example">h2</a> ]
+      [ <a href="#table-example">table</a> ]
+    </div>
+
+    <h1 id="h1-example">Heading 1</h1>
+    <p class="dim">A dim paragraph follows the H1. Used for low-emphasis prose in documentation pages.</p>
+
+    <h2 id="h2-example">Heading 2</h2>
+    <p>Body paragraph. Standard prose colour and weight.</p>
+
+    <h3>Heading 3</h3>
+    <p>Body paragraph.</p>
+
+    <h4>Heading 4</h4>
+    <p>Body paragraph.</p>
+
+    <pre><code>$ codesign -dv /Applications/clearancekit.app
+Identifier=uk.craigbass.clearancekit
+TeamIdentifier=37KMK6XFTT</code></pre>
+
+    <table id="table-example">
+      <thead>
+        <tr><th>key</th><th>type</th><th>description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>ProtectedPathPrefix</td><td>string</td><td>Path or glob pattern to protect.</td></tr>
+        <tr><td>AllowedSignatures</td><td>array</td><td>Processes allowed by code signing identity.</td></tr>
+      </tbody>
+    </table>
+
     <div class="foot">
-      <span class="k" style="color:var(--dim)">// license:</span> MIT
+      <span class="k">// license:</span> MIT
       <span class="sep">·</span>
-      <span class="k" style="color:var(--dim)">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
+      <span class="k">source:</span> <a href="https://github.com/craigjbass/clearancekit">github.com/craigjbass/clearancekit</a>
       <span class="sep">·</span>
-      <span class="k" style="color:var(--dim)">version:</span> 0.x
+      <span class="k">version:</span> 0.x
     </div>
 
   </div>
