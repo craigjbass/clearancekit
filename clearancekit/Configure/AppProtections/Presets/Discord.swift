@@ -10,6 +10,7 @@ private let discordSignatures: [ProcessSignature] = [
     sig("53Q6R32WPB", "com.hnc.Discord.helper"),
     sig("53Q6R32WPB", "com.hnc.Discord.helper.Renderer"),
     sig("53Q6R32WPB", "chrome_crashpad_handler"),
+    sig("53Q6R32WPB", "ShipIt"),
 ]
 
 let discordPreset = AppPreset(

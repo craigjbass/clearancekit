@@ -25,6 +25,7 @@ private let messagesQuickLookSignatures: [ProcessSignature] = [
     apple("com.apple.quicklook.ThumbnailsAgent"),
     apple("com.apple.quicklook.thumbnail.ImageExtension"),
     apple("com.apple.quicklook.QuickLookUIService"),
+    apple("com.apple.quicklook.thumbnail.OfficeExtension"),
 ]
 
 private let messagesMediaSignatures: [ProcessSignature] = [

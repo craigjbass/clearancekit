@@ -38,6 +38,7 @@ let chromePreset = AppPreset(
                 apple("com.apple.Safari.BrowserDataImportingService"),
                 apple("com.apple.nehelper"),
                 apple("com.apple.ecosystemanalyticsd"),
+                apple("com.apple.backgroundtaskmanagementd"),
             ],
             allowedAncestorSignatures: [
                 sig("EQHXZ8M8AV", "com.google.GoogleUpdater"),

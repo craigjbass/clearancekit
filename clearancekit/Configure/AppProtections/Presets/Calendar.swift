@@ -10,6 +10,7 @@ private let calendarGroupContainerSignatures: [ProcessSignature] = [
     apple("com.apple.calaccessd"),
     apple("com.apple.dataaccess.dataaccessd"),
     apple("com.apple.CalendarWeatherKitService"),
+    apple("com.apple.DataDetectorsViewService"),
 ]
 
 let calendarPreset = AppPreset(
