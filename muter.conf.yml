@@ -1,0 +1,11 @@
+executable: /usr/bin/xcodebuild
+arguments:
+  - -project
+  - clearancekit.xcodeproj
+  - -scheme
+  - clearancekitTests
+  - -destination
+  - platform=macOS
+  - test
+exclude:
+  - clearancekit
