@@ -3,3 +3,4 @@ tla/*_TTrace_*
 .worktrees/
 build/
 .superpowers/
+threatmodel/
