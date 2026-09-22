@@ -18,6 +18,7 @@ let signalPreset = AppPreset(
                 sig("U68MSDN6DR", "org.whispersystems.signal-desktop"),
                 sig("U68MSDN6DR", "org.whispersystems.signal-desktop.helper.Renderer"),
                 sig("U68MSDN6DR", "org.whispersystems.signal-desktop.helper"),
+                apple("com.apple.usernoted"),
             ]
         ),
     ]

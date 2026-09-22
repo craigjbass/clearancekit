@@ -26,6 +26,10 @@ private let mailSpotlightSignatures: [ProcessSignature] = [
     apple("com.apple.suggestd"),
 ]
 
+private let mailCategorizationSignatures: [ProcessSignature] = [
+    apple("com.apple.campo"),
+]
+
 // secinitd, containermanagerd, and WebKit.Networking are covered by the global allowlist.
 private let mailSandboxSignatures: [ProcessSignature] = [
     apple("com.apple.syncdefaultsd"),
@@ -40,7 +44,7 @@ let mailPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Mail",
-            allowedSignatures: mailCoreSignatures + mailSpotlightSignatures
+            allowedSignatures: mailCoreSignatures + mailSpotlightSignatures + mailCategorizationSignatures
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000002")!,
