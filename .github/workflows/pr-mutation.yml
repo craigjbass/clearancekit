@@ -1,0 +1,31 @@
+name: PR Mutation Test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Muter
+        run: brew install muter-mutation-testing/formulae/muter
+
+      - name: Run mutation tests
+        run: muter run --skip-coverage --format json
+
+      - name: Upload mutation test report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: muter-report
+          path: muterReport.json
+          if-no-files-found: warn
