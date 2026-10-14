@@ -30,6 +30,10 @@ final class PolicyStore: ObservableObject {
     /// the authoritative snapshot is pushed back via `receivedUserRules(_:)`.
     @Published private(set) var userRules: [FAARule] = []
 
+    func doubleStarCompatibilityRuleCount(builtInPresetRules: [FAARule]) -> Int {
+        countDoubleStarCompatibilityRules(in: baselineRules + managedRules + userRules, builtInPresetRules: builtInPresetRules)
+    }
+
     private let service: PolicyServiceProtocol
     private let authenticate: Authenticate
 
