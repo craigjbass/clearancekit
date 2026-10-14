@@ -50,4 +50,23 @@ struct DenyNotificationThrottleTests {
 
         #expect(decision == .post)
     }
+
+    @Test("quiet deny is suppressed")
+    func quietDenyIsSuppressed() {
+        var throttle = DenyNotificationThrottle(debounceInterval: debounceInterval)
+
+        let decision = throttle.evaluate(deniedEvent(.quiet), at: start)
+
+        #expect(decision == .suppress)
+    }
+
+    @Test("quiet deny does not start the debounce window")
+    func quietDenyDoesNotStartWindow() {
+        var throttle = DenyNotificationThrottle(debounceInterval: debounceInterval)
+        _ = throttle.evaluate(deniedEvent(.quiet), at: start)
+
+        let decision = throttle.evaluate(deniedEvent(.notify), at: start.addingTimeInterval(5))
+
+        #expect(decision == .post)
+    }
 }

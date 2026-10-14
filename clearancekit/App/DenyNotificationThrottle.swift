@@ -19,6 +19,9 @@ struct DenyNotificationThrottle {
     }
 
     mutating func evaluate(_ event: FolderOpenEvent, at now: Date) -> DenyNotificationDecision {
+        if case .quiet = event.notificationPolicy {
+            return .suppress
+        }
         if let lastPostedAt, now.timeIntervalSince(lastPostedAt) < debounceInterval {
             return .suppress
         }
