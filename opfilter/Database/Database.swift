@@ -359,6 +359,66 @@ final class Database {
         )
     }
 
+    // MARK: - User Quiet List
+
+    func loadUserQuietListResult() -> DatabaseLoadResult<QuietListEntry> {
+        var entries: [QuietListEntry] = []
+        query("""
+            SELECT id, signing_id, process_path, platform_binary, team_id
+            FROM user_quiet_list ORDER BY rowid
+        """) { stmt in
+            if let entry = quietListEntryFromRow(stmt) {
+                entries.append(entry)
+            }
+        }
+        switch checkSignature(table: "user_quiet_list", content: canonicalQuietListJSON(entries)) {
+        case .verified, .uninitialized:
+            NSLog("Database: Loaded %d user quiet list entry/entries", entries.count)
+            return .ok(entries)
+        case .suspect:
+            NSLog("Database: Signature verification failed for user_quiet_list — %d suspect entry/entries", entries.count)
+            return .suspect(entries)
+        }
+    }
+
+    func saveUserQuietList(_ entries: [QuietListEntry]) {
+        inTransaction {
+            execute("DELETE FROM user_quiet_list")
+            for entry in entries {
+                insertQuietListEntry(entry)
+            }
+            updateSignature(table: "user_quiet_list", content: canonicalQuietListJSON(entries))
+        }
+    }
+
+    private func insertQuietListEntry(_ entry: QuietListEntry) {
+        execute("""
+            INSERT INTO user_quiet_list (id, signing_id, process_path, platform_binary, team_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, bindings: [
+            .text(entry.id.uuidString),
+            .text(entry.signingID),
+            .text(entry.processPath),
+            .int(entry.platformBinary ? 1 : 0),
+            .text(entry.teamID),
+        ])
+    }
+
+    private func quietListEntryFromRow(_ stmt: OpaquePointer) -> QuietListEntry? {
+        let uuidString = columnText(stmt, 0)
+        guard let id = UUID(uuidString: uuidString) else {
+            NSLog("Database: Skipping quiet list row with invalid UUID '%@'", uuidString)
+            return nil
+        }
+        return QuietListEntry(
+            id: id,
+            signingID: columnText(stmt, 1),
+            processPath: columnText(stmt, 2),
+            platformBinary: sqlite3_column_int(stmt, 3) != 0,
+            teamID: columnText(stmt, 4)
+        )
+    }
+
     // MARK: - User Jail Rules
 
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> {
@@ -655,6 +715,15 @@ final class Database {
         }
         result.append(("user_ancestor_allowlist", canonicalAncestorAllowlistJSON(ancestor)))
 
+        var quietList: [QuietListEntry] = []
+        query("""
+            SELECT id, signing_id, process_path, platform_binary, team_id
+            FROM user_quiet_list ORDER BY rowid
+        """) { stmt in
+            if let entry = quietListEntryFromRow(stmt) { quietList.append(entry) }
+        }
+        result.append(("user_quiet_list", canonicalQuietListJSON(quietList)))
+
         var jail: [JailRule] = []
         query("""
             SELECT id, name, jailed_signature, allowed_path_prefixes
@@ -722,6 +791,7 @@ final class Database {
         case "user_rules":              break
         case "user_allowlist":          break
         case "user_ancestor_allowlist": break
+        case "user_quiet_list":         break
         case "user_jail_rules":         break
         case "feature_flags":           break
         case "bundle_updater_signatures": break
@@ -850,6 +920,16 @@ final class Database {
         encoder.outputFormatting = .sortedKeys
         guard let encoded = try? encoder.encode(sorted) else {
             fatalError("Database: Failed to JSON-encode ancestor allowlist for signature — [AncestorAllowlistEntry] must always be encodable")
+        }
+        return encoded
+    }
+
+    private func canonicalQuietListJSON(_ entries: [QuietListEntry]) -> Data {
+        let sorted = entries.sorted { $0.id.uuidString < $1.id.uuidString }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let encoded = try? encoder.encode(sorted) else {
+            fatalError("Database: Failed to JSON-encode quiet list for signature — [QuietListEntry] must always be encodable")
         }
         return encoded
     }

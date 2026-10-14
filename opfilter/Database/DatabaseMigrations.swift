@@ -29,6 +29,7 @@ let allMigrations: [Migration] = [
     Migration(version: 9, name: "Seed bundle_protection_enabled feature flag", up: migration009SeedBundleProtectionFlag),
     Migration(version: 10, name: "Seed advanced_mode_enabled feature flag", up: migration010SeedAdvancedModeFlag),
     Migration(version: 11, name: "Add epoch column to data_signatures for replay protection", up: migration011AddEpochColumn),
+    Migration(version: 12, name: "Create user quiet list table", up: migration012CreateQuietList),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -349,4 +350,19 @@ private func migration010SeedAdvancedModeFlag(_ db: Database) {
 private func migration011AddEpochColumn(_ db: Database) {
     db.execute("ALTER TABLE data_signatures ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0")
     NSLog("Migration 011: Added epoch column to data_signatures (legacy signatures remain valid at epoch=0)")
+}
+
+// MARK: - Migration 012: Create user quiet list table
+
+private func migration012CreateQuietList(_ db: Database) {
+    db.execute("""
+        CREATE TABLE user_quiet_list (
+            id TEXT PRIMARY KEY,
+            signing_id TEXT NOT NULL DEFAULT '',
+            process_path TEXT NOT NULL DEFAULT '',
+            platform_binary INTEGER NOT NULL DEFAULT 0,
+            team_id TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    NSLog("Migration 012: Created user_quiet_list table")
 }
