@@ -81,6 +81,64 @@ struct PathMatchingTests {
     }
 }
 
+@Suite("pathContainsProtectedPaths")
+struct PathContainsProtectedPathsTests {
+    @Test("directory matched by the single-star pattern's parent contains protected paths")
+    func directoryAboveSingleStarContainsProtectedPaths() {
+        #expect(pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal/*"))
+    }
+
+    @Test("grandparent contains protected paths")
+    func grandparentContainsProtectedPaths() {
+        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/*"))
+    }
+
+    @Test("root contains every protected path")
+    func rootContainsProtectedPaths() {
+        #expect(pathContainsProtectedPaths("/", by: "/Library/Application Support/clearancekit"))
+    }
+
+    @Test("parent of a literal prefix contains protected paths")
+    func parentOfLiteralPrefix() {
+        #expect(pathContainsProtectedPaths("/Library/Application Support", by: "/Library/Application Support/clearancekit"))
+    }
+
+    @Test("parent matched through a wildcard component contains protected paths")
+    func parentThroughWildcardComponent() {
+        #expect(pathContainsProtectedPaths("/Users/admin/Library", by: "/Users/*/Library/Mail"))
+    }
+
+    @Test("double-star pattern makes every deeper directory a parent")
+    func doubleStarMakesDeeperDirectoriesParents() {
+        #expect(pathContainsProtectedPaths("/a/b/c", by: "/a/**/secret"))
+    }
+
+    @Test("trailing slash in the pattern is ignored")
+    func trailingSlashInPattern() {
+        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/"))
+    }
+
+    @Test("the protected path itself is not reported")
+    func protectedPathItselfIsNotReported() {
+        #expect(!pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal"))
+    }
+
+    @Test("a path below the pattern is not reported")
+    func pathBelowPatternIsNotReported() {
+        #expect(!pathContainsProtectedPaths("/Users/develop/goal/gold", by: "/Users/develop/goal/*"))
+    }
+
+    @Test("a sibling that shares a string prefix is not reported")
+    func siblingWithSharedStringPrefix() {
+        #expect(!pathContainsProtectedPaths("/Users/developer", by: "/Users/develop/goal/*"))
+    }
+
+    @Test("an unrelated directory is not reported")
+    func unrelatedDirectory() {
+        #expect(!pathContainsProtectedPaths("/Users/admin/Documents", by: "/Users/*/Library/Mail"))
+    }
+}
+
 // MARK: - ProcessSignature
 
 @Suite("ProcessSignature")

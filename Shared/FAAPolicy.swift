@@ -343,6 +343,20 @@ private func componentPrefixMatches(path: ArraySlice<String>, pattern: ArraySlic
     return componentPrefixMatches(path: path.dropFirst(), pattern: pattern.dropFirst())
 }
 
+public func pathContainsProtectedPaths(_ path: String, by pattern: String) -> Bool {
+    let pathParts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    let patternParts = pattern.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    return componentsLeadIntoPattern(path: pathParts[...], pattern: patternParts[...])
+}
+
+private func componentsLeadIntoPattern(path: ArraySlice<String>, pattern: ArraySlice<String>) -> Bool {
+    guard let patternHead = pattern.first else { return false }
+    guard let pathHead = path.first else { return true }
+    if patternHead == "**" { return true }
+    guard globMatches(string: pathHead, pattern: patternHead) else { return false }
+    return componentsLeadIntoPattern(path: path.dropFirst(), pattern: pattern.dropFirst())
+}
+
 /// Matches a single path component against a glob pattern (`*`, `?` within the component).
 private func globMatches(string: String, pattern: String) -> Bool {
     if pattern == "*" { return true }
