@@ -224,9 +224,10 @@ final class Database {
             NSLog("Database: Skipping rule row with invalid UUID '%@'", uuidString)
             return nil
         }
+        let protectedPathPrefix = columnText(stmt, 1)
         return FAARule(
             id: id,
-            protectedPathPrefix: columnText(stmt, 1),
+            protectedPathPrefix: protectedPathPrefix,
             allowedProcessPaths: decodeStringArray(columnText(stmt, 2)),
             allowedSignatures: decodeSignatureArray(columnText(stmt, 3)),
             allowedAncestorProcessPaths: decodeStringArray(columnText(stmt, 4)),
@@ -235,7 +236,8 @@ final class Database {
             requireValidSigning: sqlite3_column_int(stmt, 7) != 0,
             authorizedSignatures: decodeSignatureArray(columnText(stmt, 8)),
             requiresAuthorization: sqlite3_column_int(stmt, 9) != 0,
-            authorizationSessionDuration: TimeInterval(sqlite3_column_int64(stmt, 10))
+            authorizationSessionDuration: TimeInterval(sqlite3_column_int64(stmt, 10)),
+            doubleStarParentMatching: .implied(by: protectedPathPrefix)
         )
     }
 

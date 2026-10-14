@@ -268,4 +268,18 @@ struct CanonicalRulesEncodingTests {
             try JSONDecoder().decode(FAARule.self, from: Data(json.utf8))
         }
     }
+
+    @Test("rule built with the implied matching encodes like the same rule decoded from stored JSON")
+    func impliedMatchingRuleEncodesLikeDecodedStoredRule() throws {
+        let storedJSON = #"[{"allowedAncestorProcessPaths":[],"allowedAncestorSignatures":[],"allowedProcessPaths":[],"allowedSignatures":[],"enforceOnWriteOnly":true,"id":"7F541614-31BF-4525-803F-794C578771E5","protectedPathPrefix":"\/private\/var\/folders\/**\/NSCreateObjectFileImageFromMemory-*","source":"user"}]"#
+        let pattern = "/private/var/folders/**/NSCreateObjectFileImageFromMemory-*"
+        let rowRule = FAARule(
+            id: UUID(uuidString: "7F541614-31BF-4525-803F-794C578771E5")!,
+            protectedPathPrefix: pattern,
+            enforceOnWriteOnly: true,
+            doubleStarParentMatching: .implied(by: pattern)
+        )
+
+        #expect(String(data: canonicalRulesJSON([rowRule]), encoding: .utf8) == storedJSON)
+    }
 }
