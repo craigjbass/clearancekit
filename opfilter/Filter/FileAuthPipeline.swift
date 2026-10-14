@@ -233,21 +233,7 @@ final class FileAuthPipeline: @unchecked Sendable {
 
         let ancestors = processTree.ancestors(of: event.processIdentity)
 
-        if let evaluator = bundleProtectionEvaluator,
-           let decision = evaluator.evaluate(
-               accessPath: event.path,
-               processTeamID: event.teamID,
-               processSigningID: event.signingID,
-               processUID: event.uid,
-               accessKind: event.accessKind,
-               ancestors: ancestors
-           ) {
-            event.respond(decision.isAllowed, false)
-            postRespondHandler(event, decision, ancestors, dwellNanoseconds)
-            return
-        }
-
-        let decision = evaluateAccess(
+        let faaDecision = evaluateAccess(
             rules: workItem.rules,
             allowlist: workItem.allowlist,
             ancestorAllowlist: workItem.ancestorAllowlist,
@@ -260,6 +246,10 @@ final class FileAuthPipeline: @unchecked Sendable {
             accessKind: event.accessKind,
             ancestors: ancestors
         )
+        let decision = combinedDecision(
+            bundleDecision: bundleProtectionDecision(for: event, ancestors: ancestors),
+            faaDecision: faaDecision
+        )
 
         let logAncestors = processTree.ancestors(of: event.processIdentity)
         if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds) {
@@ -267,6 +257,24 @@ final class FileAuthPipeline: @unchecked Sendable {
         }
         event.respond(decision.isAllowed, false)
         postRespondHandler(event, decision, logAncestors, dwellNanoseconds)
+    }
+
+    private func bundleProtectionDecision(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicyDecision? {
+        bundleProtectionEvaluator?.evaluate(
+            accessPath: event.path,
+            processTeamID: event.teamID,
+            processSigningID: event.signingID,
+            processUID: event.uid,
+            accessKind: event.accessKind,
+            ancestors: ancestors
+        )
+    }
+
+    // The bundle decision is the first argument so that it names the matched
+    // criterion in the audit log when both decisions allow.
+    private func combinedDecision(bundleDecision: PolicyDecision?, faaDecision: PolicyDecision) -> PolicyDecision {
+        guard let bundleDecision else { return faaDecision }
+        return moreRestrictiveDecision(bundleDecision, faaDecision)
     }
 
     /// Returns true if the decision was handled as an authorization case (either

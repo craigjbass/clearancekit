@@ -571,7 +571,7 @@ private func checkRulesBeneath(
     return decisions.dropFirst().reduce(firstDecision, moreRestrictiveDecision)
 }
 
-private func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
+public func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
     if lhs.isDenial { return lhs }
     if rhs.isDenial { return rhs }
     if !lhs.isAllowed { return lhs }

@@ -69,6 +69,8 @@ private func directoryOperationEvent(
     secondaryPath: String?,
     movedEntryKind: MovedEntryKind,
     processPath: String = "/tmp/poc",
+    teamID: String = "",
+    signingID: String = "",
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
@@ -83,8 +85,8 @@ private func directoryOperationEvent(
         parentPID: 1,
         parentPIDVersion: 0,
         processPath: processPath,
-        teamID: "",
-        signingID: "",
+        teamID: teamID,
+        signingID: signingID,
         uid: 501,
         gid: 20,
         ttyPath: nil,
@@ -598,6 +600,83 @@ struct FileAuthPipelineTests {
         } else {
             Issue.record("Expected .noRuleApplies for read, got \(String(describing: postRespondDecision))")
         }
+    }
+
+    @Test("rename swap from inside an app bundle onto a protected directory is denied")
+    func renameSwapFromBundleOntoProtectedDirectoryIsDenied() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: true)
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: true)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(
+            operation: .rename,
+            path: "/Applications/Foo.app/Contents/Resources/evildir",
+            secondaryPath: "/Users/develop/goal",
+            movedEntryKind: .directory,
+            teamID: "UPDATER_TEAM",
+            signingID: "com.updater.tool"
+        ) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == false)
+    }
+
+    @Test("bundle denial wins over a rule that needs authorization")
+    func bundleDenialWinsOverAuthorization() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: false)
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: true)
+        let authorizationRequestCount = OSAllocatedUnfairLock(initialState: 0)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", requiresAuthorization: true)] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() },
+            authorizationHandler: { _, _, _, _ in authorizationRequestCount.withLock { $0 += 1 } },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(
+            operation: .rename,
+            path: "/Applications/Foo.app/Contents/Resources/evildir",
+            secondaryPath: "/Users/develop/goal",
+            movedEntryKind: .directory,
+            teamID: "WRONG_TEAM",
+            signingID: "com.wrong.process"
+        ) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == false)
+        #expect(authorizationRequestCount.withLock { $0 } == 0)
     }
 
     @Test("directory operation on a parent of a protected path is denied", arguments: [FileOperation.rename, .clone, .copyfile])
