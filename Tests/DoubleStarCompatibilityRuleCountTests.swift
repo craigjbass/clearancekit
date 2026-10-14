@@ -45,15 +45,33 @@ struct DoubleStarCompatibilityRuleCountTests {
         #expect(count([changed]) == 0)
     }
 
-    @Test("a rule with a preset's id and matching mode but another pattern follows the preset and does not count")
-    func samePresetIdentityWithDifferentPatternDoesNotCount() {
+    @Test("a rule with a preset's id and matching mode but another pattern counts")
+    func samePresetIdentityWithDifferentPatternCounts() {
         let edited = FAARule(
             id: presetRuleID,
             protectedPathPrefix: "/other/**/path",
             doubleStarParentMatching: .stopAtDoubleStar
         )
 
-        #expect(count([edited]) == 0)
+        #expect(count([edited]) == 1)
+    }
+
+    @Test("a preset rule set to all nested directories is counted when the same id is in compatibility mode")
+    func presetIdentityInCompatibilityModeCounts() {
+        let allNestedPreset = FAARule(
+            id: presetRuleID,
+            protectedPathPrefix: "/private/var/folders/**/Preset-*",
+            doubleStarParentMatching: .allNestedDirectories
+        )
+        let compatibilityCopy = FAARule(
+            id: presetRuleID,
+            protectedPathPrefix: "/private/var/folders/**/Preset-*",
+            doubleStarParentMatching: .stopAtDoubleStar
+        )
+
+        let counted = countDoubleStarCompatibilityRules(in: [compatibilityCopy], builtInPresetRules: [allNestedPreset])
+
+        #expect(counted == 1)
     }
 
     @Test("a rule without a ** component never counts")
