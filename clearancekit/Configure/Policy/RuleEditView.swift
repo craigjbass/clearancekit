@@ -65,6 +65,16 @@ struct RuleEditView: View {
                     Text("Protects all files and subdirectories within the specified directory. Use * to match any single path component, ** to match any number of levels.")
                         .foregroundStyle(.secondary)
                 }
+                if patternContainsDoubleStarComponent(draft.protectedPathPrefix) {
+                    Section {
+                        Picker("Parent directories", selection: $draft.doubleStarParentMatching) {
+                            Text("Protect all nested directories").tag(DoubleStarParentMatching.allNestedDirectories)
+                            Text("Compatibility: stop at **").tag(DoubleStarParentMatching.stopAtDoubleStar)
+                        }
+                    } footer: {
+                        doubleStarCompatibilityWarning
+                    }
+                }
                 Section {
                     StringListEditor(values: $draft.allowedProcessPaths)
                 } header: {
@@ -180,6 +190,17 @@ struct RuleEditView: View {
     }
 
     @ViewBuilder
+    private var doubleStarCompatibilityWarning: some View {
+        switch draft.doubleStarParentMatching {
+        case .allNestedDirectories:
+            EmptyView()
+        case .stopAtDoubleStar:
+            Label(LocalizedStringKey(DoubleStarCompatibilityCopy.warning), systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
     private func pickerSectionHeader(_ title: String, target: ProcessPickerTarget) -> some View {
         HStack {
             Text(title)
@@ -204,6 +225,7 @@ private struct DraftRule {
     var authorizedSignatures: [String] = []
     var requiresAuthorization: Bool = false
     var authorizationSessionDuration: TimeInterval = 300
+    var doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories
 
     init() {}
 
@@ -218,6 +240,7 @@ private struct DraftRule {
         self.authorizedSignatures = rule.authorizedSignatures.map(\.description)
         self.requiresAuthorization = rule.requiresAuthorization
         self.authorizationSessionDuration = rule.authorizationSessionDuration
+        self.doubleStarParentMatching = rule.doubleStarParentMatching
     }
 
     func toRule(preservingID id: UUID?) -> FAARule {
@@ -241,7 +264,8 @@ private struct DraftRule {
             requireValidSigning: requireValidSigning,
             authorizedSignatures: nonEmpty(authorizedSignatures).compactMap(parseSignature),
             requiresAuthorization: requiresAuthorization,
-            authorizationSessionDuration: authorizationSessionDuration
+            authorizationSessionDuration: authorizationSessionDuration,
+            doubleStarParentMatching: doubleStarParentMatching
         )
     }
 }
