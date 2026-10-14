@@ -44,6 +44,7 @@ let safariPreset = AppPreset(
                 apple("com.apple.quicklook.thumbnail.TextExtension"),
                 apple("com.apple.SafariServices"),
                 apple("com.apple.syncdefaultsd"),
+                apple("com.apple.screencaptureui"),
             ]
         ),
         FAARule(

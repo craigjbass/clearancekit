@@ -20,6 +20,7 @@ let sshKeysPreset = AppPreset(
                 apple("com.apple.installer"),
                 apple("com.apple.SoftwareUpdateAgent"),
                 apple("com.apple.mdmclient"),
+                apple("com.apple.ssh"),
             ],
             enforceOnWriteOnly: true
         ),

@@ -15,6 +15,7 @@ private let messagesCoreSignatures: [ProcessSignature] = [
     apple("com.apple.AddressBook"),
     apple("com.apple.messages.AssistantExtension"),
     apple("com.apple.IMAutomaticHistoryDeletionAgent"),
+    apple("com.apple.messagesescrowd"),
 ]
 
 private let messagesSpotlightSignatures: [ProcessSignature] = [
