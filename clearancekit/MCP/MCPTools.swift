@@ -316,6 +316,7 @@ enum MCPDispatcher {
             allowedSignatures: signatures,
             enforceOnWriteOnly: enforceOnWriteOnly
         )
+        try requireSpotlightRiskAcknowledgement(for: rule, acknowledgement: spotlightRiskAcknowledgement(from: args))
         try await PolicyStore.shared.add(rule)
         var lines = ["Rule added:", "  ID: \(rule.id.uuidString)", "  Path: \(pathPrefix)"]
         if !signatures.isEmpty { lines.append("  Signatures: \(signatures.map(\.description).joined(separator: ", "))") }
@@ -346,6 +347,7 @@ enum MCPDispatcher {
             allowedAncestorSignatures: existing.allowedAncestorSignatures,
             enforceOnWriteOnly: enforceOnWriteOnly
         )
+        try requireSpotlightRiskAcknowledgement(for: updated, acknowledgement: spotlightRiskAcknowledgement(from: args))
         try await store.update(updated)
         var lines = [
             "Rule updated:",
@@ -401,6 +403,12 @@ enum MCPDispatcher {
     }
 
     // MARK: - Helpers
+
+    private static func spotlightRiskAcknowledgement(from args: [String: JSONValue]) -> SpotlightRiskAcknowledgement {
+        args["acknowledge_spotlight_risk"]?.boolValue == true ? .acknowledged : .notAcknowledged
+    }
+
+    private static let spotlightRiskParameterDescription = "Set to true only when the user accepts that this rule allows a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them). An allowed indexer lets any account read the protected files with mdimport. Without this flag such a rule is refused and not saved."
 
     private static func parseSignatures(from value: JSONValue?) throws -> [ProcessSignature] {
         guard let value else { return [] }
@@ -492,7 +500,8 @@ enum MCPDispatcher {
                 "protected_path_prefix":  (type: "string",  description: "Path to protect (e.g. /Users/*/Library/Mail)", required: true),
                 "allowed_signatures":     (type: "array",   description: "Allowed signing IDs as [\"teamID:signingID\"]. Apple binaries: \"apple:com.apple.Foo\".", required: false),
                 "enforce_on_write_only":  (type: "boolean", description: "When true, the rule only enforces on writes (rename/unlink/link/create/truncate/copyfile/exchangedata/clone, plus opens with FWRITE/O_APPEND/O_TRUNC). Reads from any process pass through. Defaults to false.", required: false),
-                "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false)
+                "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false),
+                "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
             ]
         ),
         toolDef(
@@ -501,7 +510,8 @@ enum MCPDispatcher {
             params: [
                 "id":                     (type: "string",  description: "UUID of the user rule to update", required: true),
                 "allowed_signatures":     (type: "array",   description: "Complete new list of signatures as [\"teamID:signingID\"]", required: true),
-                "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false)
+                "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false),
+                "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
             ]
         ),
         toolDef(
