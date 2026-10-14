@@ -27,12 +27,14 @@ protocol PolicyDatabaseProtocol: AnyObject {
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule>
     func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag>
     func loadBundleUpdaterSignaturesResult() -> DatabaseLoadResult<BundleUpdaterSignature>
+    func loadUserQuietListResult() -> DatabaseLoadResult<QuietListEntry>
     func saveUserRules(_ rules: [FAARule])
     func saveUserAllowlist(_ entries: [AllowlistEntry])
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry])
     func saveUserJailRules(_ rules: [JailRule])
     func saveFeatureFlags(_ flags: [FeatureFlag])
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature])
+    func saveUserQuietList(_ entries: [QuietListEntry])
 }
 
 // MARK: - PolicyRepository
@@ -46,6 +48,8 @@ final class PolicyRepository: @unchecked Sendable {
         var userAllowlist: [AllowlistEntry] = []
         var managedAncestorAllowlist: [AncestorAllowlistEntry] = []
         var userAncestorAllowlist: [AncestorAllowlistEntry] = []
+        var managedQuietList: [QuietListEntry] = []
+        var userQuietList: [QuietListEntry] = []
         var managedJailRules: [JailRule] = []
         var userJailRules: [JailRule] = []
         var pendingSuspectUserRules: [FAARule]?
@@ -64,12 +68,14 @@ final class PolicyRepository: @unchecked Sendable {
         database: PolicyDatabaseProtocol,
         managedRules: [FAARule] = [],
         managedAllowlist: [AllowlistEntry] = [],
+        managedQuietList: [QuietListEntry] = [],
         managedJailRules: [JailRule] = [],
         xprotectEntries: [AllowlistEntry] = []
     ) {
         var initialState = State()
         initialState.managedRules = managedRules
         initialState.managedAllowlist = managedAllowlist
+        initialState.managedQuietList = managedQuietList
         initialState.managedJailRules = managedJailRules
         initialState.xprotectEntries = xprotectEntries
 
@@ -97,6 +103,13 @@ final class PolicyRepository: @unchecked Sendable {
             // high impact. Silently discard and log — the user will notice that their
             // ancestor entries are gone and can re-add them after investigating.
             logger.warning("PolicyRepository: Signature issue for user_ancestor_allowlist — discarding \(entries.count) suspect entry/entries")
+        }
+
+        switch database.loadUserQuietListResult() {
+        case .ok(let entries):
+            initialState.userQuietList = entries
+        case .suspect(let entries):
+            logger.warning("PolicyRepository: Signature issue for user_quiet_list — discarding \(entries.count) suspect entry/entries")
         }
 
         switch database.loadUserJailRulesResult() {
@@ -176,6 +189,14 @@ final class PolicyRepository: @unchecked Sendable {
         storage.withLock { baselineAllowlist + $0.xprotectEntries + $0.managedAllowlist + $0.userAllowlist }
     }
 
+    func mergedQuietList() -> [QuietListEntry] {
+        storage.withLock { baselineQuietList + $0.managedQuietList + $0.userQuietList }
+    }
+
+    func managedQuietList() -> [QuietListEntry] {
+        storage.withLock { $0.managedQuietList }
+    }
+
     func mergedAncestorAllowlist() -> [AncestorAllowlistEntry] {
         storage.withLock { $0.managedAncestorAllowlist + $0.userAncestorAllowlist }
     }
@@ -249,6 +270,24 @@ final class PolicyRepository: @unchecked Sendable {
             return state.userAncestorAllowlist
         }
         database.saveUserAncestorAllowlist(entries)
+    }
+
+    // MARK: - Quiet list mutations
+
+    func addQuietListEntry(_ entry: QuietListEntry) {
+        let entries = storage.withLock { state -> [QuietListEntry] in
+            state.userQuietList.append(entry)
+            return state.userQuietList
+        }
+        database.saveUserQuietList(entries)
+    }
+
+    func removeQuietListEntry(entryID: UUID) {
+        let entries = storage.withLock { state -> [QuietListEntry] in
+            state.userQuietList.removeAll { $0.id == entryID }
+            return state.userQuietList
+        }
+        database.saveUserQuietList(entries)
     }
 
     // MARK: - Jail rule mutations
@@ -435,6 +474,22 @@ final class PolicyRepository: @unchecked Sendable {
         let entries = storage.withLock { $0.userAncestorAllowlist }
         guard let data = try? JSONEncoder().encode(entries) else {
             fatalError("PolicyRepository: Failed to encode user ancestor allowlist — this is a bug")
+        }
+        return data as NSData
+    }
+
+    func encodedManagedQuietList() -> NSData {
+        let entries = storage.withLock { $0.managedQuietList }
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("PolicyRepository: Failed to encode managed quiet list — this is a bug")
+        }
+        return data as NSData
+    }
+
+    func encodedUserQuietList() -> NSData {
+        let entries = storage.withLock { $0.userQuietList }
+        guard let data = try? JSONEncoder().encode(entries) else {
+            fatalError("PolicyRepository: Failed to encode user quiet list — this is a bug")
         }
         return data as NSData
     }

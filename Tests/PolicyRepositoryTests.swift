@@ -14,12 +14,14 @@ private final class FakeDatabase: PolicyDatabaseProtocol {
     var userAncestorAllowlistResult: DatabaseLoadResult<AncestorAllowlistEntry> = .ok([])
     var userJailRulesResult: DatabaseLoadResult<JailRule> = .ok([])
     var featureFlagsResult: DatabaseLoadResult<FeatureFlag> = .ok([])
+    var userQuietListResult: DatabaseLoadResult<QuietListEntry> = .ok([])
 
     private(set) var savedRules: [FAARule] = []
     private(set) var savedAllowlist: [AllowlistEntry] = []
     private(set) var savedAncestorAllowlist: [AncestorAllowlistEntry] = []
     private(set) var savedJailRules: [JailRule] = []
     private(set) var savedFeatureFlags: [FeatureFlag] = []
+    private(set) var savedQuietList: [QuietListEntry] = []
 
     func loadUserRulesResult() -> DatabaseLoadResult<FAARule> { userRulesResult }
     func loadUserAllowlistResult() -> DatabaseLoadResult<AllowlistEntry> { userAllowlistResult }
@@ -27,12 +29,14 @@ private final class FakeDatabase: PolicyDatabaseProtocol {
     func loadUserJailRulesResult() -> DatabaseLoadResult<JailRule> { userJailRulesResult }
     func loadFeatureFlagsResult() -> DatabaseLoadResult<FeatureFlag> { featureFlagsResult }
     func loadBundleUpdaterSignaturesResult() -> DatabaseLoadResult<BundleUpdaterSignature> { .ok([]) }
+    func loadUserQuietListResult() -> DatabaseLoadResult<QuietListEntry> { userQuietListResult }
     func saveUserRules(_ rules: [FAARule]) { savedRules = rules }
     func saveUserAllowlist(_ entries: [AllowlistEntry]) { savedAllowlist = entries }
     func saveUserAncestorAllowlist(_ entries: [AncestorAllowlistEntry]) { savedAncestorAllowlist = entries }
     func saveUserJailRules(_ rules: [JailRule]) { savedJailRules = rules }
     func saveFeatureFlags(_ flags: [FeatureFlag]) { savedFeatureFlags = flags }
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {}
+    func saveUserQuietList(_ entries: [QuietListEntry]) { savedQuietList = entries }
 }
 
 // MARK: - Factories
@@ -51,6 +55,10 @@ private func makeEntry(id: UUID = UUID(), signingID: String = "com.example.app")
 
 private func makeAncestorEntry(id: UUID = UUID(), signingID: String = "com.example.ancestor") -> AncestorAllowlistEntry {
     AncestorAllowlistEntry(id: id, signingID: signingID, processPath: "", platformBinary: false, teamID: "")
+}
+
+private func makeQuietEntry(id: UUID = UUID(), signingID: String = "com.example.noisy") -> QuietListEntry {
+    QuietListEntry(id: id, signingID: signingID, processPath: "", platformBinary: false, teamID: "TEAM123")
 }
 
 // MARK: - PolicyRepositoryTests
@@ -285,6 +293,97 @@ struct PolicyRepositoryTests {
 
         #expect(!repo.mergedAncestorAllowlist().contains { $0.id == entry.id })
         #expect(db.savedAncestorAllowlist.isEmpty)
+    }
+
+    // MARK: - Quiet list
+
+    @Test("loads user quiet list from database on init")
+    func loadsUserQuietListFromDatabase() {
+        let entry = makeQuietEntry()
+        let db = FakeDatabase()
+        db.userQuietListResult = .ok([entry])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(repo.mergedQuietList().contains { $0.id == entry.id })
+    }
+
+    @Test("suspect user quiet list is discarded without a pending issue")
+    func suspectUserQuietListIsDiscarded() {
+        let entry = makeQuietEntry()
+        let db = FakeDatabase()
+        db.userQuietListResult = .suspect([entry])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(!repo.hasPendingSignatureIssue)
+        #expect(repo.mergedQuietList().map(\.id) == baselineQuietList.map(\.id))
+    }
+
+    @Test("mergedQuietList orders baseline then managed then user")
+    func mergedQuietListOrder() {
+        let managed = makeQuietEntry(signingID: "managed.noisy")
+        let user = makeQuietEntry(signingID: "user.noisy")
+        let repo = PolicyRepository(database: FakeDatabase(), managedQuietList: [managed])
+        repo.addQuietListEntry(user)
+
+        let merged = repo.mergedQuietList()
+
+        #expect(merged.map(\.id) == baselineQuietList.map(\.id) + [managed.id, user.id])
+    }
+
+    @Test("managedQuietList returns only managed entries")
+    func managedQuietListReturnsManagedEntries() {
+        let managed = makeQuietEntry(signingID: "managed.noisy")
+        let repo = PolicyRepository(database: FakeDatabase(), managedQuietList: [managed])
+
+        #expect(repo.managedQuietList() == [managed])
+    }
+
+    @Test("addQuietListEntry appends and persists")
+    func addQuietListEntryAppendsAndPersists() {
+        let entry = makeQuietEntry()
+        let db = FakeDatabase()
+        let repo = PolicyRepository(database: db)
+
+        repo.addQuietListEntry(entry)
+
+        #expect(repo.mergedQuietList().contains { $0.id == entry.id })
+        #expect(db.savedQuietList == [entry])
+    }
+
+    @Test("removeQuietListEntry deletes by ID and persists")
+    func removeQuietListEntryDeletesAndPersists() {
+        let entry = makeQuietEntry()
+        let db = FakeDatabase()
+        let repo = PolicyRepository(database: db)
+        repo.addQuietListEntry(entry)
+
+        repo.removeQuietListEntry(entryID: entry.id)
+
+        #expect(!repo.mergedQuietList().contains { $0.id == entry.id })
+        #expect(db.savedQuietList.isEmpty)
+    }
+
+    @Test("encodedUserQuietList round-trips through JSON")
+    func encodedUserQuietListRoundTrips() throws {
+        let entry = makeQuietEntry()
+        let repo = PolicyRepository(database: FakeDatabase())
+        repo.addQuietListEntry(entry)
+
+        let decoded = try JSONDecoder().decode([QuietListEntry].self, from: repo.encodedUserQuietList() as Data)
+
+        #expect(decoded == [entry])
+    }
+
+    @Test("encodedManagedQuietList round-trips through JSON")
+    func encodedManagedQuietListRoundTrips() throws {
+        let managed = makeQuietEntry(signingID: "managed.noisy")
+        let repo = PolicyRepository(database: FakeDatabase(), managedQuietList: [managed])
+
+        let decoded = try JSONDecoder().decode([QuietListEntry].self, from: repo.encodedManagedQuietList() as Data)
+
+        #expect(decoded == [managed])
     }
 
     // MARK: - Resync
