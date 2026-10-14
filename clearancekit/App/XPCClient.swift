@@ -47,8 +47,8 @@ final class XPCClient: NSObject, ObservableObject {
     private var connection: NSXPCConnection?
     private var reconnectTimer: Timer?
     private let reconnectInterval: TimeInterval = 5.0
-    private var lastDenyNotificationDate: Date?
-    private let denyNotificationDebounce: TimeInterval = 30.0
+    private static let denyNotificationDebounceInterval: TimeInterval = 30.0
+    private var denyNotificationThrottle = DenyNotificationThrottle(debounceInterval: XPCClient.denyNotificationDebounceInterval)
     /// Events buffered since the last flush. Not published — only `events` triggers SwiftUI repaints.
     private var pendingEvents: [FolderOpenEvent] = []
     private var pendingTamperEvents: [TamperAttemptEvent] = []
@@ -581,11 +581,7 @@ final class XPCClient: NSObject, ObservableObject {
     // MARK: - Events
 
     private func sendDenyNotificationIfNeeded(for event: FolderOpenEvent) {
-        let now = Date()
-        if let last = lastDenyNotificationDate, now.timeIntervalSince(last) < denyNotificationDebounce {
-            return
-        }
-        lastDenyNotificationDate = now
+        guard case .post = denyNotificationThrottle.evaluate(event, at: Date()) else { return }
 
         let content = UNMutableNotificationContent()
         content.title = "Access Denied"
