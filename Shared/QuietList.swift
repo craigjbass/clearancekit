@@ -60,6 +60,12 @@ public let spotlightIndexerSigningIDs = [
     "com.apple.mdsync",
 ]
 
+private let appleSigningIDPrefix = "com.apple."
+
+public let spotlightIndexerBinaryNames: Set<String> = Set(
+    spotlightIndexerSigningIDs.map { String($0.dropFirst(appleSigningIDPrefix.count)) }
+)
+
 // MARK: - Baseline quiet list
 
 private let baselineQuietListIDPrefix = "D0000000-0000-0000-0000-"

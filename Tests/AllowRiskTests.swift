@@ -53,11 +53,36 @@ struct AllowRiskTests {
         #expect(allowRisk(for: AllowlistEntry(signingID: "com.apple.mds", teamID: "TEAM123")) == .noKnownRisk)
     }
 
-    @Test("path-only allowlist entry is not a risk")
-    func pathOnlyAllowlistEntryIsNotRisk() {
+    @Test("path-only allowlist entry for an indexer binary is a risk")
+    func pathOnlyAllowlistEntryIsRisk() {
         let entry = AllowlistEntry(processPath: "/System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared", platformBinary: true)
 
-        #expect(allowRisk(for: entry) == .noKnownRisk)
+        #expect(allowRisk(for: entry) == .spotlightIndexer)
+    }
+
+    @Test("path-only ancestor allowlist entry for an indexer binary is a risk")
+    func pathOnlyAncestorEntryForIndexerIsRisk() {
+        #expect(allowRisk(for: AncestorAllowlistEntry(processPath: "/System/Library/PrivateFrameworks/Spotlight.framework/mds")) == .spotlightIndexer)
+    }
+
+    @Test("rule allowing an indexer binary by process path is a risk")
+    func ruleWithIndexerProcessPathIsRisk() {
+        let rule = FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedProcessPaths: ["/usr/libexec/mdsync"])
+
+        #expect(allowRisk(for: rule) == .spotlightIndexer)
+    }
+
+    @Test("rule allowing an indexer binary by ancestor process path is a risk")
+    func ruleWithIndexerAncestorProcessPathIsRisk() {
+        let rule = FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedAncestorProcessPaths: ["/usr/libexec/mdworker"])
+
+        #expect(allowRisk(for: rule) == .spotlightIndexer)
+    }
+
+    @Test("process paths that only resemble an indexer binary are not a risk", arguments: ["/usr/libexec/mds_stores", "/tmp/mdworker_shared_helper"])
+    func lookalikePathIsNotRisk(path: String) {
+        #expect(allowRisk(for: AllowlistEntry(processPath: path)) == .noKnownRisk)
+        #expect(allowRisk(for: FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedProcessPaths: [path])) == .noKnownRisk)
     }
 
     @Test("ancestor allowlist entry for an indexer is a risk")
@@ -65,7 +90,7 @@ struct AllowRiskTests {
         #expect(allowRisk(for: AncestorAllowlistEntry(signingID: "com.apple.mdworker_shared", platformBinary: true)) == .spotlightIndexer)
     }
 
-    @Test("path-only ancestor allowlist entry is not a risk")
+    @Test("path-only ancestor allowlist entry for another binary is not a risk")
     func pathOnlyAncestorAllowlistEntryIsNotRisk() {
         #expect(allowRisk(for: AncestorAllowlistEntry(processPath: "/usr/bin/mdimport")) == .noKnownRisk)
     }

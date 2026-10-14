@@ -24,12 +24,19 @@ public func allowRisk(for entry: AncestorAllowlistEntry) -> AllowRisk {
 
 public func allowRisk(for rule: FAARule) -> AllowRisk {
     let signatures = rule.allowedSignatures + rule.allowedAncestorSignatures + rule.authorizedSignatures
-    let allowsIndexer = signatures.contains { allowRisk(for: $0) == .spotlightIndexer }
-    return allowsIndexer ? .spotlightIndexer : .noKnownRisk
+    let allowsIndexerSignature = signatures.contains { allowRisk(for: $0) == .spotlightIndexer }
+    let allowsIndexerPath = (rule.allowedProcessPaths + rule.allowedAncestorProcessPaths).contains(where: isSpotlightIndexerPath)
+    return allowsIndexerSignature || allowsIndexerPath ? .spotlightIndexer : .noKnownRisk
+}
+
+private func isSpotlightIndexerPath(_ processPath: String) -> Bool {
+    guard !processPath.isEmpty else { return false }
+    return spotlightIndexerBinaryNames.contains(URL(fileURLWithPath: processPath).lastPathComponent)
 }
 
 private func riskOfMatchCriteria(_ criteria: ProcessMatchCriteria) -> AllowRisk {
-    riskWhenAnyIndexerMatches { criteria.matches(processPath: "", signingID: $0, teamID: appleTeamID) }
+    if isSpotlightIndexerPath(criteria.processPath) { return .spotlightIndexer }
+    return riskWhenAnyIndexerMatches { criteria.matches(processPath: "", signingID: $0, teamID: appleTeamID) }
 }
 
 private func riskWhenAnyIndexerMatches(_ matchesIndexer: (String) -> Bool) -> AllowRisk {
