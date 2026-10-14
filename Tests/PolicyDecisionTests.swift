@@ -1299,13 +1299,6 @@ struct RequireValidSigningTests {
 
 @Suite("baselineAllowlist Spotlight indexers")
 struct BaselineAllowlistSpotlightTests {
-    static let spotlightIndexerSigningIDs = [
-        "com.apple.mdworker",
-        "com.apple.mdworker_shared",
-        "com.apple.mds",
-        "com.apple.mdsync",
-    ]
-
     @Test("indexer is not on the baseline allowlist", arguments: spotlightIndexerSigningIDs)
     func indexerIsNotOnBaselineAllowlist(signingID: String) {
         #expect(!isGloballyAllowed(allowlist: baselineAllowlist, processPath: "/System/indexer", signingID: signingID, teamID: "apple"))
