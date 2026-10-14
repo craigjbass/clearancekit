@@ -358,8 +358,23 @@ private func migration011AddEpochColumn(_ db: Database) {
 // which storedDoubleStarParentMatching maps to the implied value, so
 // FAARule.encode(to:) omits the field and the existing user_rules
 // signature still verifies on first launch after upgrade.
+//
+// The ALTER is skipped when the column exists, because another branch also
+// introduced a version-12 migration and a database may have run this ALTER
+// under a different version number.
 
 private func migration012AddDoubleStarParentMatchingColumn(_ db: Database) {
+    var columnAlreadyExists = false
+    db.query("PRAGMA table_info(user_rules)") { stmt in
+        guard let namePointer = sqlite3_column_text(stmt, 1) else { return }
+        if String(cString: namePointer) == "double_star_parent_matching" {
+            columnAlreadyExists = true
+        }
+    }
+    guard !columnAlreadyExists else {
+        NSLog("Migration 012: double_star_parent_matching column already present on user_rules, skipping ALTER")
+        return
+    }
     db.execute("ALTER TABLE user_rules ADD COLUMN double_star_parent_matching TEXT")
     NSLog("Migration 012: Added double_star_parent_matching column to user_rules")
 }
