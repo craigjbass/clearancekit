@@ -383,12 +383,15 @@ final class XPCServer: NSObject, @unchecked Sendable {
             guard let context else { reply(); return }
             let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
+            let reloadedQuietList = ManagedQuietListLoader.loadWithSync()
+                .resolved(keeping: context.policyRepository.managedQuietList())
             let reloadedJailRules = ManagedJailRuleLoader.loadWithSync()
             let reloadedXProtect = enumerateXProtectEntries()
 
             context.policyRepository.resync(
                 managedRules: reloadedRules,
                 managedAllowlist: reloadedAllowlist,
+                managedQuietList: reloadedQuietList,
                 managedJailRules: reloadedJailRules,
                 xprotectEntries: reloadedXProtect
             )

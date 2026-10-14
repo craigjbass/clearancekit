@@ -266,3 +266,104 @@ struct ManagedAllowlistEntryParserTests {
         #expect(allowlistEntry?.id == policyRule?.id)
     }
 }
+
+// MARK: - parseManagedQuietList
+
+@Suite("parseManagedQuietList")
+struct ManagedQuietListParserTests {
+
+    @Test("missing preference is absent")
+    func missingPreferenceIsAbsent() {
+        guard case .absent = parseManagedQuietList(nil) else {
+            Issue.record("Expected .absent")
+            return
+        }
+    }
+
+    @Test("parses valid entries")
+    func parsesValidEntries() {
+        let id = UUID()
+        let preference: [Any] = [
+            ["ID": id.uuidString, "SigningID": "com.example.noisy", "TeamID": "TEAM123"],
+            ["ProcessPath": "/usr/local/bin/noisy"],
+            ["SigningID": "com.apple.noisy", "PlatformBinary": true] as [String: Any],
+        ]
+
+        guard case .entries(let entries) = parseManagedQuietList(preference) else {
+            Issue.record("Expected .entries")
+            return
+        }
+
+        #expect(entries.count == 3)
+        #expect(entries[0] == QuietListEntry(id: id, signingID: "com.example.noisy", processPath: "", platformBinary: false, teamID: "TEAM123"))
+        #expect(entries[1].processPath == "/usr/local/bin/noisy")
+        #expect(entries[2].platformBinary)
+    }
+
+    @Test("skips an entry with no SigningID or ProcessPath")
+    func skipsInvalidEntry() {
+        let preference: [Any] = [
+            ["TeamID": "TEAM123"],
+            ["SigningID": "com.example.noisy"],
+        ]
+
+        guard case .entries(let entries) = parseManagedQuietList(preference) else {
+            Issue.record("Expected .entries")
+            return
+        }
+
+        #expect(entries.map(\.signingID) == ["com.example.noisy"])
+    }
+
+    @Test("skips an item that is not a dictionary")
+    func skipsNonDictionaryItem() {
+        let preference: [Any] = [
+            "com.example.noisy",
+            ["SigningID": "com.example.other"],
+        ]
+
+        guard case .entries(let entries) = parseManagedQuietList(preference) else {
+            Issue.record("Expected .entries")
+            return
+        }
+
+        #expect(entries.map(\.signingID) == ["com.example.other"])
+    }
+
+    @Test("a value that is not an array is malformed")
+    func nonArrayIsMalformed() {
+        guard case .malformed = parseManagedQuietList("com.example.noisy") else {
+            Issue.record("Expected .malformed")
+            return
+        }
+    }
+
+    @Test("derives a deterministic ID from SigningID when ID is absent")
+    func derivesDeterministicID() {
+        let entry = parseManagedQuietListEntry(["SigningID": "com.example.noisy"])
+
+        #expect(entry?.id == uuidV5(namespace: uuidV5URLNamespace, name: "com.example.noisy"))
+    }
+}
+
+@Suite("ManagedQuietListPreference.resolved")
+struct ManagedQuietListPreferenceTests {
+    private let previous = [QuietListEntry(id: UUID(), signingID: "com.example.previous", processPath: "", platformBinary: false, teamID: "")]
+
+    @Test("absent resolves to an empty list")
+    func absentResolvesToEmpty() {
+        #expect(ManagedQuietListPreference.absent.resolved(keeping: previous).isEmpty)
+    }
+
+    @Test("entries resolve to the new entries")
+    func entriesResolveToNewEntries() {
+        let replacement = [QuietListEntry(id: UUID(), signingID: "com.example.new", processPath: "", platformBinary: false, teamID: "")]
+
+        #expect(ManagedQuietListPreference.entries(replacement).resolved(keeping: previous) == replacement)
+    }
+
+    @Test("malformed keeps the previous list")
+    func malformedKeepsPrevious() {
+        #expect(ManagedQuietListPreference.malformed.resolved(keeping: previous) == previous)
+    }
+}

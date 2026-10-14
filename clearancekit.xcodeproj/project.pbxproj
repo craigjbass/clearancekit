@@ -130,6 +130,7 @@
 				Info.plist,
 				main.swift,
 				Policy/ManagedAllowlistLoader.swift,
+				Policy/ManagedQuietListLoader.swift,
 				Policy/ManagedPolicyLoader.swift,
 				Policy/PolicySigner.swift,
 				XPC/ConnectionValidator.swift,

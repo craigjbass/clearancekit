@@ -394,11 +394,22 @@ struct PolicyRepositoryTests {
         let repo = PolicyRepository(database: FakeDatabase(), managedRules: [initial])
         let replacement = makeRule(prefix: "/after", source: .mdm)
 
-        repo.resync(managedRules: [replacement], managedAllowlist: [], managedJailRules: [], xprotectEntries: [])
+        repo.resync(managedRules: [replacement], managedAllowlist: [], managedQuietList: [], managedJailRules: [], xprotectEntries: [])
 
         let merged = repo.mergedRules()
         #expect(!merged.contains { $0.id == initial.id })
         #expect(merged.contains { $0.id == replacement.id })
+    }
+
+    @Test("resync replaces the managed quiet list")
+    func resyncReplacesManagedQuietList() {
+        let initial = makeQuietEntry(signingID: "before.noisy")
+        let replacement = makeQuietEntry(signingID: "after.noisy")
+        let repo = PolicyRepository(database: FakeDatabase(), managedQuietList: [initial])
+
+        repo.resync(managedRules: [], managedAllowlist: [], managedQuietList: [replacement], managedJailRules: [], xprotectEntries: [])
+
+        #expect(repo.managedQuietList() == [replacement])
     }
 
     @Test("updateXProtectEntries returns true when paths change")

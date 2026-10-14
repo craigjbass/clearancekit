@@ -157,12 +157,14 @@ final class PolicyRepository: @unchecked Sendable {
     func resync(
         managedRules: [FAARule],
         managedAllowlist: [AllowlistEntry],
+        managedQuietList: [QuietListEntry],
         managedJailRules: [JailRule],
         xprotectEntries: [AllowlistEntry]
     ) {
         storage.withLock {
             $0.managedRules = managedRules
             $0.managedAllowlist = managedAllowlist
+            $0.managedQuietList = managedQuietList
             $0.managedJailRules = managedJailRules
             $0.xprotectEntries = xprotectEntries
         }
