@@ -95,6 +95,25 @@ private func directoryOperationEvent(
     )
 }
 
+enum AncestryOutcome: CaseIterable, Sendable {
+    case matching
+    case mismatching
+
+    var ancestorPath: String {
+        switch self {
+        case .matching: return "/usr/bin/parent"
+        case .mismatching: return "/usr/bin/stranger"
+        }
+    }
+
+    var expectedAllowed: Bool {
+        switch self {
+        case .matching: return true
+        case .mismatching: return false
+        }
+    }
+}
+
 // MARK: - FileAuthPipelineTests
 
 @Suite("FileAuthPipeline", .serialized)
@@ -703,6 +722,36 @@ struct FileAuthPipelineTests {
         postRespondCalled.wait()
 
         #expect(allowedResult.withLock { $0 } == false)
+    }
+
+    @Test("directory rename on a parent of an ancestry-gated rule is decided on the slow path by ancestry", arguments: [AncestryOutcome.mismatching, .matching])
+    func directoryRenameOnParentOfAncestryGatedRule(outcome: AncestryOutcome) {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        processTree.ancestorsResult = [AncestorInfo(path: outcome.ancestorPath, teamID: "", signingID: "")]
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: false)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorProcessPaths: ["/usr/bin/parent"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(operation: .rename, path: "/Users/develop/goal", secondaryPath: "/private/tmp/out", movedEntryKind: .directory) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == outcome.expectedAllowed)
+        #expect(pipeline.metrics().slowQueueEnqueueCount == 1)
     }
 
     @Test("open of a parent of a protected path is not covered by any rule")

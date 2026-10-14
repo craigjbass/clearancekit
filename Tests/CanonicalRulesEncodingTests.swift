@@ -282,4 +282,19 @@ struct CanonicalRulesEncodingTests {
 
         #expect(String(data: canonicalRulesJSON([rowRule]), encoding: .utf8) == storedJSON)
     }
+
+    @Test("stored In-Memory rule JSON without doubleStarParentMatching equals the preset's explicit stop-at-double-star rule")
+    func storedInMemoryRuleEqualsPresetRule() throws {
+        let pattern = "/private/var/folders/**/NSCreateObjectFileImageFromMemory-*"
+        let storedJSON = #"{"id":"7F541614-31BF-4525-803F-794C578771E5","protectedPathPrefix":"\/private\/var\/folders\/**\/NSCreateObjectFileImageFromMemory-*"}"#
+        let presetRule = FAARule(
+            id: UUID(uuidString: "7F541614-31BF-4525-803F-794C578771E5")!,
+            protectedPathPrefix: pattern,
+            doubleStarParentMatching: .stopAtDoubleStar
+        )
+
+        let decoded = try JSONDecoder().decode(FAARule.self, from: Data(storedJSON.utf8))
+
+        #expect(decoded == presetRule)
+    }
 }
