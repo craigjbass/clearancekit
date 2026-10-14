@@ -9,10 +9,15 @@ final class PostRespondHandler: @unchecked Sendable {
     var onEvent: ((FolderOpenEvent) -> Void)?
 
     private let postRespondQueue: DispatchQueue
+    private let quietListProvider: @Sendable () -> [QuietListEntry]
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
 
-    init(postRespondQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)) {
+    init(
+        quietListProvider: @escaping @Sendable () -> [QuietListEntry],
+        postRespondQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.post-respond", qos: .background)
+    ) {
+        self.quietListProvider = quietListProvider
         self.postRespondQueue = postRespondQueue
     }
 
@@ -41,9 +46,20 @@ final class PostRespondHandler: @unchecked Sendable {
                 ancestors: ancestors,
                 matchedRuleID: decision.matchedRuleID,
                 jailedRuleID: decision.jailedRuleID,
+                notificationPolicy: resolveNotificationPolicy(for: fileEvent, decision: decision),
                 eventID: fileEvent.correlationID
             )
             onEvent?(folderOpenEvent)
         }
+    }
+
+    private func resolveNotificationPolicy(for fileEvent: FileAuthEvent, decision: PolicyDecision) -> NotificationPolicy {
+        guard !decision.isAllowed else { return .notify }
+        return notificationPolicy(
+            processPath: fileEvent.processPath,
+            signingID: fileEvent.signingID,
+            teamID: fileEvent.teamID,
+            quietList: quietListProvider()
+        )
     }
 }

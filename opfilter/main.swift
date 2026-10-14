@@ -82,7 +82,10 @@ let policyRepository = PolicyRepository(
     xprotectEntries: xprotectEntries
 )
 
-let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
+let postRespondHandler = PostRespondHandler(
+    quietListProvider: { policyRepository.mergedQuietList() },
+    postRespondQueue: postRespondQueue
+)
 let allowlistState = AllowlistState()
 let authorizationGate = AuthorizationGate()
 

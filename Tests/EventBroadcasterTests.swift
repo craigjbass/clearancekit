@@ -16,7 +16,8 @@ struct EventBroadcasterTests {
             path: path,
             timestamp: Date(),
             processID: 100,
-            processPath: "/usr/bin/test"
+            processPath: "/usr/bin/test",
+            notificationPolicy: .notify
         )
     }
 
@@ -177,9 +178,9 @@ struct EventBroadcasterTests {
         let conn = NSXPCConnection()
         broadcaster.addClient(conn)
 
-        let deny = FolderOpenEvent(path: "/deny", timestamp: Date(timeIntervalSince1970: 1), processID: 1, processPath: "/p", accessAllowed: false)
-        let allowOld = FolderOpenEvent(path: "/old", timestamp: Date(timeIntervalSince1970: 2), processID: 2, processPath: "/p", accessAllowed: true)
-        let allowNew = FolderOpenEvent(path: "/new", timestamp: Date(timeIntervalSince1970: 3), processID: 3, processPath: "/p", accessAllowed: true)
+        let deny = FolderOpenEvent(path: "/deny", timestamp: Date(timeIntervalSince1970: 1), processID: 1, processPath: "/p", accessAllowed: false, notificationPolicy: .notify)
+        let allowOld = FolderOpenEvent(path: "/old", timestamp: Date(timeIntervalSince1970: 2), processID: 2, processPath: "/p", accessAllowed: true, notificationPolicy: .notify)
+        let allowNew = FolderOpenEvent(path: "/new", timestamp: Date(timeIntervalSince1970: 3), processID: 3, processPath: "/p", accessAllowed: true, notificationPolicy: .notify)
 
         broadcaster.broadcast(deny)
         broadcaster.broadcast(allowOld)
@@ -200,7 +201,8 @@ struct EventBroadcasterTests {
             timestamp: Date(),
             processID: 100,
             processPath: "/usr/bin/test",
-            accessAllowed: true
+            accessAllowed: true,
+            notificationPolicy: .notify
         )
 
         broadcaster.broadcast(event)

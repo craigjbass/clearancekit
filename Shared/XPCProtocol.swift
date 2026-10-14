@@ -77,6 +77,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let ancestors: [AncestorInfo]
     public let matchedRuleID: UUID?
     public let jailedRuleID: UUID?
+    public let notificationPolicy: NotificationPolicy
 
     public init(
         operation: String = "open",
@@ -93,6 +94,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         ancestors: [AncestorInfo] = [],
         matchedRuleID: UUID? = nil,
         jailedRuleID: UUID? = nil,
+        notificationPolicy: NotificationPolicy,
         eventID: UUID = UUID()
     ) {
         self.eventID = eventID
@@ -110,6 +112,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = ancestors
         self.matchedRuleID = matchedRuleID
         self.jailedRuleID = jailedRuleID
+        self.notificationPolicy = notificationPolicy
         super.init()
     }
 
@@ -135,6 +138,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = decoded?.compactMap { $0 as? AncestorInfo } ?? []
         self.matchedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "matchedRuleID") as UUID?
         self.jailedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "jailedRuleID") as UUID?
+        // An older opfilter omits the key, and decodeInteger returns 0 (.notify).
+        // An unknown value from a newer opfilter also notifies, so no deny is hidden.
+        self.notificationPolicy = NotificationPolicy(rawValue: coder.decodeInteger(forKey: "notificationPolicy")) ?? .notify
         super.init()
     }
 
@@ -154,6 +160,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(ancestors as NSArray, forKey: "ancestors")
         if let matchedRuleID { coder.encode(matchedRuleID as NSUUID, forKey: "matchedRuleID") }
         if let jailedRuleID { coder.encode(jailedRuleID as NSUUID, forKey: "jailedRuleID") }
+        coder.encode(notificationPolicy.rawValue, forKey: "notificationPolicy")
     }
 
     public override var description: String {
