@@ -68,6 +68,16 @@ extension FileAuthEvent {
         }
     }
 
+    // The ES result cache does not key on the destination path, so a cached
+    // allow for one directory move would also allow the same source to move
+    // onto a protected destination later.
+    var cachesAllowResponse: Bool {
+        switch reach {
+        case .singlePath: return true
+        case .subtree: return false
+        }
+    }
+
     private var movedEntryReach: OperationReach {
         switch movedEntryKind {
         case .directory: return .subtree

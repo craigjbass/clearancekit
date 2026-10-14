@@ -127,7 +127,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         let ancestorAllowlist = ancestorAllowlistProvider()
 
         if isGloballyAllowed(allowlist: allowlist, processPath: event.processPath, signingID: event.signingID, teamID: event.teamID) {
-            event.respond(true, true)
+            event.respond(true, event.cachesAllowResponse)
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .globallyAllowed, ancestors, 0)
@@ -163,7 +163,7 @@ final class FileAuthPipeline: @unchecked Sendable {
 
         switch classification {
         case .noRuleApplies:
-            event.respond(true, true)
+            event.respond(true, event.cachesAllowResponse)
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .noRuleApplies, ancestors, 0)
