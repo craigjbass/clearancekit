@@ -85,57 +85,131 @@ struct PathMatchingTests {
 struct PathContainsProtectedPathsTests {
     @Test("directory matched by the single-star pattern's parent contains protected paths")
     func directoryAboveSingleStarContainsProtectedPaths() {
-        #expect(pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal/*"))
+        #expect(pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal/*", matching: .allNestedDirectories))
     }
 
     @Test("grandparent contains protected paths")
     func grandparentContainsProtectedPaths() {
-        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/*"))
+        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/*", matching: .allNestedDirectories))
     }
 
     @Test("root contains every protected path")
     func rootContainsProtectedPaths() {
-        #expect(pathContainsProtectedPaths("/", by: "/Library/Application Support/clearancekit"))
+        #expect(pathContainsProtectedPaths("/", by: "/Library/Application Support/clearancekit", matching: .allNestedDirectories))
     }
 
     @Test("parent of a literal prefix contains protected paths")
     func parentOfLiteralPrefix() {
-        #expect(pathContainsProtectedPaths("/Library/Application Support", by: "/Library/Application Support/clearancekit"))
+        #expect(pathContainsProtectedPaths("/Library/Application Support", by: "/Library/Application Support/clearancekit", matching: .allNestedDirectories))
     }
 
     @Test("parent matched through a wildcard component contains protected paths")
     func parentThroughWildcardComponent() {
-        #expect(pathContainsProtectedPaths("/Users/admin/Library", by: "/Users/*/Library/Mail"))
+        #expect(pathContainsProtectedPaths("/Users/admin/Library", by: "/Users/*/Library/Mail", matching: .allNestedDirectories))
     }
 
     @Test("double-star pattern makes every deeper directory a parent")
     func doubleStarMakesDeeperDirectoriesParents() {
-        #expect(pathContainsProtectedPaths("/a/b/c", by: "/a/**/secret"))
+        #expect(pathContainsProtectedPaths("/a/b/c", by: "/a/**/secret", matching: .allNestedDirectories))
     }
 
     @Test("trailing slash in the pattern is ignored")
     func trailingSlashInPattern() {
-        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/"))
+        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/", matching: .allNestedDirectories))
     }
 
     @Test("the protected path itself is not reported")
     func protectedPathItselfIsNotReported() {
-        #expect(!pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal"))
+        #expect(!pathContainsProtectedPaths("/Users/develop/goal", by: "/Users/develop/goal", matching: .allNestedDirectories))
     }
 
     @Test("a path below the pattern is not reported")
     func pathBelowPatternIsNotReported() {
-        #expect(!pathContainsProtectedPaths("/Users/develop/goal/gold", by: "/Users/develop/goal/*"))
+        #expect(!pathContainsProtectedPaths("/Users/develop/goal/gold", by: "/Users/develop/goal/*", matching: .allNestedDirectories))
     }
 
     @Test("a sibling that shares a string prefix is not reported")
     func siblingWithSharedStringPrefix() {
-        #expect(!pathContainsProtectedPaths("/Users/developer", by: "/Users/develop/goal/*"))
+        #expect(!pathContainsProtectedPaths("/Users/developer", by: "/Users/develop/goal/*", matching: .allNestedDirectories))
     }
 
     @Test("an unrelated directory is not reported")
     func unrelatedDirectory() {
-        #expect(!pathContainsProtectedPaths("/Users/admin/Documents", by: "/Users/*/Library/Mail"))
+        #expect(!pathContainsProtectedPaths("/Users/admin/Documents", by: "/Users/*/Library/Mail", matching: .allNestedDirectories))
+    }
+}
+
+@Suite("pathContainsProtectedPaths with stopAtDoubleStar")
+struct PathContainsProtectedPathsStopAtDoubleStarTests {
+    private let inMemoryPattern = "/private/var/folders/**/NSCreateObjectFileImageFromMemory-*"
+
+    @Test("directory above the double-star contains protected paths")
+    func directoryAboveDoubleStar() {
+        #expect(pathContainsProtectedPaths("/private/var", by: inMemoryPattern, matching: .stopAtDoubleStar))
+    }
+
+    @Test("directory at the double-star position contains protected paths")
+    func directoryAtDoubleStarPosition() {
+        #expect(pathContainsProtectedPaths("/private/var/folders", by: inMemoryPattern, matching: .stopAtDoubleStar))
+    }
+
+    @Test("directory below the double-star does not count")
+    func directoryBelowDoubleStar() {
+        #expect(!pathContainsProtectedPaths("/private/var/folders/zz/abc/T", by: inMemoryPattern, matching: .stopAtDoubleStar))
+    }
+
+    @Test("directory below the double-star counts with allNestedDirectories")
+    func directoryBelowDoubleStarWithAllNestedDirectories() {
+        #expect(pathContainsProtectedPaths("/private/var/folders/zz/abc/T", by: inMemoryPattern, matching: .allNestedDirectories))
+    }
+
+    @Test("double-star directly below root makes only root a parent")
+    func doubleStarDirectlyBelowRoot() {
+        #expect(pathContainsProtectedPaths("/", by: "/**/secret", matching: .stopAtDoubleStar))
+        #expect(!pathContainsProtectedPaths("/Users", by: "/**/secret", matching: .stopAtDoubleStar))
+    }
+
+    @Test("pattern without a double-star component is not changed")
+    func patternWithoutDoubleStarIsNotChanged() {
+        #expect(pathContainsProtectedPaths("/Users/develop", by: "/Users/develop/goal/*", matching: .stopAtDoubleStar))
+    }
+}
+
+@Suite("DoubleStarParentMatching")
+struct DoubleStarParentMatchingTests {
+    @Test("pattern with a double-star component implies stopAtDoubleStar")
+    func doubleStarPatternImpliesStopAtDoubleStar() {
+        #expect(DoubleStarParentMatching.implied(by: "/a/**/secret") == .stopAtDoubleStar)
+    }
+
+    @Test("pattern without a double-star component implies allNestedDirectories")
+    func plainPatternImpliesAllNestedDirectories() {
+        #expect(DoubleStarParentMatching.implied(by: "/Users/*/Library/Mail") == .allNestedDirectories)
+    }
+
+    @Test("double-star inside a component is not a double-star component")
+    func doubleStarInsideComponentIsNotDoubleStarComponent() {
+        #expect(!patternContainsDoubleStarComponent("/a/b**/c"))
+        #expect(patternContainsDoubleStarComponent("/a/**/c"))
+    }
+
+    @Test("external names parse to the matching case")
+    func externalNamesParse() {
+        #expect(DoubleStarParentMatching(rawValue: "all_nested_directories") == .allNestedDirectories)
+        #expect(DoubleStarParentMatching(rawValue: "stop_at_double_star") == .stopAtDoubleStar)
+        #expect(DoubleStarParentMatching(rawValue: "stopAtDoubleStar") == nil)
+    }
+
+    @Test("FAARule.init uses allNestedDirectories")
+    func initUsesAllNestedDirectories() {
+        #expect(FAARule(protectedPathPrefix: "/a/**/secret").doubleStarParentMatching == .allNestedDirectories)
+    }
+
+    @Test("compatibility mode applies only to double-star patterns set to stopAtDoubleStar")
+    func compatibilityModeAppliesOnlyToDoubleStarPatterns() {
+        #expect(FAARule(protectedPathPrefix: "/a/**/secret", doubleStarParentMatching: .stopAtDoubleStar).usesDoubleStarCompatibilityMode)
+        #expect(!FAARule(protectedPathPrefix: "/a/secret", doubleStarParentMatching: .stopAtDoubleStar).usesDoubleStarCompatibilityMode)
+        #expect(!FAARule(protectedPathPrefix: "/a/**/secret").usesDoubleStarCompatibilityMode)
     }
 }
 
@@ -1359,6 +1433,35 @@ struct RequireValidSigningTests {
 
 @Suite("subtree operations on parent directories")
 struct SubtreeOperationTests {
+    private let inMemoryCompatibilityRule = FAARule(
+        protectedPathPrefix: "/private/var/folders/**/NSCreateObjectFileImageFromMemory-*",
+        enforceOnWriteOnly: true,
+        doubleStarParentMatching: .stopAtDoubleStar
+    )
+
+    @Test("compatibility rule does not cover a directory below the double-star")
+    func compatibilityRuleIgnoresDirectoryBelowDoubleStar() {
+        let decision = decide(rules: [inMemoryCompatibilityRule], path: "/private/var/folders/zz/abc/T/TemporaryItems", secondaryPath: "/private/var/folders/zz/abc/T/TemporaryItems2")
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    @Test("compatibility rule still covers a directory above the double-star")
+    func compatibilityRuleCoversDirectoryAboveDoubleStar() {
+        let decision = decide(rules: [inMemoryCompatibilityRule], path: "/private/var", secondaryPath: "/private/var2")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("classifyPaths ignores a directory below the double-star for a compatibility rule")
+    func classifyPathsIgnoresDirectoryBelowDoubleStarForCompatibilityRule() {
+        guard case .noRuleApplies = classifyPaths("/private/var/folders/zz/abc", secondaryPath: nil, reach: .subtree, rules: [inMemoryCompatibilityRule]) else {
+            Issue.record("Expected .noRuleApplies")
+            return
+        }
+    }
+
     private let goalRule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/Applications/Goal.app/Contents/MacOS/Goal"])
 
     private func decide(

@@ -156,6 +156,23 @@ extension ProcessSignature: CustomStringConvertible {
     public var description: String { "\(teamID):\(signingID)" }
 }
 
+// MARK: - DoubleStarParentMatching
+
+// stopAtDoubleStar keeps the older behaviour for `**` rules: a directory
+// below the `**` can be moved or copied without this rule's permission.
+public enum DoubleStarParentMatching: String, Codable {
+    case allNestedDirectories = "all_nested_directories"
+    case stopAtDoubleStar = "stop_at_double_star"
+
+    public static func implied(by pattern: String) -> DoubleStarParentMatching {
+        patternContainsDoubleStarComponent(pattern) ? .stopAtDoubleStar : .allNestedDirectories
+    }
+}
+
+public func patternContainsDoubleStarComponent(_ pattern: String) -> Bool {
+    pattern.split(separator: "/", omittingEmptySubsequences: true).contains("**")
+}
+
 // MARK: - FAARule
 
 public struct FAARule: Identifiable, Codable, Equatable {
@@ -181,6 +198,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public var authorizedSignatures: [ProcessSignature]
     public let requiresAuthorization: Bool
     public let authorizationSessionDuration: TimeInterval
+    public let doubleStarParentMatching: DoubleStarParentMatching
 
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
@@ -198,7 +216,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         requireValidSigning: Bool = false,
         authorizedSignatures: [ProcessSignature] = [],
         requiresAuthorization: Bool = false,
-        authorizationSessionDuration: TimeInterval = 300
+        authorizationSessionDuration: TimeInterval = 300,
+        doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -212,13 +231,14 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.authorizedSignatures = authorizedSignatures
         self.requiresAuthorization = requiresAuthorization
         self.authorizationSessionDuration = authorizationSessionDuration
+        self.doubleStarParentMatching = doubleStarParentMatching
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures,
              allowedAncestorProcessPaths, allowedAncestorSignatures,
              enforceOnWriteOnly, requireValidSigning,
-             authorizedSignatures, requiresAuthorization, authorizationSessionDuration
+             authorizedSignatures, requiresAuthorization, authorizationSessionDuration, doubleStarParentMatching
     }
 
     public init(from decoder: Decoder) throws {
@@ -235,6 +255,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         authorizedSignatures = (try? c.decode([ProcessSignature].self, forKey: .authorizedSignatures)) ?? []
         requiresAuthorization = (try? c.decode(Bool.self, forKey: .requiresAuthorization)) ?? false
         authorizationSessionDuration = (try? c.decode(TimeInterval.self, forKey: .authorizationSessionDuration)) ?? 300
+        doubleStarParentMatching = try c.decodeIfPresent(DoubleStarParentMatching.self, forKey: .doubleStarParentMatching)
+            ?? .implied(by: protectedPathPrefix)
     }
 
     /// Custom encoder that omits fields when they equal their defaults. This is
@@ -266,6 +288,19 @@ public struct FAARule: Identifiable, Codable, Equatable {
         }
         if authorizationSessionDuration != 300 {
             try c.encode(authorizationSessionDuration, forKey: .authorizationSessionDuration)
+        }
+        if doubleStarParentMatching != .implied(by: protectedPathPrefix) {
+            try c.encode(doubleStarParentMatching, forKey: .doubleStarParentMatching)
+        }
+    }
+}
+
+extension FAARule {
+    public var usesDoubleStarCompatibilityMode: Bool {
+        guard patternContainsDoubleStarComponent(protectedPathPrefix) else { return false }
+        switch doubleStarParentMatching {
+        case .allNestedDirectories: return false
+        case .stopAtDoubleStar: return true
         }
     }
 }
@@ -343,18 +378,25 @@ private func componentPrefixMatches(path: ArraySlice<String>, pattern: ArraySlic
     return componentPrefixMatches(path: path.dropFirst(), pattern: pattern.dropFirst())
 }
 
-public func pathContainsProtectedPaths(_ path: String, by pattern: String) -> Bool {
+public func pathContainsProtectedPaths(_ path: String, by pattern: String, matching: DoubleStarParentMatching) -> Bool {
     let pathParts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
     let patternParts = pattern.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-    return componentsLeadIntoPattern(path: pathParts[...], pattern: patternParts[...])
+    return componentsLeadIntoPattern(path: pathParts[...], pattern: patternParts[...], matching: matching)
 }
 
-private func componentsLeadIntoPattern(path: ArraySlice<String>, pattern: ArraySlice<String>) -> Bool {
+private func componentsLeadIntoPattern(path: ArraySlice<String>, pattern: ArraySlice<String>, matching: DoubleStarParentMatching) -> Bool {
     guard let patternHead = pattern.first else { return false }
     guard let pathHead = path.first else { return true }
-    if patternHead == "**" { return true }
+    if patternHead == "**" { return pathBelowDoubleStarCounts(matching) }
     guard globMatches(string: pathHead, pattern: patternHead) else { return false }
-    return componentsLeadIntoPattern(path: path.dropFirst(), pattern: pattern.dropFirst())
+    return componentsLeadIntoPattern(path: path.dropFirst(), pattern: pattern.dropFirst(), matching: matching)
+}
+
+private func pathBelowDoubleStarCounts(_ matching: DoubleStarParentMatching) -> Bool {
+    switch matching {
+    case .allNestedDirectories: return true
+    case .stopAtDoubleStar: return false
+    }
 }
 
 /// Matches a single path component against a glob pattern (`*`, `?` within the component).
@@ -565,7 +607,7 @@ private func checkRulesBeneath(
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
     let decisions = rules
-        .filter { pathContainsProtectedPaths(path, by: $0.protectedPathPrefix) }
+        .filter { pathContainsProtectedPaths(path, by: $0.protectedPathPrefix, matching: $0.doubleStarParentMatching) }
         .compactMap { decision(for: $0, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: .write, ancestors: ancestors) }
     guard let firstDecision = decisions.first else { return .noRuleApplies }
     return decisions.dropFirst().reduce(firstDecision, moreRestrictiveDecision)
@@ -631,7 +673,7 @@ private func ruleApplies(_ rule: FAARule, to path: String, reach: OperationReach
     if pathIsProtected(path, by: rule.protectedPathPrefix) { return true }
     switch reach {
     case .singlePath: return false
-    case .subtree: return pathContainsProtectedPaths(path, by: rule.protectedPathPrefix)
+    case .subtree: return pathContainsProtectedPaths(path, by: rule.protectedPathPrefix, matching: rule.doubleStarParentMatching)
     }
 }
 

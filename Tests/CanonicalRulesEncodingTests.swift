@@ -190,4 +190,82 @@ struct CanonicalRulesEncodingTests {
         #expect(json.contains("authorizedSignatures"))
         #expect(json.contains("ABCDE12345:com.example.app"))
     }
+
+    // MARK: - doubleStarParentMatching
+
+    @Test("stored double-star rule JSON re-encodes byte-identically")
+    func storedDoubleStarRuleReencodesByteIdentical() throws {
+        // Canonical JSON of the In-Memory Code Loading preset rule as builds
+        // before doubleStarParentMatching signed it. If this string ever needs
+        // editing, existing user_rules signatures stop verifying.
+        let storedJSON = #"[{"allowedAncestorProcessPaths":[],"allowedAncestorSignatures":[],"allowedProcessPaths":[],"allowedSignatures":[],"enforceOnWriteOnly":true,"id":"7F541614-31BF-4525-803F-794C578771E5","protectedPathPrefix":"\/private\/var\/folders\/**\/NSCreateObjectFileImageFromMemory-*","source":"user"}]"#
+
+        let decoded = try JSONDecoder().decode([FAARule].self, from: Data(storedJSON.utf8))
+
+        #expect(decoded[0].doubleStarParentMatching == .stopAtDoubleStar)
+        #expect(String(data: canonicalRulesJSON(decoded), encoding: .utf8) == storedJSON)
+    }
+
+    @Test("stored rule without double-star decodes as allNestedDirectories")
+    func storedPlainRuleDecodesAsAllNestedDirectories() throws {
+        let storedJSON = #"[{"allowedAncestorProcessPaths":[],"allowedAncestorSignatures":[],"allowedProcessPaths":[],"allowedSignatures":[],"id":"00000000-0000-0000-0000-000000000001","protectedPathPrefix":"\/Users\/*\/Library\/Safari","source":"user"}]"#
+
+        let decoded = try JSONDecoder().decode([FAARule].self, from: Data(storedJSON.utf8))
+
+        #expect(decoded[0].doubleStarParentMatching == .allNestedDirectories)
+    }
+
+    @Test("implied doubleStarParentMatching is omitted from canonical JSON")
+    func impliedDoubleStarParentMatchingIsOmitted() {
+        let plainRule = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!,
+            protectedPathPrefix: "/Users/*/Library/Safari"
+        )
+        let compatibilityRule = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-00000000000C")!,
+            protectedPathPrefix: "/a/**/secret",
+            doubleStarParentMatching: .stopAtDoubleStar
+        )
+        let json = String(data: canonicalRulesJSON([plainRule, compatibilityRule]), encoding: .utf8) ?? ""
+
+        #expect(!json.contains("doubleStarParentMatching"))
+    }
+
+    @Test("double-star rule with allNestedDirectories writes the key and round-trips")
+    func doubleStarRuleWithAllNestedDirectoriesRoundTrips() throws {
+        let original = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-00000000000D")!,
+            protectedPathPrefix: "/a/**/secret"
+        )
+
+        let encoded = canonicalRulesJSON([original])
+        let decoded = try JSONDecoder().decode([FAARule].self, from: encoded)
+
+        #expect(String(data: encoded, encoding: .utf8)?.contains(#""doubleStarParentMatching":"all_nested_directories""#) == true)
+        #expect(decoded == [original])
+    }
+
+    @Test("plain rule with stopAtDoubleStar writes the key and round-trips")
+    func plainRuleWithStopAtDoubleStarRoundTrips() throws {
+        let original = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-00000000000E")!,
+            protectedPathPrefix: "/a/secret",
+            doubleStarParentMatching: .stopAtDoubleStar
+        )
+
+        let encoded = canonicalRulesJSON([original])
+        let decoded = try JSONDecoder().decode([FAARule].self, from: encoded)
+
+        #expect(String(data: encoded, encoding: .utf8)?.contains(#""doubleStarParentMatching":"stop_at_double_star""#) == true)
+        #expect(decoded == [original])
+    }
+
+    @Test("unknown doubleStarParentMatching value fails to decode")
+    func unknownDoubleStarParentMatchingFailsToDecode() {
+        let json = #"{"id":"00000000-0000-0000-0000-00000000000F","protectedPathPrefix":"\/a\/**\/secret","doubleStarParentMatching":"sometimes"}"#
+
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(FAARule.self, from: Data(json.utf8))
+        }
+    }
 }
