@@ -382,6 +382,11 @@ private func pathSpecificity(_ pattern: String) -> Int {
     pattern.split(separator: "/", omittingEmptySubsequences: true).count
 }
 
+public enum OperationReach {
+    case singlePath
+    case subtree
+}
+
 // MARK: - Policy evaluation
 
 /// Evaluates FAA policy rules against a file-access request.
@@ -516,16 +521,54 @@ public func checkFAAPolicy(
     rules: [FAARule],
     path: String,
     secondaryPath: String?,
+    reach: OperationReach,
     processPath: String,
     teamID: String,
     signingID: String,
     accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
-    let primaryDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let primaryDecision = checkFAAPolicy(rules: rules, path: path, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     guard let secondaryPath else { return primaryDecision }
-    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     return moreRestrictiveDecision(primaryDecision, secondaryDecision)
+}
+
+private func checkFAAPolicy(
+    rules: [FAARule],
+    path: String,
+    reach: OperationReach,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    accessKind: AccessKind,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision {
+    let pathDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    switch reach {
+    case .singlePath:
+        return pathDecision
+    case .subtree:
+        let rulesBeneathDecision = checkRulesBeneath(path, rules: rules, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+        return moreRestrictiveDecision(pathDecision, rulesBeneathDecision)
+    }
+}
+
+// Moving or copying a directory moves or copies everything inside it, so the
+// operation is a write to every protected path beneath — the Santa model.
+private func checkRulesBeneath(
+    _ path: String,
+    rules: [FAARule],
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision {
+    let decisions = rules
+        .filter { pathContainsProtectedPaths(path, by: $0.protectedPathPrefix) }
+        .compactMap { decision(for: $0, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: .write, ancestors: ancestors) }
+    guard let firstDecision = decisions.first else { return .noRuleApplies }
+    return decisions.dropFirst().reduce(firstDecision, moreRestrictiveDecision)
 }
 
 private func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
@@ -557,11 +600,28 @@ public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassifica
     return .processLevelOnly(matchingRule: first)
 }
 
-public func classifyPaths(_ path: String, secondaryPath: String?, rules: [FAARule]) -> PathRuleClassification {
-    let primaryClassification = classifyPath(path, rules: rules)
+public func classifyPaths(_ path: String, secondaryPath: String?, reach: OperationReach, rules: [FAARule]) -> PathRuleClassification {
+    let primaryClassification = classifyPath(path, reach: reach, rules: rules)
     guard let secondaryPath else { return primaryClassification }
-    let secondaryClassification = classifyPath(secondaryPath, rules: rules)
+    let secondaryClassification = classifyPath(secondaryPath, reach: reach, rules: rules)
     return moreRestrictive(primaryClassification, secondaryClassification)
+}
+
+private func classifyPath(_ path: String, reach: OperationReach, rules: [FAARule]) -> PathRuleClassification {
+    let matching = rules.filter { ruleApplies($0, to: path, reach: reach) }
+    guard let first = matching.first else { return .noRuleApplies }
+    if matching.contains(where: \.requiresAncestry) {
+        return .ancestryRequired(matchingRule: first)
+    }
+    return .processLevelOnly(matchingRule: first)
+}
+
+private func ruleApplies(_ rule: FAARule, to path: String, reach: OperationReach) -> Bool {
+    if pathIsProtected(path, by: rule.protectedPathPrefix) { return true }
+    switch reach {
+    case .singlePath: return false
+    case .subtree: return pathContainsProtectedPaths(path, by: rule.protectedPathPrefix)
+    }
 }
 
 private func moreRestrictive(_ lhs: PathRuleClassification, _ rhs: PathRuleClassification) -> PathRuleClassification {
@@ -582,6 +642,7 @@ public func evaluateAccess(
     ancestorAllowlist: [AncestorAllowlistEntry] = [],
     path: String,
     secondaryPath: String? = nil,
+    reach: OperationReach,
     processPath: String,
     teamID: String,
     signingID: String,
@@ -598,7 +659,7 @@ public func evaluateAccess(
         }
     }
 
-    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }
 
 public func evaluateAccess(
@@ -620,5 +681,5 @@ public func evaluateAccess(
         rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
     let ancestors = needsAncestors ? await ancestryProvider() : []
 
-    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, reach: .singlePath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }

@@ -1172,7 +1172,7 @@ struct ClassifyPathsTests {
     @Test("nil secondary path delegates to single-path classifyPath")
     func nilSecondaryPath() {
         let rules = [FAARule(protectedPathPrefix: "/protected", allowedProcessPaths: ["/safe"])]
-        guard case .noRuleApplies = classifyPaths("/unrelated/file", secondaryPath: nil, rules: rules) else {
+        guard case .noRuleApplies = classifyPaths("/unrelated/file", secondaryPath: nil, reach: .singlePath, rules: rules) else {
             Issue.record("Expected .noRuleApplies")
             return
         }
@@ -1181,7 +1181,7 @@ struct ClassifyPathsTests {
     @Test("returns ancestryRequired when only secondary path is protected by ancestry rule")
     func secondaryPathProtectedByAncestryRule() {
         let rules = [FAARule(protectedPathPrefix: "/protected", allowedAncestorProcessPaths: ["/usr/bin/parent"])]
-        guard case .ancestryRequired = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", rules: rules) else {
+        guard case .ancestryRequired = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", reach: .singlePath, rules: rules) else {
             Issue.record("Expected .ancestryRequired")
             return
         }
@@ -1193,7 +1193,7 @@ struct ClassifyPathsTests {
             FAARule(protectedPathPrefix: "/simple", allowedProcessPaths: ["/safe"]),
             FAARule(protectedPathPrefix: "/complex", allowedAncestorProcessPaths: ["/usr/bin/parent"]),
         ]
-        guard case .ancestryRequired = classifyPaths("/simple/file", secondaryPath: "/complex/dest", rules: rules) else {
+        guard case .ancestryRequired = classifyPaths("/simple/file", secondaryPath: "/complex/dest", reach: .singlePath, rules: rules) else {
             Issue.record("Expected .ancestryRequired from more restrictive secondary path")
             return
         }
@@ -1202,7 +1202,7 @@ struct ClassifyPathsTests {
     @Test("returns processLevelOnly when secondary path is protected by process-level rule")
     func secondaryPathProcessLevelOnly() {
         let rules = [FAARule(protectedPathPrefix: "/protected", allowedSignatures: [ProcessSignature(teamID: "T", signingID: "*")])]
-        guard case .processLevelOnly = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", rules: rules) else {
+        guard case .processLevelOnly = classifyPaths("/unrelated/file", secondaryPath: "/protected/dest", reach: .singlePath, rules: rules) else {
             Issue.record("Expected .processLevelOnly")
             return
         }
@@ -1220,6 +1220,7 @@ struct CheckFAAPolicyDualPathTests {
             rules: rules,
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
+            reach: .singlePath,
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
@@ -1236,6 +1237,7 @@ struct CheckFAAPolicyDualPathTests {
             rules: rules,
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
+            reach: .singlePath,
             processPath: "/allowed",
             teamID: "",
             signingID: "",
@@ -1255,6 +1257,7 @@ struct CheckFAAPolicyDualPathTests {
             rules: rules,
             path: "/src/file",
             secondaryPath: "/dst/file",
+            reach: .singlePath,
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
@@ -1271,6 +1274,7 @@ struct CheckFAAPolicyDualPathTests {
             rules: rules,
             path: "/unprotected/file",
             secondaryPath: nil,
+            reach: .singlePath,
             processPath: "/unauthorized",
             teamID: "",
             signingID: "",
@@ -1348,6 +1352,140 @@ struct RequireValidSigningTests {
         let decision = await decide(rules: [writeOnlyRule], teamID: "", accessKind: .read)
         guard case .noRuleApplies = decision else {
             Issue.record("Expected .noRuleApplies — write-only rule must be skipped before requireValidSigning is checked")
+            return
+        }
+    }
+}
+
+@Suite("subtree operations on parent directories")
+struct SubtreeOperationTests {
+    private let goalRule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/Applications/Goal.app/Contents/MacOS/Goal"])
+
+    private func decide(
+        rules: [FAARule],
+        allowlist: [AllowlistEntry] = [],
+        path: String,
+        secondaryPath: String? = nil,
+        reach: OperationReach = .subtree,
+        processPath: String = "/tmp/poc",
+        teamID: String = "",
+        signingID: String = "",
+        accessKind: AccessKind = .write
+    ) -> PolicyDecision {
+        evaluateAccess(
+            rules: rules,
+            allowlist: allowlist,
+            path: path,
+            secondaryPath: secondaryPath,
+            reach: reach,
+            processPath: processPath,
+            teamID: teamID,
+            signingID: signingID,
+            accessKind: accessKind,
+            ancestors: []
+        )
+    }
+
+    @Test("clone of the directory that holds protected files is denied")
+    func cloneOfProtectedDirectoryIsDenied() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/goal", secondaryPath: "/private/tmp/ck_clone_out")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("rename swap onto the protected directory is denied")
+    func renameSwapOntoProtectedDirectoryIsDenied() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/evildir", secondaryPath: "/Users/develop/goal")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("rename of the protected directory itself is denied")
+    func renameOfProtectedDirectoryIsDenied() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/goal", secondaryPath: "/Users/develop/goal2")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("rename of a grandparent is denied")
+    func renameOfGrandparentIsDenied() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop", secondaryPath: "/Users/develop2")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("rename of an unrelated sibling directory is not covered by any rule")
+    func renameOfUnrelatedSiblingIsAllowed() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/other", secondaryPath: "/Users/develop/other2")
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    @Test("single-path operation on the parent directory is not covered by any rule")
+    func singlePathOperationOnParentIsUnchanged() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/goal", reach: .singlePath)
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    @Test("process allowed by every rule beneath is allowed")
+    func processAllowedByEveryRuleBeneathIsAllowed() {
+        let decision = decide(rules: [goalRule], path: "/Users/develop/goal", secondaryPath: "/Users/develop/goal.old", processPath: "/Applications/Goal.app/Contents/MacOS/Goal")
+        #expect(decision.isAllowed)
+    }
+
+    @Test("process allowed by only one of two rules beneath is denied")
+    func processAllowedByOneOfTwoRulesIsDenied() {
+        let otherRule = FAARule(protectedPathPrefix: "/Users/develop/vault", allowedProcessPaths: ["/Applications/Vault.app/Contents/MacOS/Vault"])
+        let decision = decide(rules: [goalRule, otherRule], path: "/Users/develop", secondaryPath: "/Users/develop2", processPath: "/Applications/Goal.app/Contents/MacOS/Goal")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("subtree operation is evaluated as a write for write-only rules")
+    func subtreeOperationIsWriteForWriteOnlyRules() {
+        let writeOnly = FAARule(protectedPathPrefix: "/Users/*/.ssh", allowedSignatures: [ProcessSignature(teamID: "apple", signingID: "com.apple.ssh-agent")], enforceOnWriteOnly: true)
+        let decision = decide(rules: [writeOnly], path: "/Users/develop", secondaryPath: "/Users/develop2", accessKind: .read)
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("rename under a double-star rule is checked")
+    func renameUnderDoubleStarRuleIsChecked() {
+        let rule = FAARule(protectedPathPrefix: "/a/**/secret")
+        let decision = decide(rules: [rule], path: "/a/b/c", secondaryPath: "/a/b/d")
+        #expect(!decision.isAllowed)
+    }
+
+    @Test("globally allowed process may rename a parent")
+    func globallyAllowedProcessMayRenameParent() {
+        let allowlist = [AllowlistEntry(signingID: "com.apple.finder", platformBinary: true)]
+        let decision = decide(rules: [goalRule], allowlist: allowlist, path: "/Users/develop", secondaryPath: "/Users/develop2", teamID: "apple", signingID: "com.apple.finder")
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+
+    @Test("classifyPaths reports a rule for a subtree operation on a parent")
+    func classifyPathsReportsRuleForParent() {
+        guard case .processLevelOnly = classifyPaths("/Users/develop/goal", secondaryPath: "/private/tmp/out", reach: .subtree, rules: [goalRule]) else {
+            Issue.record("Expected .processLevelOnly")
+            return
+        }
+    }
+
+    @Test("classifyPaths requires ancestry when a rule beneath needs it")
+    func classifyPathsRequiresAncestryForRuleBeneath() {
+        let ancestryRule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorProcessPaths: ["/usr/bin/parent"])
+        guard case .ancestryRequired = classifyPaths("/Users/develop", secondaryPath: nil, reach: .subtree, rules: [ancestryRule]) else {
+            Issue.record("Expected .ancestryRequired")
+            return
+        }
+    }
+
+    @Test("classifyPaths ignores parents for a single-path operation")
+    func classifyPathsIgnoresParentsForSinglePath() {
+        guard case .noRuleApplies = classifyPaths("/Users/develop/goal", secondaryPath: nil, reach: .singlePath, rules: [goalRule]) else {
+            Issue.record("Expected .noRuleApplies")
             return
         }
     }
