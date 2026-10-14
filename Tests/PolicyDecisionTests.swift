@@ -1306,22 +1306,70 @@ struct BaselineAllowlistSpotlightTests {
         "com.apple.mdsync",
     ]
 
-    @Test("indexer reading a protected file is globally allowed", arguments: spotlightIndexerSigningIDs)
-    func indexerReadingProtectedFileIsGloballyAllowed(signingID: String) async {
+    @Test("indexer is not on the baseline allowlist", arguments: spotlightIndexerSigningIDs)
+    func indexerIsNotOnBaselineAllowlist(signingID: String) {
+        #expect(!isGloballyAllowed(allowlist: baselineAllowlist, processPath: "/System/indexer", signingID: signingID, teamID: "apple"))
+    }
+
+    @Test("indexer reading a protected file is denied", arguments: spotlightIndexerSigningIDs)
+    func indexerReadingProtectedFileIsDenied(signingID: String) async {
         let rules = [FAARule(protectedPathPrefix: "/Users/develop/goal/*")]
 
         let decision = await evaluateAccess(
             rules: rules,
             allowlist: baselineAllowlist,
             path: "/Users/develop/goal/gold",
-            processPath: "/System/Library/Frameworks/CoreServices.framework/indexer",
+            processPath: "/System/indexer",
             teamID: "apple",
             signingID: signingID,
             accessKind: .read
         )
 
-        guard case .globallyAllowed = decision else {
-            Issue.record("Expected .globallyAllowed, got \(decision)")
+        guard case .denied = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+    }
+
+    @Test("indexer reading an unprotected file is allowed")
+    func indexerReadingUnprotectedFileIsAllowed() async {
+        let rules = [FAARule(protectedPathPrefix: "/Users/develop/goal/*")]
+
+        let decision = await evaluateAccess(
+            rules: rules,
+            allowlist: baselineAllowlist,
+            path: "/Users/develop/Documents/notes.txt",
+            processPath: "/System/indexer",
+            teamID: "apple",
+            signingID: "com.apple.mdworker_shared",
+            accessKind: .read
+        )
+
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
+    @Test("rule that allows the indexer still allows it")
+    func ruleThatAllowsIndexerStillAllowsIt() async {
+        let rules = [FAARule(
+            protectedPathPrefix: "/Users/develop/goal/*",
+            allowedSignatures: [ProcessSignature(teamID: "apple", signingID: "com.apple.mdworker_shared")]
+        )]
+
+        let decision = await evaluateAccess(
+            rules: rules,
+            allowlist: baselineAllowlist,
+            path: "/Users/develop/goal/gold",
+            processPath: "/System/indexer",
+            teamID: "apple",
+            signingID: "com.apple.mdworker_shared",
+            accessKind: .read
+        )
+
+        guard case .allowed = decision else {
+            Issue.record("Expected .allowed, got \(decision)")
             return
         }
     }

@@ -130,12 +130,8 @@ private func signingEntry(n: Int, signingID: String) -> AllowlistEntry {
 }
 
 public let baselineAllowlist: [AllowlistEntry] = [
-    signingEntry(n: 1,  signingID: "com.apple.mdworker"),
-    signingEntry(n: 2,  signingID: "com.apple.mdworker_shared"),
-    signingEntry(n: 3,  signingID: "com.apple.mds"),
     signingEntry(n: 4,  signingID: "com.apple.apfsd"),
     signingEntry(n: 5,  signingID: "com.apple.deleted"),
-    signingEntry(n: 6,  signingID: "com.apple.mdsync"),
     signingEntry(n: 7,  signingID: "com.apple.containermanagerd"),
     signingEntry(n: 8,  signingID: "com.apple.containermanagerd_system"),
     signingEntry(n: 9,  signingID: "com.apple.secinitd"),
