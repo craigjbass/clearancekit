@@ -20,14 +20,18 @@ enum FileOperation: String {
     case clone         = "clone"
 }
 
-extension FileOperation {
-    var reach: OperationReach {
-        switch self {
-        case .rename, .clone, .copyfile:
-            return .subtree
-        case .open, .unlink, .link, .create, .truncate, .readdir, .exchangedata:
-            return .singlePath
-        }
+// MARK: - MovedEntryKind
+
+enum MovedEntryKind {
+    case directory
+    case noDirectory
+
+    init(fileModes: [mode_t]) {
+        self = fileModes.contains(where: Self.isDirectoryMode) ? .directory : .noDirectory
+    }
+
+    private static func isDirectoryMode(_ mode: mode_t) -> Bool {
+        mode & S_IFMT == S_IFDIR
     }
 }
 
@@ -39,6 +43,7 @@ struct FileAuthEvent: Sendable {
     let accessKind: AccessKind
     let path: String
     let secondaryPath: String?
+    let movedEntryKind: MovedEntryKind
     let processIdentity: ProcessIdentity
     let processID: pid_t
     let parentPID: pid_t
@@ -51,6 +56,24 @@ struct FileAuthEvent: Sendable {
     let ttyPath: String?
     let deadline: UInt64
     let respond: @Sendable (_ allowed: Bool, _ cache: Bool) -> Void
+}
+
+extension FileAuthEvent {
+    var reach: OperationReach {
+        switch operation {
+        case .rename, .clone, .copyfile:
+            return movedEntryReach
+        case .open, .unlink, .link, .create, .truncate, .readdir, .exchangedata:
+            return .singlePath
+        }
+    }
+
+    private var movedEntryReach: OperationReach {
+        switch movedEntryKind {
+        case .directory: return .subtree
+        case .noDirectory: return .singlePath
+        }
+    }
 }
 
 // MARK: - MachTime

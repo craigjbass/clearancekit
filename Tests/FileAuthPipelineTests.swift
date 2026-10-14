@@ -47,6 +47,7 @@ private func fileAuthEvent(
         accessKind: accessKind,
         path: path,
         secondaryPath: nil,
+        movedEntryKind: .noDirectory,
         processIdentity: identity(),
         processID: 100,
         parentPID: 1,
@@ -66,6 +67,7 @@ private func directoryOperationEvent(
     operation: FileOperation,
     path: String,
     secondaryPath: String?,
+    movedEntryKind: MovedEntryKind,
     processPath: String = "/tmp/poc",
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
@@ -75,6 +77,7 @@ private func directoryOperationEvent(
         accessKind: .write,
         path: path,
         secondaryPath: secondaryPath,
+        movedEntryKind: movedEntryKind,
         processIdentity: identity(),
         processID: 100,
         parentPID: 1,
@@ -431,6 +434,7 @@ struct FileAuthPipelineTests {
             accessKind: .write,
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
+            movedEntryKind: .noDirectory,
             processIdentity: identity(),
             processID: 100,
             parentPID: 1,
@@ -611,7 +615,7 @@ struct FileAuthPipelineTests {
         )
         pipeline.start()
 
-        pipeline.submit(directoryOperationEvent(operation: operation, path: "/Users/develop/goal", secondaryPath: "/private/tmp/ck_clone_out") { allowed, _ in
+        pipeline.submit(directoryOperationEvent(operation: operation, path: "/Users/develop/goal", secondaryPath: "/private/tmp/ck_clone_out", movedEntryKind: .directory) { allowed, _ in
             allowedResult.withLock { $0 = allowed }
             responded.signal()
         })
@@ -637,7 +641,7 @@ struct FileAuthPipelineTests {
         )
         pipeline.start()
 
-        pipeline.submit(directoryOperationEvent(operation: .open, path: "/Users/develop/goal", secondaryPath: nil) { allowed, cache in
+        pipeline.submit(directoryOperationEvent(operation: .open, path: "/Users/develop/goal", secondaryPath: nil, movedEntryKind: .noDirectory) { allowed, cache in
             result.withLock { $0 = (allowed, cache) }
             responded.signal()
         })
@@ -647,5 +651,118 @@ struct FileAuthPipelineTests {
 
         #expect(result.withLock { $0.allowed } == true)
         #expect(result.withLock { $0.cache } == true)
+    }
+
+    @Test("rename of a regular file that has the path of a parent is not covered by any rule")
+    func renameOfRegularFileWithParentPathIsNotCovered() {
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: false)
+        var postRespondDecision: PolicyDecision?
+
+        let pipeline = FileAuthPipeline(
+            processTree: FakePipelineProcessTree(),
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, decision, _, _ in
+                postRespondDecision = decision
+                postRespondCalled.signal()
+            }
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(operation: .rename, path: "/Users/develop/goal", secondaryPath: "/Users/develop/goal2", movedEntryKind: .noDirectory) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == true)
+        guard case .noRuleApplies = postRespondDecision else {
+            Issue.record("Expected .noRuleApplies, got \(String(describing: postRespondDecision))")
+            return
+        }
+    }
+
+    @Test("regular file swapped onto a protected directory is denied")
+    func regularFileSwappedOntoProtectedDirectoryIsDenied() {
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: true)
+
+        let pipeline = FileAuthPipeline(
+            processTree: FakePipelineProcessTree(),
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(operation: .rename, path: "/Users/develop/planted-file", secondaryPath: "/Users/develop/goal", movedEntryKind: .directory) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == false)
+    }
+}
+
+// MARK: - MovedEntryKind
+
+@Suite("MovedEntryKind")
+struct MovedEntryKindTests {
+    @Test("a directory source is a directory move")
+    func directorySourceIsDirectoryMove() {
+        #expect(MovedEntryKind(fileModes: [S_IFDIR | 0o755]) == .directory)
+    }
+
+    @Test("a regular file source moves no directory")
+    func regularFileSourceMovesNoDirectory() {
+        #expect(MovedEntryKind(fileModes: [S_IFREG | 0o644]) == .noDirectory)
+    }
+
+    @Test("a symbolic link to a directory moves no directory")
+    func symbolicLinkMovesNoDirectory() {
+        #expect(MovedEntryKind(fileModes: [S_IFLNK | 0o755]) == .noDirectory)
+    }
+
+    @Test("a regular file swapped with an existing directory is a directory move")
+    func fileSwappedWithDirectoryIsDirectoryMove() {
+        #expect(MovedEntryKind(fileModes: [S_IFREG | 0o644, S_IFDIR | 0o755]) == .directory)
+    }
+
+    @Test("an event that moves no entry moves no directory")
+    func noFileModesMovesNoDirectory() {
+        #expect(MovedEntryKind(fileModes: []) == .noDirectory)
+    }
+}
+
+// MARK: - FileAuthEvent.reach
+
+@Suite("FileAuthEvent.reach")
+struct FileAuthEventReachTests {
+    @Test("a directory move or copy reaches the subtree", arguments: [FileOperation.rename, .clone, .copyfile])
+    func directoryMoveReachesSubtree(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/a", secondaryPath: "/b", movedEntryKind: .directory) { _, _ in }
+        #expect(event.reach == .subtree)
+    }
+
+    @Test("a move or copy of a non-directory reaches only its paths", arguments: [FileOperation.rename, .clone, .copyfile])
+    func nonDirectoryMoveReachesSinglePath(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/a", secondaryPath: "/b", movedEntryKind: .noDirectory) { _, _ in }
+        #expect(event.reach == .singlePath)
+    }
+
+    @Test("an operation that moves nothing reaches only its paths", arguments: [FileOperation.open, .unlink, .link, .create, .truncate, .readdir, .exchangedata])
+    func nonMovingOperationReachesSinglePath(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/a", secondaryPath: "/b", movedEntryKind: .directory) { _, _ in }
+        #expect(event.reach == .singlePath)
     }
 }

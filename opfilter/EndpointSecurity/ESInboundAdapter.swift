@@ -277,6 +277,7 @@ final class ESInboundAdapter {
             accessKind: accessKind,
             path: path,
             secondaryPath: secondaryPath,
+            movedEntryKind: movedEntryKind(of: message),
             processIdentity: processIdentity,
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
@@ -303,6 +304,36 @@ final class ESInboundAdapter {
         default:
             return ""
         }
+    }
+
+    private static func movedEntryKind(of message: UnsafePointer<es_message_t>) -> MovedEntryKind {
+        MovedEntryKind(fileModes: movedEntryFileModes(of: message))
+    }
+
+    private static func movedEntryFileModes(of message: UnsafePointer<es_message_t>) -> [mode_t] {
+        let event = message.pointee.event
+        switch message.pointee.event_type {
+        case ES_EVENT_TYPE_AUTH_RENAME:
+            return [event.rename.source.pointee.stat.st_mode] + renameExistingDestinationFileModes(from: event.rename)
+        case ES_EVENT_TYPE_AUTH_CLONE:
+            return [event.clone.source.pointee.stat.st_mode]
+        case ES_EVENT_TYPE_AUTH_COPYFILE:
+            return [event.copyfile.source.pointee.stat.st_mode] + copyfileExistingTargetFileModes(from: event.copyfile)
+        default:
+            return []
+        }
+    }
+
+    // RENAME_SWAP exchanges the source with an existing destination, so a
+    // directory at either end moves.
+    private static func renameExistingDestinationFileModes(from event: es_event_rename_t) -> [mode_t] {
+        guard event.destination_type == ES_DESTINATION_TYPE_EXISTING_FILE else { return [] }
+        return [event.destination.existing_file.pointee.stat.st_mode]
+    }
+
+    private static func copyfileExistingTargetFileModes(from event: es_event_copyfile_t) -> [mode_t] {
+        guard let targetFile = event.target_file else { return [] }
+        return [targetFile.pointee.stat.st_mode]
     }
 
     static func linkDestinationPath(from event: es_event_link_t) -> String {
