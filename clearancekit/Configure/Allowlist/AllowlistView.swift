@@ -659,7 +659,20 @@ struct QuietListEntryEditView: View {
     let onSave: (QuietListEntry) -> Void
     let onCancel: () -> Void
 
-    private var isValid: Bool { !value.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var draftEntry: QuietListEntry {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return QuietListEntry(
+            id: UUID(),
+            signingID: matchType == .signingID ? trimmed : "",
+            processPath: matchType == .processPath ? trimmed : "",
+            platformBinary: platformBinary,
+            teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
+        )
+    }
+
+    private var isValid: Bool {
+        !value.trimmingCharacters(in: .whitespaces).isEmpty && draftEntry.validation == .valid
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -695,6 +708,12 @@ struct QuietListEntryEditView: View {
                     TextField("Team ID (optional)", text: $teamID)
                         .font(.system(.body, design: .monospaced))
                 }
+
+                if draftEntry.validation == .matchesEveryProcess {
+                    Text("A signing ID of * with no team ID would silence every deny notification. Enter a team ID or choose platform binary.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
             .padding()
 
@@ -705,14 +724,7 @@ struct QuietListEntryEditView: View {
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
                 Button("Add") {
-                    let trimmed = value.trimmingCharacters(in: .whitespaces)
-                    onSave(QuietListEntry(
-                        id: UUID(),
-                        signingID: matchType == .signingID ? trimmed : "",
-                        processPath: matchType == .processPath ? trimmed : "",
-                        platformBinary: platformBinary,
-                        teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
-                    ))
+                    onSave(draftEntry)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)

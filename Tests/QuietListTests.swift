@@ -132,3 +132,26 @@ struct QuietListEntryQuietingTests {
         #expect(entry.teamID == "")
     }
 }
+
+@Suite("QuietListEntry validation")
+struct QuietListEntryValidationTests {
+    @Test("wildcard signing ID without a team or platform flag is rejected")
+    func wildcardWithoutTeamIsRejected() {
+        #expect(quietEntry(signingID: "*").validation == .matchesEveryProcess)
+    }
+
+    @Test("wildcard signing ID with a team is accepted")
+    func wildcardWithTeamIsAccepted() {
+        #expect(quietEntry(signingID: "*", teamID: "TEAM123").validation == .valid)
+    }
+
+    @Test("wildcard signing ID for platform binaries is accepted")
+    func wildcardForPlatformBinariesIsAccepted() {
+        #expect(quietEntry(signingID: "*", platformBinary: true).validation == .valid)
+    }
+
+    @Test("ordinary signing ID is accepted")
+    func ordinarySigningIDIsAccepted() {
+        #expect(quietEntry(signingID: "com.example.noisy").validation == .valid)
+    }
+}

@@ -39,6 +39,22 @@ public struct QuietListEntry: Identifiable, Codable, Equatable {
     }
 }
 
+// MARK: - Validation
+
+public enum QuietListEntryValidation: Equatable {
+    case valid
+    case matchesEveryProcess
+}
+
+private let wildcardSigningID = "*"
+
+extension QuietListEntry {
+    public var validation: QuietListEntryValidation {
+        let isUnrestrictedWildcard = signingID == wildcardSigningID && teamID.isEmpty && !platformBinary
+        return isUnrestrictedWildcard ? .matchesEveryProcess : .valid
+    }
+}
+
 // MARK: - NotificationPolicy
 
 public enum NotificationPolicy: Int, Codable {
