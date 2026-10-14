@@ -166,7 +166,7 @@ final class Database {
                    allowed_ancestor_process_paths, allowed_ancestor_signatures,
                    enforce_on_write_only, require_valid_signing,
                    authorized_signatures, requires_authorization,
-                   authorization_session_duration
+                   authorization_session_duration, double_star_parent_matching
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) {
@@ -201,8 +201,8 @@ final class Database {
                  allowed_ancestor_process_paths, allowed_ancestor_signatures,
                  enforce_on_write_only, require_valid_signing,
                  authorized_signatures, requires_authorization,
-                 authorization_session_duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 authorization_session_duration, double_star_parent_matching)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bindings: [
             .text(rule.id.uuidString),
             .text(rule.protectedPathPrefix),
@@ -215,6 +215,7 @@ final class Database {
             .text(encodeSignatureArray(rule.authorizedSignatures)),
             .int(rule.requiresAuthorization ? 1 : 0),
             .int(Int(rule.authorizationSessionDuration)),
+            .text(rule.doubleStarParentMatching.rawValue),
         ])
     }
 
@@ -225,6 +226,10 @@ final class Database {
             return nil
         }
         let protectedPathPrefix = columnText(stmt, 1)
+        guard let doubleStarParentMatching = storedDoubleStarParentMatching(optionalColumnText(stmt, 11), pattern: protectedPathPrefix) else {
+            NSLog("Database: Skipping rule row %@ with unknown double_star_parent_matching '%@'", uuidString, columnText(stmt, 11))
+            return nil
+        }
         return FAARule(
             id: id,
             protectedPathPrefix: protectedPathPrefix,
@@ -237,7 +242,7 @@ final class Database {
             authorizedSignatures: decodeSignatureArray(columnText(stmt, 8)),
             requiresAuthorization: sqlite3_column_int(stmt, 9) != 0,
             authorizationSessionDuration: TimeInterval(sqlite3_column_int64(stmt, 10)),
-            doubleStarParentMatching: .implied(by: protectedPathPrefix)
+            doubleStarParentMatching: doubleStarParentMatching
         )
     }
 
@@ -632,7 +637,7 @@ final class Database {
                    allowed_ancestor_process_paths, allowed_ancestor_signatures,
                    enforce_on_write_only, require_valid_signing,
                    authorized_signatures, requires_authorization,
-                   authorization_session_duration
+                   authorization_session_duration, double_star_parent_matching
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) { rules.append(rule) }
@@ -790,6 +795,11 @@ final class Database {
     private func columnText(_ stmt: OpaquePointer, _ index: Int32) -> String {
         guard let cStr = sqlite3_column_text(stmt, index) else { return "" }
         return String(cString: cStr)
+    }
+
+    private func optionalColumnText(_ stmt: OpaquePointer, _ index: Int32) -> String? {
+        guard sqlite3_column_type(stmt, index) != SQLITE_NULL else { return nil }
+        return columnText(stmt, index)
     }
 
     private func encodeStringArray(_ array: [String]) -> String {

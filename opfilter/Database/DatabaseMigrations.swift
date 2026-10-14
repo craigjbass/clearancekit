@@ -29,6 +29,7 @@ let allMigrations: [Migration] = [
     Migration(version: 9, name: "Seed bundle_protection_enabled feature flag", up: migration009SeedBundleProtectionFlag),
     Migration(version: 10, name: "Seed advanced_mode_enabled feature flag", up: migration010SeedAdvancedModeFlag),
     Migration(version: 11, name: "Add epoch column to data_signatures for replay protection", up: migration011AddEpochColumn),
+    Migration(version: 12, name: "Add double_star_parent_matching column to user_rules", up: migration012AddDoubleStarParentMatchingColumn),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -349,4 +350,16 @@ private func migration010SeedAdvancedModeFlag(_ db: Database) {
 private func migration011AddEpochColumn(_ db: Database) {
     db.execute("ALTER TABLE data_signatures ADD COLUMN epoch INTEGER NOT NULL DEFAULT 0")
     NSLog("Migration 011: Added epoch column to data_signatures (legacy signatures remain valid at epoch=0)")
+}
+
+// MARK: - Migration 012: Add double_star_parent_matching column to user_rules
+//
+// The column is nullable with no default. Existing rows read back as NULL,
+// which storedDoubleStarParentMatching maps to the implied value, so
+// FAARule.encode(to:) omits the field and the existing user_rules
+// signature still verifies on first launch after upgrade.
+
+private func migration012AddDoubleStarParentMatchingColumn(_ db: Database) {
+    db.execute("ALTER TABLE user_rules ADD COLUMN double_star_parent_matching TEXT")
+    NSLog("Migration 012: Added double_star_parent_matching column to user_rules")
 }
