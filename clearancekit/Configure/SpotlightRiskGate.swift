@@ -18,6 +18,12 @@ struct RiskReviewItem {
     let risk: AllowRisk
 }
 
+extension RiskReviewItem {
+    static func items(for rules: [FAARule]) -> [RiskReviewItem] {
+        rules.map { RiskReviewItem(label: $0.protectedPathPrefix, risk: allowRisk(for: $0)) }
+    }
+}
+
 struct PendingRiskyChange: Identifiable {
     let id = UUID()
     let riskyLabels: [String]

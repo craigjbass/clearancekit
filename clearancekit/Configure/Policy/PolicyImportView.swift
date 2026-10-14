@@ -87,7 +87,7 @@ struct PolicyImportView: View {
                     .controlSize(.small)
             }
             Button("Import") {
-                riskGate.submit(rules.map { RiskReviewItem(label: $0.protectedPathPrefix, risk: allowRisk(for: $0)) }) {
+                riskGate.submit(RiskReviewItem.items(for: rules)) {
                     Task { await performImport() }
                 }
             }

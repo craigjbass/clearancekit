@@ -15,6 +15,23 @@ private final class ApplyCounter {
 @Suite("SpotlightRiskGate")
 @MainActor
 struct SpotlightRiskGateTests {
+    @Test("rules are reviewed by protected path and flag only an indexer allow")
+    func rulesAreReviewedByProtectedPath() {
+        let safeRule = FAARule(
+            protectedPathPrefix: "/Users/*/Safe",
+            allowedSignatures: [ProcessSignature(teamID: "TEAMID1234", signingID: "com.example.app")]
+        )
+        let indexerRule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.mds")]
+        )
+
+        let items = RiskReviewItem.items(for: [safeRule, indexerRule])
+
+        #expect(items.map(\.label) == ["/Users/*/Safe", "/Users/*/Secrets"])
+        #expect(items.map(\.risk) == [.noKnownRisk, .spotlightIndexer])
+    }
+
     @Test("change without risk applies at once")
     func changeWithoutRiskAppliesAtOnce() {
         let gate = SpotlightRiskGate()
