@@ -339,6 +339,9 @@ public protocol ServiceProtocol {
     func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
+    func addQuietListEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeQuietListEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
+
     // User jail-rule mutations (GUI → opfilter). Opfilter stores, then applies merged
     // jail rules directly and pushes updated user jail rules to all GUI clients.
     func addJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
@@ -424,6 +427,8 @@ public protocol ClientProtocol {
     func userAllowlistUpdated(_ allowlistData: NSData)
     func managedAncestorAllowlistUpdated(_ allowlistData: NSData)
     func userAncestorAllowlistUpdated(_ allowlistData: NSData)
+    func managedQuietListUpdated(_ quietListData: NSData)
+    func quietListUpdated(_ quietListData: NSData)
     func managedJailRulesUpdated(_ rulesData: NSData)
     func userJailRulesUpdated(_ rulesData: NSData)
     // Opfilter pushes the current jail-enabled state on connect and whenever it

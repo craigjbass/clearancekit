@@ -138,6 +138,11 @@ struct EventRow: View {
 
     private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
 
+    private var canQuietNotifications: Bool {
+        guard !event.accessAllowed else { return false }
+        return event.notificationPolicy == .notify
+    }
+
     private var suggestBaselineIssueURL: URL? {
         guard !event.accessAllowed, event.teamID.isEmpty, !event.signingID.isEmpty else { return nil }
         let title = "Add `\(event.signingID)` to baseline allowlist"
@@ -395,6 +400,14 @@ struct EventRow: View {
                     .controlSize(.mini)
                 }
             }
+        }
+        if canQuietNotifications {
+            allowButton(label: "Don't notify for this process", itemKey: "quiet") {
+                try await QuietListStore.shared.add(
+                    .quieting(processPath: event.processPath, signingID: event.signingID, teamID: event.teamID)
+                )
+            }
+            .font(.caption)
         }
     }
 

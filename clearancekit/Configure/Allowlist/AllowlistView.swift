@@ -7,6 +7,8 @@ import SwiftUI
 
 struct AllowlistView: View {
     @StateObject private var allowlistStore = AllowlistStore.shared
+    @StateObject private var quietListStore = QuietListStore.shared
+    @State private var isAddingQuietEntry = false
     @State private var isAddingEntry = false
     @State private var isAddingAncestorEntry = false
     @State private var editingEntry: AllowlistEntry? = nil
@@ -75,6 +77,20 @@ struct AllowlistView: View {
                 editingAncestorEntry = nil
             }
         }
+        .sheet(isPresented: $isAddingQuietEntry) {
+            QuietListEntryEditView { entry in
+                Task {
+                    do {
+                        try await quietListStore.add(entry)
+                        isAddingQuietEntry = false
+                    } catch {
+                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                    }
+                }
+            } onCancel: {
+                isAddingQuietEntry = false
+            }
+        }
         .alert("Authentication Failed", isPresented: Binding(
             get: { authError != nil },
             set: { if !$0 { authError = nil } }
@@ -90,6 +106,7 @@ struct AllowlistView: View {
     private var toolbar: some View {
         HStack {
             Spacer()
+            Button("Add Quiet Entry") { isAddingQuietEntry = true }
             Button("Add Ancestor Entry") { isAddingAncestorEntry = true }
             Button("Add Entry") { isAddingEntry = true }
         }
@@ -156,6 +173,36 @@ struct AllowlistView: View {
                                 }
                             }
                         })
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            Section("Baseline Quiet List") {
+                ForEach(quietListStore.baselineEntries) { entry in
+                    QuietListEntryRow(entry: entry, source: .baseline, onDelete: { })
+                        .padding(.vertical, 4)
+                }
+            }
+            if !quietListStore.managedEntries.isEmpty {
+                Section("Managed Profile Quiet List") {
+                    ForEach(quietListStore.managedEntries) { entry in
+                        QuietListEntryRow(entry: entry, source: .managed, onDelete: { })
+                            .padding(.vertical, 4)
+                    }
+                }
+            }
+            if !quietListStore.userEntries.isEmpty {
+                Section("User Quiet List") {
+                    ForEach(quietListStore.userEntries) { entry in
+                        QuietListEntryRow(entry: entry, source: .user) {
+                            Task {
+                                do {
+                                    try await quietListStore.remove(entry)
+                                } catch {
+                                    if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                }
+                            }
+                        }
                         .padding(.vertical, 4)
                     }
                 }
@@ -505,6 +552,135 @@ struct AncestorAllowlistEntryEditView: View {
                         teamID:         platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
                     )
                     onSave(entry)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValid)
+            }
+            .padding()
+        }
+        .frame(width: 420)
+    }
+}
+
+// MARK: - QuietListEntryRow
+
+private struct QuietListEntryRow: View {
+    let entry: QuietListEntry
+    let source: AllowlistEntrySource
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            HStack(spacing: 6) {
+                Image(systemName: "bell.slash")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                Text(entry.signingID.isEmpty ? entry.processPath : entry.signingID)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1)
+                if entry.platformBinary {
+                    badge("apple")
+                } else if !entry.teamID.isEmpty {
+                    badge(entry.teamID)
+                }
+                sourceBadge
+            }
+            Spacer()
+            if source == .user {
+                Button { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sourceBadge: some View {
+        switch source {
+        case .baseline: badge("baseline")
+        case .managed:  badge("managed")
+        case .user:     EmptyView()
+        }
+    }
+
+    private func badge(_ label: String) -> some View {
+        Text(label)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+// MARK: - QuietListEntryEditView
+
+struct QuietListEntryEditView: View {
+    @State private var matchType: AllowlistEntryEditView.MatchType = .signingID
+    @State private var value = ""
+    @State private var platformBinary = false
+    @State private var teamID = ""
+
+    let onSave: (QuietListEntry) -> Void
+    let onCancel: () -> Void
+
+    private var isValid: Bool { !value.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add Quiet List Entry")
+                .font(.headline)
+                .padding()
+
+            Text("Denies from a matching process are still enforced and logged. They do not show a notification.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+
+            Divider()
+
+            Form {
+                Picker("Match by", selection: $matchType) {
+                    ForEach(AllowlistEntryEditView.MatchType.allCases, id: \.self) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                TextField(
+                    matchType == .signingID ? "com.example.app" : "/usr/bin/example",
+                    text: $value
+                )
+                .font(.system(.body, design: .monospaced))
+
+                Toggle("Platform binary (Apple)", isOn: $platformBinary)
+
+                if !platformBinary {
+                    TextField("Team ID (optional)", text: $teamID)
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+            .padding()
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Cancel") { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Add") {
+                    let trimmed = value.trimmingCharacters(in: .whitespaces)
+                    onSave(QuietListEntry(
+                        id: UUID(),
+                        signingID: matchType == .signingID ? trimmed : "",
+                        processPath: matchType == .processPath ? trimmed : "",
+                        platformBinary: platformBinary,
+                        teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
+                    ))
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)

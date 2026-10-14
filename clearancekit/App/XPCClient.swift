@@ -362,6 +362,27 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Quiet list mutations
+
+    func addQuietListEntry(_ entry: QuietListEntry) {
+        guard let data = try? JSONEncoder().encode(entry) else { return }
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: addQuietListEntry error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.addQuietListEntry(data as NSData) { success in
+            if !success { logger.error("XPCClient: addQuietListEntry rejected by service") }
+        }
+    }
+
+    func removeQuietListEntry(entryID: UUID) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: removeQuietListEntry error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.removeQuietListEntry(entryID as NSUUID) { success in
+            if !success { logger.error("XPCClient: removeQuietListEntry rejected by service") }
+        }
+    }
+
     // MARK: - Jail rule mutations
 
     func addJailRule(_ rule: JailRule) {
@@ -752,6 +773,28 @@ extension XPCClient: ClientProtocol {
         }
         Task { @MainActor in
             AllowlistStore.shared.receivedUserAncestorEntries(entries)
+        }
+    }
+
+    nonisolated func managedQuietListUpdated(_ quietListData: NSData) {
+        guard let entries = try? JSONDecoder().decode([QuietListEntry].self, from: quietListData as Data) else {
+            logger.fault("XPCClient: Failed to decode managed quiet list — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            QuietListStore.shared.receivedManagedEntries(entries)
+        }
+    }
+
+    nonisolated func quietListUpdated(_ quietListData: NSData) {
+        guard let entries = try? JSONDecoder().decode([QuietListEntry].self, from: quietListData as Data) else {
+            logger.fault("XPCClient: Failed to decode user quiet list — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
+        }
+        Task { @MainActor in
+            QuietListStore.shared.receivedUserEntries(entries)
         }
     }
 
