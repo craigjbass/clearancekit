@@ -356,7 +356,7 @@ private func migration011AddEpochColumn(_ db: Database) {
 
 private func migration012CreateQuietList(_ db: Database) {
     db.execute("""
-        CREATE TABLE user_quiet_list (
+        CREATE TABLE IF NOT EXISTS user_quiet_list (
             id TEXT PRIMARY KEY,
             signing_id TEXT NOT NULL DEFAULT '',
             process_path TEXT NOT NULL DEFAULT '',
