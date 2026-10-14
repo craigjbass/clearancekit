@@ -412,77 +412,90 @@ public func checkFAAPolicy(
     }
 
     for (_, rule) in sorted {
-        if rule.enforceOnWriteOnly && accessKind == .read { continue }
-
-        if rule.requireValidSigning && teamID.isEmpty {
-            return .denied(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                allowedCriteria: "valid code signature required"
-            )
+        if let ruleDecision = decision(for: rule, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors) {
+            return ruleDecision
         }
-
-        if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
-        }
-
-        if !rule.allowedSignatures.isEmpty,
-           let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
-        }
-
-        if !rule.authorizedSignatures.isEmpty,
-           rule.authorizedSignatures.contains(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
-            return .requiresAuthorization(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                criterion: "authorizedSignature",
-                sessionDuration: rule.authorizationSessionDuration
-            )
-        }
-
-        if rule.requiresAuthorization && !teamID.isEmpty {
-            return .requiresAuthorization(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                criterion: "requiresAuthorization",
-                sessionDuration: rule.authorizationSessionDuration
-            )
-        }
-
-        if !rule.allowedAncestorProcessPaths.isEmpty {
-            if let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
-            }
-        }
-
-        if !rule.allowedAncestorSignatures.isEmpty {
-            for ancestor in ancestors {
-                if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
-                    return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
-                }
-            }
-        }
-
-        var criteria: [String] = []
-        if !rule.allowedProcessPaths.isEmpty {
-            criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
-        }
-        if !rule.allowedSignatures.isEmpty {
-            criteria.append("signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
-        }
-        if !rule.allowedAncestorProcessPaths.isEmpty {
-            criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
-        }
-        if !rule.allowedAncestorSignatures.isEmpty {
-            criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
-        }
-        return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
+}
+
+private func decision(
+    for rule: FAARule,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    accessKind: AccessKind,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision? {
+    if rule.enforceOnWriteOnly && accessKind == .read { return nil }
+
+    if rule.requireValidSigning && teamID.isEmpty {
+        return .denied(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            allowedCriteria: "valid code signature required"
+        )
+    }
+
+    if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
+    }
+
+    if !rule.allowedSignatures.isEmpty,
+       let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
+    }
+
+    if !rule.authorizedSignatures.isEmpty,
+       rule.authorizedSignatures.contains(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
+        return .requiresAuthorization(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            criterion: "authorizedSignature",
+            sessionDuration: rule.authorizationSessionDuration
+        )
+    }
+
+    if rule.requiresAuthorization && !teamID.isEmpty {
+        return .requiresAuthorization(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            criterion: "requiresAuthorization",
+            sessionDuration: rule.authorizationSessionDuration
+        )
+    }
+
+    if !rule.allowedAncestorProcessPaths.isEmpty {
+        if let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
+        }
+    }
+
+    if !rule.allowedAncestorSignatures.isEmpty {
+        for ancestor in ancestors {
+            if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
+                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
+            }
+        }
+    }
+
+    var criteria: [String] = []
+    if !rule.allowedProcessPaths.isEmpty {
+        criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
+    }
+    if !rule.allowedSignatures.isEmpty {
+        criteria.append("signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
+    }
+    if !rule.allowedAncestorProcessPaths.isEmpty {
+        criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
+    }
+    if !rule.allowedAncestorSignatures.isEmpty {
+        criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
+    }
+    return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
 }
 
 public func checkFAAPolicy(
