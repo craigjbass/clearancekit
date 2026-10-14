@@ -91,6 +91,9 @@ enum ClearanceKitMobileconfigExporter {
         if rule.enforceOnWriteOnly {
             dict["EnforceOnWriteOnly"] = true
         }
+        if rule.doubleStarParentMatching != .implied(by: rule.protectedPathPrefix) {
+            dict["DoubleStarParentMatching"] = rule.doubleStarParentMatching.rawValue
+        }
         return dict
     }
 

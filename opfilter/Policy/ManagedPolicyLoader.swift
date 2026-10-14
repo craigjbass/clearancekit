@@ -27,6 +27,14 @@
 //                                                       operations; reads
 //                                                       fall through to the
 //                                                       next rule
+//    DoubleStarParentMatching    (string, optional)  — "all_nested_directories"
+//                                                       or "stop_at_double_star".
+//                                                       Omit to use
+//                                                       stop_at_double_star for
+//                                                       patterns with a **
+//                                                       component and
+//                                                       all_nested_directories
+//                                                       for other patterns
 //
 
 import Foundation
