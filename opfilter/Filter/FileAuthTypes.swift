@@ -20,6 +20,17 @@ enum FileOperation: String {
     case clone         = "clone"
 }
 
+extension FileOperation {
+    var reach: OperationReach {
+        switch self {
+        case .rename, .clone, .copyfile:
+            return .subtree
+        case .open, .unlink, .link, .create, .truncate, .readdir, .exchangedata:
+            return .singlePath
+        }
+    }
+}
+
 // MARK: - FileAuthEvent
 
 struct FileAuthEvent: Sendable {

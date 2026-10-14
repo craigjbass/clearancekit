@@ -62,6 +62,34 @@ private func fileAuthEvent(
     )
 }
 
+private func directoryOperationEvent(
+    operation: FileOperation,
+    path: String,
+    secondaryPath: String?,
+    processPath: String = "/tmp/poc",
+    respond: @escaping @Sendable (Bool, Bool) -> Void
+) -> FileAuthEvent {
+    FileAuthEvent(
+        correlationID: UUID(),
+        operation: operation,
+        accessKind: .write,
+        path: path,
+        secondaryPath: secondaryPath,
+        processIdentity: identity(),
+        processID: 100,
+        parentPID: 1,
+        parentPIDVersion: 0,
+        processPath: processPath,
+        teamID: "",
+        signingID: "",
+        uid: 501,
+        gid: 20,
+        ttyPath: nil,
+        deadline: 0,
+        respond: respond
+    )
+}
+
 // MARK: - FileAuthPipelineTests
 
 @Suite("FileAuthPipeline", .serialized)
@@ -566,5 +594,58 @@ struct FileAuthPipelineTests {
         } else {
             Issue.record("Expected .noRuleApplies for read, got \(String(describing: postRespondDecision))")
         }
+    }
+
+    @Test("directory operation on a parent of a protected path is denied", arguments: [FileOperation.rename, .clone, .copyfile])
+    func directoryOperationOnParentIsDenied(operation: FileOperation) {
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: true)
+
+        let pipeline = FileAuthPipeline(
+            processTree: FakePipelineProcessTree(),
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(operation: operation, path: "/Users/develop/goal", secondaryPath: "/private/tmp/ck_clone_out") { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == false)
+    }
+
+    @Test("open of a parent of a protected path is not covered by any rule")
+    func openOfParentIsAllowedAndCacheable() {
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let result = OSAllocatedUnfairLock(initialState: (allowed: false, cache: false))
+
+        let pipeline = FileAuthPipeline(
+            processTree: FakePipelineProcessTree(),
+            rulesProvider: { [FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedProcessPaths: ["/allowed"])] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() }
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(operation: .open, path: "/Users/develop/goal", secondaryPath: nil) { allowed, cache in
+            result.withLock { $0 = (allowed, cache) }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(result.withLock { $0.allowed } == true)
+        #expect(result.withLock { $0.cache } == true)
     }
 }
