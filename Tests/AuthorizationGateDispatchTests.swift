@@ -123,7 +123,7 @@ struct AuthorizationGateDispatchTests {
         let deadline = mach_absolute_time() + ticks
         return FileAuthEvent(
             correlationID: UUID(), operation: .open, accessKind: .write,
-            path: "/Secrets", secondaryPath: nil,
+            path: "/Secrets", secondaryPath: nil, movedEntryKind: .noDirectory,
             processIdentity: ProcessIdentity(pid: 1234, pidVersion: 7),
             processID: 1234, parentPID: 1, parentPIDVersion: 0, processPath: "/Apps/Example",
             teamID: "ABCDE12345", signingID: "com.example.app",

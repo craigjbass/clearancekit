@@ -309,17 +309,20 @@ enum MCPDispatcher {
         let signatures = try parseSignatures(from: args["allowed_signatures"])
         let id = args["id"]?.stringValue.flatMap { UUID(uuidString: $0) } ?? UUID()
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? false
+        let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? .allNestedDirectories
         let rule = FAARule(
             id: id,
             protectedPathPrefix: pathPrefix,
             source: .user,
             allowedSignatures: signatures,
-            enforceOnWriteOnly: enforceOnWriteOnly
+            enforceOnWriteOnly: enforceOnWriteOnly,
+            doubleStarParentMatching: doubleStarParentMatching
         )
         try await PolicyStore.shared.add(rule)
         var lines = ["Rule added:", "  ID: \(rule.id.uuidString)", "  Path: \(pathPrefix)"]
         if !signatures.isEmpty { lines.append("  Signatures: \(signatures.map(\.description).joined(separator: ", "))") }
         if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
+        lines.append(contentsOf: doubleStarParentMatchingLines(for: rule))
         return text(lines.joined(separator: "\n"))
     }
 
@@ -336,6 +339,7 @@ enum MCPDispatcher {
         }
         let signatures = try parseSignatures(from: args["allowed_signatures"])
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? existing.enforceOnWriteOnly
+        let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? existing.doubleStarParentMatching
         let updated = FAARule(
             id: existing.id,
             protectedPathPrefix: existing.protectedPathPrefix,
@@ -344,7 +348,8 @@ enum MCPDispatcher {
             allowedSignatures: signatures,
             allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
             allowedAncestorSignatures: existing.allowedAncestorSignatures,
-            enforceOnWriteOnly: enforceOnWriteOnly
+            enforceOnWriteOnly: enforceOnWriteOnly,
+            doubleStarParentMatching: doubleStarParentMatching
         )
         try await store.update(updated)
         var lines = [
@@ -354,6 +359,7 @@ enum MCPDispatcher {
             "  Signatures: \(signatures.map(\.description).joined(separator: ", "))",
         ]
         if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
+        lines.append(contentsOf: doubleStarParentMatchingLines(for: updated))
         return text(lines.joined(separator: "\n"))
     }
 
@@ -391,7 +397,7 @@ enum MCPDispatcher {
             lines.append("  Installed: \(preset.isInstalled)")
             for rule in preset.rules {
                 let writesOnlyTag = rule.enforceOnWriteOnly ? " [writes only]" : ""
-                lines.append("  Rule [\(rule.id.uuidString)]: \(rule.protectedPathPrefix)\(writesOnlyTag)")
+                lines.append("  Rule [\(rule.id.uuidString)]: \(rule.protectedPathPrefix)\(writesOnlyTag)\(doubleStarCompatibilityTag(for: rule))")
                 if !rule.allowedSignatures.isEmpty {
                     lines.append("    Sigs: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
                 }
@@ -401,6 +407,27 @@ enum MCPDispatcher {
     }
 
     // MARK: - Helpers
+
+    private static func parseDoubleStarParentMatching(from value: JSONValue?) throws -> DoubleStarParentMatching? {
+        guard let value else { return nil }
+        guard let name = value.stringValue, let matching = DoubleStarParentMatching(rawValue: name) else {
+            throw MCPToolError.invalidParameter("double_star_parent_matching must be \"all_nested_directories\" or \"stop_at_double_star\".")
+        }
+        return matching
+    }
+
+    private static func doubleStarParentMatchingLines(for rule: FAARule) -> [String] {
+        guard patternContainsDoubleStarComponent(rule.protectedPathPrefix) else { return [] }
+        guard rule.usesDoubleStarCompatibilityMode else { return ["  Parent directories: all nested directories"] }
+        return [
+            "  Parent directories: stop at ** (compatibility mode)",
+            "  Warning: \(DoubleStarCompatibilityCopy.warning)",
+        ]
+    }
+
+    private static func doubleStarCompatibilityTag(for rule: FAARule) -> String {
+        rule.usesDoubleStarCompatibilityMode ? " [** compatibility]" : ""
+    }
 
     private static func parseSignatures(from value: JSONValue?) throws -> [ProcessSignature] {
         guard let value else { return [] }
@@ -446,7 +473,7 @@ enum MCPDispatcher {
 
     private static func formatRule(_ rule: FAARule) -> String {
         let writesOnlyTag = rule.enforceOnWriteOnly ? " [writes only]" : ""
-        var lines = ["  [\(rule.id.uuidString)] \(rule.protectedPathPrefix)\(writesOnlyTag)"]
+        var lines = ["  [\(rule.id.uuidString)] \(rule.protectedPathPrefix)\(writesOnlyTag)\(doubleStarCompatibilityTag(for: rule))"]
         if !rule.allowedSignatures.isEmpty {
             lines.append("    Signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
         }
@@ -492,16 +519,18 @@ enum MCPDispatcher {
                 "protected_path_prefix":  (type: "string",  description: "Path to protect (e.g. /Users/*/Library/Mail)", required: true),
                 "allowed_signatures":     (type: "array",   description: "Allowed signing IDs as [\"teamID:signingID\"]. Apple binaries: \"apple:com.apple.Foo\".", required: false),
                 "enforce_on_write_only":  (type: "boolean", description: "When true, the rule only enforces on writes (rename/unlink/link/create/truncate/copyfile/exchangedata/clone, plus opens with FWRITE/O_APPEND/O_TRUNC). Reads from any process pass through. Defaults to false.", required: false),
+                "double_star_parent_matching": (type: "string", description: "Only for patterns with a ** component. \"all_nested_directories\" (default): a rename, clone or copy of any directory that can hold a protected path needs this rule's permission. \"stop_at_double_star\": compatibility mode. Directories below ** can be moved or copied without this rule's permission, so protected files can be moved out of the protected location.", required: false),
                 "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false)
             ]
         ),
         toolDef(
             name: "update_rule",
-            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID. enforce_on_write_only is preserved from the existing rule when omitted.",
+            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID. enforce_on_write_only and double_star_parent_matching are preserved from the existing rule when omitted.",
             params: [
                 "id":                     (type: "string",  description: "UUID of the user rule to update", required: true),
                 "allowed_signatures":     (type: "array",   description: "Complete new list of signatures as [\"teamID:signingID\"]", required: true),
-                "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false)
+                "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false),
+                "double_star_parent_matching": (type: "string", description: "Optional: \"all_nested_directories\" or \"stop_at_double_star\" (compatibility mode, directories below ** can be moved or copied without this rule's permission). Omit to preserve the current value.", required: false)
             ]
         ),
         toolDef(

@@ -32,6 +32,18 @@ func parseManagedPolicyRule(_ dict: [String: Any]) -> FAARule? {
         allowedSignatures:           parseSignatures(dict["AllowedSignatures"]         as? [String] ?? []),
         allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],
         allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? []),
-        enforceOnWriteOnly:          dict["EnforceOnWriteOnly"] as? Bool ?? false
+        enforceOnWriteOnly:          dict["EnforceOnWriteOnly"] as? Bool ?? false,
+        doubleStarParentMatching:    parseDoubleStarParentMatching(dict["DoubleStarParentMatching"], pattern: path)
     )
+}
+
+// An unknown value gives the stricter matching, so a typo in a profile
+// never opens the parent-directory bypass.
+private func parseDoubleStarParentMatching(_ value: Any?, pattern: String) -> DoubleStarParentMatching {
+    guard let value else { return .implied(by: pattern) }
+    guard let name = value as? String, let matching = DoubleStarParentMatching(rawValue: name) else {
+        NSLog("ManagedPolicyLoader: Unknown DoubleStarParentMatching value for %@ — using all_nested_directories", pattern)
+        return .allNestedDirectories
+    }
+    return matching
 }

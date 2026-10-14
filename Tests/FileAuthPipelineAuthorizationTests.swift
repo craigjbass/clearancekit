@@ -36,6 +36,7 @@ private func authorizationEvent(
         accessKind: .write,
         path: path,
         secondaryPath: nil,
+        movedEntryKind: .noDirectory,
         processIdentity: ProcessIdentity(pid: pid, pidVersion: pidVersion),
         processID: pid,
         parentPID: 1,

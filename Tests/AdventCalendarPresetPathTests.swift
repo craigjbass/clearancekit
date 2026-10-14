@@ -166,6 +166,31 @@ struct AdventCalendarPresetPathTests {
         ))
     }
 
+    @Test("in-memory rule in compatibility mode allows temporary folder moves")
+    func inMemoryCompatibilityRuleAllowsTemporaryFolderMoves() {
+        let rule = FAARule(
+            protectedPathPrefix: "/private/var/folders/**/NSCreateObjectFileImageFromMemory-*",
+            enforceOnWriteOnly: true,
+            doubleStarParentMatching: .stopAtDoubleStar
+        )
+        let decision = evaluateAccess(
+            rules: [rule],
+            allowlist: [],
+            path: "/private/var/folders/zz/zyxvpxvq6csfxvn_n00000sm00006d/T/TemporaryItems/build",
+            secondaryPath: "/private/var/folders/zz/zyxvpxvq6csfxvn_n00000sm00006d/T/TemporaryItems/build2",
+            reach: .subtree,
+            processPath: "/usr/bin/ditto",
+            teamID: "apple",
+            signingID: "com.apple.ditto",
+            accessKind: .write,
+            ancestors: []
+        )
+        guard case .noRuleApplies = decision else {
+            Issue.record("Expected .noRuleApplies, got \(decision)")
+            return
+        }
+    }
+
     // MARK: - AWS credentials (Day 25)
 
     @Test("AWS credentials file is protected")

@@ -838,12 +838,15 @@ EQHXZ8M8AV:*                                    # Any Google-signed binary</code
     "AllowedSignatures": ["apple:com.apple.Safari", "TEAM:*"],
     "AllowedAncestorProcessPaths": ["/usr/bin/parent"],
     "AllowedAncestorSignatures": ["TEAM:com.example.runner"],
-    "EnforceOnWriteOnly": false
+    "EnforceOnWriteOnly": false,
+    "DoubleStarParentMatching": "all_nested_directories"
 }</code></pre>
 
 <p>If <code>ID</code> is omitted, it is derived deterministically from the <code>ProtectedPathPrefix</code>.</p>
 
 <p>When <code>EnforceOnWriteOnly</code> is <code>true</code>, the rule only fires for write operations (rename, unlink, link, create, truncate, copyfile, exchangedata, clone, and opens with <code>FWRITE</code> / <code>O_APPEND</code> / <code>O_TRUNC</code>). Read-only opens fall through to the next rule. Use this for tamper-protection of config files like <code>/etc/pam.d</code>, <code>/etc/ssh</code>, or audio plugin bundles, where any process should be able to read the file but only specific processes should be able to modify it. Defaults to <code>false</code>.</p>
+
+<p><code>DoubleStarParentMatching</code> applies only to patterns with a <code>**</code> component. With <code>all_nested_directories</code>, a rename, clone or copy of any directory that can hold a protected path needs this rule's permission. With <code>stop_at_double_star</code> (compatibility mode), directories below <code>**</code> can be moved or copied without this rule's permission, so protected files can be moved out of the protected location this way. If the key is omitted, rules with <code>**</code> use <code>stop_at_double_star</code>.</p>
 
 <h3>GlobalAllowlist schema</h3>
 <pre><code>{

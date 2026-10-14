@@ -171,6 +171,60 @@ struct ManagedPolicyRuleParserTests {
 
         #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == false)
     }
+
+    @Test("DoubleStarParentMatching stop_at_double_star is parsed")
+    func doubleStarParentMatchingStopAtDoubleStar() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/**/secret",
+            "DoubleStarParentMatching": "stop_at_double_star",
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .stopAtDoubleStar)
+    }
+
+    @Test("DoubleStarParentMatching all_nested_directories is parsed")
+    func doubleStarParentMatchingAllNestedDirectories() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/**/secret",
+            "DoubleStarParentMatching": "all_nested_directories",
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .allNestedDirectories)
+    }
+
+    @Test("absent DoubleStarParentMatching on a double-star pattern gives stopAtDoubleStar")
+    func doubleStarParentMatchingAbsentOnDoubleStarPattern() {
+        let dict: [String: Any] = ["ProtectedPathPrefix": "/a/**/secret"]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .stopAtDoubleStar)
+    }
+
+    @Test("absent DoubleStarParentMatching on a plain pattern gives allNestedDirectories")
+    func doubleStarParentMatchingAbsentOnPlainPattern() {
+        let dict: [String: Any] = ["ProtectedPathPrefix": "/a/secret"]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .allNestedDirectories)
+    }
+
+    @Test("unknown DoubleStarParentMatching value gives allNestedDirectories")
+    func doubleStarParentMatchingUnknownValue() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/**/secret",
+            "DoubleStarParentMatching": "sometimes",
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .allNestedDirectories)
+    }
+
+    @Test("DoubleStarParentMatching with non-string type gives allNestedDirectories")
+    func doubleStarParentMatchingWrongType() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/**/secret",
+            "DoubleStarParentMatching": true,
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.doubleStarParentMatching == .allNestedDirectories)
+    }
 }
 
 // MARK: - parseManagedAllowlistEntry

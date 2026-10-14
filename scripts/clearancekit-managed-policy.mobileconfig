@@ -120,6 +120,23 @@
                                         <key>EnforceOnWriteOnly</key>
                                         <true/>
                                         -->
+                                        <!--
+                                            DoubleStarParentMatching (optional):
+                                            only for patterns with a ** component.
+                                            "all_nested_directories": a move or copy
+                                            of any directory that can hold a
+                                            protected path needs this rule's
+                                            permission.
+                                            "stop_at_double_star": compatibility
+                                            mode. Directories below ** can be moved
+                                            or copied without this rule's
+                                            permission. Omit to use
+                                            stop_at_double_star for ** patterns.
+                                        -->
+                                        <!--
+                                        <key>DoubleStarParentMatching</key>
+                                        <string>all_nested_directories</string>
+                                        -->
                                     </dict>
                                 </array>
 

@@ -156,6 +156,23 @@ extension ProcessSignature: CustomStringConvertible {
     public var description: String { "\(teamID):\(signingID)" }
 }
 
+// MARK: - DoubleStarParentMatching
+
+// stopAtDoubleStar keeps the older behaviour for `**` rules: a directory
+// below the `**` can be moved or copied without this rule's permission.
+public enum DoubleStarParentMatching: String, Codable {
+    case allNestedDirectories = "all_nested_directories"
+    case stopAtDoubleStar = "stop_at_double_star"
+
+    public static func implied(by pattern: String) -> DoubleStarParentMatching {
+        patternContainsDoubleStarComponent(pattern) ? .stopAtDoubleStar : .allNestedDirectories
+    }
+}
+
+public func patternContainsDoubleStarComponent(_ pattern: String) -> Bool {
+    pattern.split(separator: "/", omittingEmptySubsequences: true).contains("**")
+}
+
 // MARK: - FAARule
 
 public struct FAARule: Identifiable, Codable, Equatable {
@@ -181,6 +198,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public var authorizedSignatures: [ProcessSignature]
     public let requiresAuthorization: Bool
     public let authorizationSessionDuration: TimeInterval
+    public let doubleStarParentMatching: DoubleStarParentMatching
 
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
@@ -198,7 +216,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         requireValidSigning: Bool = false,
         authorizedSignatures: [ProcessSignature] = [],
         requiresAuthorization: Bool = false,
-        authorizationSessionDuration: TimeInterval = 300
+        authorizationSessionDuration: TimeInterval = 300,
+        doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -212,13 +231,14 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.authorizedSignatures = authorizedSignatures
         self.requiresAuthorization = requiresAuthorization
         self.authorizationSessionDuration = authorizationSessionDuration
+        self.doubleStarParentMatching = doubleStarParentMatching
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures,
              allowedAncestorProcessPaths, allowedAncestorSignatures,
              enforceOnWriteOnly, requireValidSigning,
-             authorizedSignatures, requiresAuthorization, authorizationSessionDuration
+             authorizedSignatures, requiresAuthorization, authorizationSessionDuration, doubleStarParentMatching
     }
 
     public init(from decoder: Decoder) throws {
@@ -235,6 +255,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         authorizedSignatures = (try? c.decode([ProcessSignature].self, forKey: .authorizedSignatures)) ?? []
         requiresAuthorization = (try? c.decode(Bool.self, forKey: .requiresAuthorization)) ?? false
         authorizationSessionDuration = (try? c.decode(TimeInterval.self, forKey: .authorizationSessionDuration)) ?? 300
+        doubleStarParentMatching = try c.decodeIfPresent(DoubleStarParentMatching.self, forKey: .doubleStarParentMatching)
+            ?? .implied(by: protectedPathPrefix)
     }
 
     /// Custom encoder that omits fields when they equal their defaults. This is
@@ -266,6 +288,19 @@ public struct FAARule: Identifiable, Codable, Equatable {
         }
         if authorizationSessionDuration != 300 {
             try c.encode(authorizationSessionDuration, forKey: .authorizationSessionDuration)
+        }
+        if doubleStarParentMatching != .implied(by: protectedPathPrefix) {
+            try c.encode(doubleStarParentMatching, forKey: .doubleStarParentMatching)
+        }
+    }
+}
+
+extension FAARule {
+    public var usesDoubleStarCompatibilityMode: Bool {
+        guard patternContainsDoubleStarComponent(protectedPathPrefix) else { return false }
+        switch doubleStarParentMatching {
+        case .allNestedDirectories: return false
+        case .stopAtDoubleStar: return true
         }
     }
 }
@@ -343,6 +378,27 @@ private func componentPrefixMatches(path: ArraySlice<String>, pattern: ArraySlic
     return componentPrefixMatches(path: path.dropFirst(), pattern: pattern.dropFirst())
 }
 
+public func pathContainsProtectedPaths(_ path: String, by pattern: String, matching: DoubleStarParentMatching) -> Bool {
+    let pathParts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    let patternParts = pattern.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    return componentsLeadIntoPattern(path: pathParts[...], pattern: patternParts[...], matching: matching)
+}
+
+private func componentsLeadIntoPattern(path: ArraySlice<String>, pattern: ArraySlice<String>, matching: DoubleStarParentMatching) -> Bool {
+    guard let patternHead = pattern.first else { return false }
+    guard let pathHead = path.first else { return true }
+    if patternHead == "**" { return pathBelowDoubleStarCounts(matching) }
+    guard globMatches(string: pathHead, pattern: patternHead) else { return false }
+    return componentsLeadIntoPattern(path: path.dropFirst(), pattern: pattern.dropFirst(), matching: matching)
+}
+
+private func pathBelowDoubleStarCounts(_ matching: DoubleStarParentMatching) -> Bool {
+    switch matching {
+    case .allNestedDirectories: return true
+    case .stopAtDoubleStar: return false
+    }
+}
+
 /// Matches a single path component against a glob pattern (`*`, `?` within the component).
 private func globMatches(string: String, pattern: String) -> Bool {
     if pattern == "*" { return true }
@@ -366,6 +422,11 @@ private func globMatches(string: String, pattern: String) -> Bool {
 
 private func pathSpecificity(_ pattern: String) -> Int {
     pattern.split(separator: "/", omittingEmptySubsequences: true).count
+}
+
+public enum OperationReach {
+    case singlePath
+    case subtree
 }
 
 // MARK: - Policy evaluation
@@ -398,77 +459,90 @@ public func checkFAAPolicy(
     }
 
     for (_, rule) in sorted {
-        if rule.enforceOnWriteOnly && accessKind == .read { continue }
-
-        if rule.requireValidSigning && teamID.isEmpty {
-            return .denied(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                allowedCriteria: "valid code signature required"
-            )
+        if let ruleDecision = decision(for: rule, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors) {
+            return ruleDecision
         }
-
-        if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
-        }
-
-        if !rule.allowedSignatures.isEmpty,
-           let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
-        }
-
-        if !rule.authorizedSignatures.isEmpty,
-           rule.authorizedSignatures.contains(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
-            return .requiresAuthorization(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                criterion: "authorizedSignature",
-                sessionDuration: rule.authorizationSessionDuration
-            )
-        }
-
-        if rule.requiresAuthorization && !teamID.isEmpty {
-            return .requiresAuthorization(
-                ruleID: rule.id,
-                ruleName: rule.protectedPathPrefix,
-                ruleSource: rule.source,
-                criterion: "requiresAuthorization",
-                sessionDuration: rule.authorizationSessionDuration
-            )
-        }
-
-        if !rule.allowedAncestorProcessPaths.isEmpty {
-            if let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
-            }
-        }
-
-        if !rule.allowedAncestorSignatures.isEmpty {
-            for ancestor in ancestors {
-                if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
-                    return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
-                }
-            }
-        }
-
-        var criteria: [String] = []
-        if !rule.allowedProcessPaths.isEmpty {
-            criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
-        }
-        if !rule.allowedSignatures.isEmpty {
-            criteria.append("signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
-        }
-        if !rule.allowedAncestorProcessPaths.isEmpty {
-            criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
-        }
-        if !rule.allowedAncestorSignatures.isEmpty {
-            criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
-        }
-        return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
     }
     return .noRuleApplies
+}
+
+private func decision(
+    for rule: FAARule,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    accessKind: AccessKind,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision? {
+    if rule.enforceOnWriteOnly && accessKind == .read { return nil }
+
+    if rule.requireValidSigning && teamID.isEmpty {
+        return .denied(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            allowedCriteria: "valid code signature required"
+        )
+    }
+
+    if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
+    }
+
+    if !rule.allowedSignatures.isEmpty,
+       let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
+    }
+
+    if !rule.authorizedSignatures.isEmpty,
+       rule.authorizedSignatures.contains(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
+        return .requiresAuthorization(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            criterion: "authorizedSignature",
+            sessionDuration: rule.authorizationSessionDuration
+        )
+    }
+
+    if rule.requiresAuthorization && !teamID.isEmpty {
+        return .requiresAuthorization(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            criterion: "requiresAuthorization",
+            sessionDuration: rule.authorizationSessionDuration
+        )
+    }
+
+    if !rule.allowedAncestorProcessPaths.isEmpty {
+        if let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
+        }
+    }
+
+    if !rule.allowedAncestorSignatures.isEmpty {
+        for ancestor in ancestors {
+            if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
+                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
+            }
+        }
+    }
+
+    var criteria: [String] = []
+    if !rule.allowedProcessPaths.isEmpty {
+        criteria.append("process paths: \(rule.allowedProcessPaths.joined(separator: ", "))")
+    }
+    if !rule.allowedSignatures.isEmpty {
+        criteria.append("signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
+    }
+    if !rule.allowedAncestorProcessPaths.isEmpty {
+        criteria.append("ancestor paths: \(rule.allowedAncestorProcessPaths.joined(separator: ", "))")
+    }
+    if !rule.allowedAncestorSignatures.isEmpty {
+        criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
+    }
+    return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
 }
 
 public func checkFAAPolicy(
@@ -489,22 +563,71 @@ public func checkFAAPolicy(
     rules: [FAARule],
     path: String,
     secondaryPath: String?,
+    reach: OperationReach,
     processPath: String,
     teamID: String,
     signingID: String,
     accessKind: AccessKind,
     ancestors: [AncestorInfo]
 ) -> PolicyDecision {
-    let primaryDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let primaryDecision = checkFAAPolicy(rules: rules, path: path, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     guard let secondaryPath else { return primaryDecision }
-    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
     return moreRestrictiveDecision(primaryDecision, secondaryDecision)
 }
 
-private func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
+private func checkFAAPolicy(
+    rules: [FAARule],
+    path: String,
+    reach: OperationReach,
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    accessKind: AccessKind,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision {
+    let pathDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    switch reach {
+    case .singlePath:
+        return pathDecision
+    case .subtree:
+        let rulesBeneathDecision = checkRulesBeneath(path, rules: rules, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+        return moreRestrictiveDecision(pathDecision, rulesBeneathDecision)
+    }
+}
+
+// Moving or copying a directory moves or copies everything inside it, so the
+// operation is a write to every protected path beneath — the Santa model.
+private func checkRulesBeneath(
+    _ path: String,
+    rules: [FAARule],
+    processPath: String,
+    teamID: String,
+    signingID: String,
+    ancestors: [AncestorInfo]
+) -> PolicyDecision {
+    let decisions = rules
+        .filter { pathContainsProtectedPaths(path, by: $0.protectedPathPrefix, matching: $0.doubleStarParentMatching) }
+        .compactMap { decision(for: $0, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: .write, ancestors: ancestors) }
+    guard let firstDecision = decisions.first else { return .noRuleApplies }
+    return decisions.dropFirst().reduce(firstDecision, moreRestrictiveDecision)
+}
+
+public func moreRestrictiveDecision(_ lhs: PolicyDecision, _ rhs: PolicyDecision) -> PolicyDecision {
+    if lhs.isDenial { return lhs }
+    if rhs.isDenial { return rhs }
     if !lhs.isAllowed { return lhs }
     if !rhs.isAllowed { return rhs }
     return lhs
+}
+
+private extension PolicyDecision {
+    var isDenial: Bool {
+        switch self {
+        case .denied, .jailDenied: return true
+        case .globallyAllowed, .noRuleApplies, .allowed, .jailAllowed, .requiresAuthorization: return false
+        }
+    }
 }
 
 // MARK: - Path classification
@@ -530,11 +653,28 @@ public func classifyPath(_ path: String, rules: [FAARule]) -> PathRuleClassifica
     return .processLevelOnly(matchingRule: first)
 }
 
-public func classifyPaths(_ path: String, secondaryPath: String?, rules: [FAARule]) -> PathRuleClassification {
-    let primaryClassification = classifyPath(path, rules: rules)
+public func classifyPaths(_ path: String, secondaryPath: String?, reach: OperationReach, rules: [FAARule]) -> PathRuleClassification {
+    let primaryClassification = classifyPath(path, reach: reach, rules: rules)
     guard let secondaryPath else { return primaryClassification }
-    let secondaryClassification = classifyPath(secondaryPath, rules: rules)
+    let secondaryClassification = classifyPath(secondaryPath, reach: reach, rules: rules)
     return moreRestrictive(primaryClassification, secondaryClassification)
+}
+
+private func classifyPath(_ path: String, reach: OperationReach, rules: [FAARule]) -> PathRuleClassification {
+    let matching = rules.filter { ruleApplies($0, to: path, reach: reach) }
+    guard let first = matching.first else { return .noRuleApplies }
+    if matching.contains(where: \.requiresAncestry) {
+        return .ancestryRequired(matchingRule: first)
+    }
+    return .processLevelOnly(matchingRule: first)
+}
+
+private func ruleApplies(_ rule: FAARule, to path: String, reach: OperationReach) -> Bool {
+    if pathIsProtected(path, by: rule.protectedPathPrefix) { return true }
+    switch reach {
+    case .singlePath: return false
+    case .subtree: return pathContainsProtectedPaths(path, by: rule.protectedPathPrefix, matching: rule.doubleStarParentMatching)
+    }
 }
 
 private func moreRestrictive(_ lhs: PathRuleClassification, _ rhs: PathRuleClassification) -> PathRuleClassification {
@@ -555,6 +695,7 @@ public func evaluateAccess(
     ancestorAllowlist: [AncestorAllowlistEntry] = [],
     path: String,
     secondaryPath: String? = nil,
+    reach: OperationReach,
     processPath: String,
     teamID: String,
     signingID: String,
@@ -571,7 +712,7 @@ public func evaluateAccess(
         }
     }
 
-    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }
 
 public func evaluateAccess(
@@ -593,5 +734,5 @@ public func evaluateAccess(
         rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
     let ancestors = needsAncestors ? await ancestryProvider() : []
 
-    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, reach: .singlePath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
 }

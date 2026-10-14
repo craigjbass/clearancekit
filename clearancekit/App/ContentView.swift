@@ -51,6 +51,7 @@ struct ContentView: View {
     @StateObject private var extensionManager = SystemExtensionManager.shared
     @ObservedObject private var nav = NavigationState.shared
     @StateObject private var protectionStore = AppProtectionStore.shared
+    @ObservedObject private var policyStore = PolicyStore.shared
     @State private var signatureIssue: PendingSignatureIssue? = nil
 
     private static let basicItems: Set<SidebarItem> = [.events, .presets, .setup]
@@ -64,11 +65,21 @@ struct ContentView: View {
         )
     }
 
+    private var doubleStarCompatibilityRuleCount: Int {
+        policyStore.doubleStarCompatibilityRuleCount(builtInPresetRules: builtInPresets.flatMap(\.rules))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if xpcClient.hasServiceVersionMismatch {
                 ServiceVersionMismatchBanner {
                     nav.selection = .setup
+                }
+            }
+            if doubleStarCompatibilityRuleCount > 0 {
+                DoubleStarCompatibilityBanner(ruleCount: doubleStarCompatibilityRuleCount) {
+                    xpcClient.setAdvancedModeEnabled(true)
+                    nav.selection = .policy
                 }
             }
             NavigationSplitView {
@@ -204,6 +215,27 @@ private struct ServiceVersionMismatchBanner: View {
             Spacer()
             Button("Go to Setup", action: onSetup)
                 .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.windowBackgroundColor))
+        Divider()
+    }
+}
+
+// MARK: - DoubleStarCompatibilityBanner
+
+private struct DoubleStarCompatibilityBanner: View {
+    let ruleCount: Int
+    let onShowRules: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(LocalizedStringKey(DoubleStarCompatibilityCopy.bannerTitle(ruleCount: ruleCount)))
+            Spacer()
+            Button("Show Rules", action: onShowRules)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

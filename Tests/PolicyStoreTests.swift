@@ -291,4 +291,30 @@ struct PolicyStoreTests {
 
         #expect(store.userRules == rules)
     }
+
+    // MARK: doubleStarCompatibilityRuleCount
+
+    @Test("counts user and managed rules in double-star compatibility mode")
+    func countsDoubleStarCompatibilityRules() {
+        let store = PolicyStore(service: FakePolicyService(), authenticate: approvedAuth)
+        store.receivedUserRules([
+            FAARule(protectedPathPrefix: "/a/**/secret", doubleStarParentMatching: .stopAtDoubleStar),
+            FAARule(protectedPathPrefix: "/b/**/secret"),
+        ])
+        store.receivedManagedRules([
+            FAARule(protectedPathPrefix: "/c/**/secret", source: .mdm, doubleStarParentMatching: .stopAtDoubleStar),
+        ])
+
+        #expect(store.doubleStarCompatibilityRuleCount(builtInPresetRules: []) == 2)
+    }
+
+    @Test("a plain pattern set to stopAtDoubleStar is not counted")
+    func plainPatternIsNotCounted() {
+        let store = PolicyStore(service: FakePolicyService(), authenticate: approvedAuth)
+        store.receivedUserRules([
+            FAARule(protectedPathPrefix: "/a/secret", doubleStarParentMatching: .stopAtDoubleStar),
+        ])
+
+        #expect(store.doubleStarCompatibilityRuleCount(builtInPresetRules: []) == 0)
+    }
 }

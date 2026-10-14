@@ -29,6 +29,7 @@ struct AuditLoggerTests {
             accessKind: accessKind,
             path: path,
             secondaryPath: nil,
+            movedEntryKind: .noDirectory,
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),
             processID: processID,
             parentPID: parentPID,
