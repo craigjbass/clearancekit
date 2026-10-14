@@ -68,9 +68,9 @@ extension FileAuthEvent {
         }
     }
 
-    // The ES result cache does not key on the destination path, so a cached
-    // allow for one directory move would also allow the same source to move
-    // onto a protected destination later.
+    // Defence in depth: ESMessage.h says AUTH_RENAME, AUTH_CLONE and AUTH_COPYFILE
+    // are not cached today. A subtree allow depends on the path names, so it is
+    // never marked cacheable in case ES changes or a new subtree operation is added.
     var cachesAllowResponse: Bool {
         switch reach {
         case .singlePath: return true
