@@ -16,8 +16,8 @@ final class ESInboundAdapter {
     private let interactor: FAAFilterInteractor
     private let esAdapterQueue: DispatchQueue
     private var client: OpaquePointer?
-    private var policyPrefixes: Set<String> = []
-    private var discoveryPrefixes: Set<String> = []
+    private var policyMuteTargets: Set<MuteTarget> = []
+    private var discoveryMuteTargets: Set<MuteTarget> = []
 
     init(
         interactor: FAAFilterInteractor,
@@ -123,9 +123,9 @@ final class ESInboundAdapter {
     /// clears the ES authorization cache, and updates the interactor's rule set.
     func updatePolicy(_ rules: [FAARule]) {
         guard let client else { return }
-        let old = policyPrefixes.union(discoveryPrefixes)
-        policyPrefixes = Set(rules.map { mutePath(for: $0.protectedPathPrefix) })
-        applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
+        let old = policyMuteTargets.union(discoveryMuteTargets)
+        policyMuteTargets = muteTargets(for: rules)
+        applyMuteTargetDiff(from: old, to: policyMuteTargets.union(discoveryMuteTargets), client: client)
         es_clear_cache(client)
         interactor.updatePolicy(rules)
     }
@@ -134,9 +134,9 @@ final class ESInboundAdapter {
     /// Pass `["/Users"]` to begin and `[]` to end.
     func setDiscoveryPaths(_ paths: [String]) {
         guard let client else { return }
-        let old = policyPrefixes.union(discoveryPrefixes)
-        discoveryPrefixes = Set(paths)
-        applyPrefixDiff(from: old, to: policyPrefixes.union(discoveryPrefixes), client: client)
+        let old = policyMuteTargets.union(discoveryMuteTargets)
+        discoveryMuteTargets = Set(paths.map { MuteTarget(path: $0, kind: .prefix) })
+        applyMuteTargetDiff(from: old, to: policyMuteTargets.union(discoveryMuteTargets), client: client)
         es_clear_cache(client)
     }
 
@@ -145,28 +145,28 @@ final class ESInboundAdapter {
         es_clear_cache(client)
     }
 
-    private func applyPrefixDiff(from old: Set<String>, to new: Set<String>, client: OpaquePointer) {
-        for prefix in old.subtracting(new) {
-            es_unmute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+    private func applyMuteTargetDiff(from old: Set<MuteTarget>, to new: Set<MuteTarget>, client: OpaquePointer) {
+        for target in old.subtracting(new) {
+            es_unmute_path(client, target.path, target.kind.esMutePathType)
         }
-        for prefix in new.subtracting(old) {
-            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        for target in new.subtracting(old) {
+            es_mute_path(client, target.path, target.kind.esMutePathType)
         }
     }
 
     private func applyMutedPrefixes(from rules: [FAARule]) {
         guard let client else { return }
-        policyPrefixes = Set(rules.map { mutePath(for: $0.protectedPathPrefix) })
-        for prefix in policyPrefixes {
-            es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        policyMuteTargets = muteTargets(for: rules)
+        for target in policyMuteTargets {
+            es_mute_path(client, target.path, target.kind.esMutePathType)
         }
         // Bundle protection prefixes are permanently muted so write events inside .app bundles
-        // are always delivered. Kept outside policyPrefixes so policy diffs never unmute them.
+        // are always delivered. Kept outside policyMuteTargets so policy diffs never unmute them.
         for prefix in BundlePath.protectedPrefixes {
             es_mute_path(client, prefix, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
         }
         // XProtect path is permanently muted so NOTIFY_WRITE, AUTH_RENAME, and AUTH_UNLINK events
-        // are always delivered for it. Kept outside policyPrefixes so policy diffs never unmute it.
+        // are always delivered for it. Kept outside policyMuteTargets so policy diffs never unmute it.
         es_mute_path(client, Self.xprotectPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
     }
 
