@@ -1294,3 +1294,35 @@ struct RequireValidSigningTests {
         }
     }
 }
+
+// MARK: - Baseline allowlist and Spotlight indexers
+
+@Suite("baselineAllowlist Spotlight indexers")
+struct BaselineAllowlistSpotlightTests {
+    static let spotlightIndexerSigningIDs = [
+        "com.apple.mdworker",
+        "com.apple.mdworker_shared",
+        "com.apple.mds",
+        "com.apple.mdsync",
+    ]
+
+    @Test("indexer reading a protected file is globally allowed", arguments: spotlightIndexerSigningIDs)
+    func indexerReadingProtectedFileIsGloballyAllowed(signingID: String) async {
+        let rules = [FAARule(protectedPathPrefix: "/Users/develop/goal/*")]
+
+        let decision = await evaluateAccess(
+            rules: rules,
+            allowlist: baselineAllowlist,
+            path: "/Users/develop/goal/gold",
+            processPath: "/System/Library/Frameworks/CoreServices.framework/indexer",
+            teamID: "apple",
+            signingID: signingID,
+            accessKind: .read
+        )
+
+        guard case .globallyAllowed = decision else {
+            Issue.record("Expected .globallyAllowed, got \(decision)")
+            return
+        }
+    }
+}
