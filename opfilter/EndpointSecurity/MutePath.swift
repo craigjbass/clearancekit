@@ -7,14 +7,13 @@ import EndpointSecurity
 
 /// Returns the literal path prefix to pass to `es_mute_path` for a given pattern.
 /// Stops at the first path component that contains a wildcard character.
+/// Empty components and a trailing slash are removed, because ES reports
+/// paths without them.
 func mutePath(for pattern: String) -> String {
-    var literal: [String] = []
-    for component in pattern.split(separator: "/", omittingEmptySubsequences: false).map(String.init) {
-        if component.contains("*") || component.contains("?") { break }
-        literal.append(component)
-    }
-    let result = literal.joined(separator: "/")
-    return result.isEmpty ? "/" : result
+    let literalComponents = pattern
+        .split(separator: "/", omittingEmptySubsequences: true)
+        .prefix { !$0.contains("*") && !$0.contains("?") }
+    return "/\(literalComponents.joined(separator: "/"))"
 }
 
 enum MuteTargetKind {

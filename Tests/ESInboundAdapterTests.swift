@@ -69,4 +69,29 @@ struct MutePathTests {
     func questionMarkStops() {
         #expect(mutePath(for: "/data/v?/file") == "/data")
     }
+
+    @Test("trailing slash is removed from a literal pattern")
+    func trailingSlashIsRemoved() {
+        #expect(mutePath(for: "/Users/develop/goal/") == "/Users/develop/goal")
+    }
+
+    @Test("repeated slashes are collapsed")
+    func repeatedSlashesAreCollapsed() {
+        #expect(mutePath(for: "/Users//develop/goal//") == "/Users/develop/goal")
+    }
+
+    @Test("root pattern stays root")
+    func rootPatternStaysRoot() {
+        #expect(mutePath(for: "/") == "/")
+    }
+
+    @Test("trailing-slash pattern selects the directory and each literal parent")
+    func trailingSlashPatternSelectsDirectoryAndParents() {
+        #expect(muteTargets(for: "/Users/develop/goal/") == [
+            MuteTarget(path: "/Users/develop/goal", kind: .prefix),
+            MuteTarget(path: "/Users/develop", kind: .literal),
+            MuteTarget(path: "/Users", kind: .literal),
+            MuteTarget(path: "/", kind: .literal),
+        ])
+    }
 }
