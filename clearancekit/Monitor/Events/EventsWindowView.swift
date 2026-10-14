@@ -115,6 +115,7 @@ struct EventRow: View {
     let isHighlighted: Bool
     @State private var allowedItems: Set<String> = []
     @State private var isExpanded = false
+    @StateObject private var riskGate = SpotlightRiskGate()
 
     private static let baselineRuleIDs: Set<UUID> = Set(faaPolicy.map(\.id))
 
@@ -137,6 +138,15 @@ struct EventRow: View {
     private var isReadOnlyEvent: Bool { isBaselineEvent || isManagedEvent }
 
     private var canAllowDeny: Bool { !event.accessAllowed && !isReadOnlyEvent }
+
+    private var canQuietNotifications: Bool {
+        guard !event.accessAllowed else { return false }
+        return event.notificationPolicy == .notify
+    }
+
+    private func signatureAllowRisk(teamID: String, signingID: String) -> AllowRisk {
+        allowRisk(for: ProcessSignature(teamID: teamID.isEmpty ? appleTeamID : teamID, signingID: signingID))
+    }
 
     private var suggestBaselineIssueURL: URL? {
         guard !event.accessAllowed, event.teamID.isEmpty, !event.signingID.isEmpty else { return nil }
@@ -192,6 +202,7 @@ struct EventRow: View {
                 .stroke(Color.orange, lineWidth: isHighlighted ? 2 : 0)
                 .animation(.easeOut(duration: 0.3), value: isHighlighted)
         )
+        .spotlightIndexerRiskConfirmation(riskGate)
     }
 
     // MARK: - Compact read-only row (baseline + managed, expandable)
@@ -261,7 +272,7 @@ struct EventRow: View {
                 Image(systemName: event.accessAllowed ? "checkmark.shield.fill" : "xmark.shield.fill")
                     .foregroundColor(event.accessAllowed ? .green : .red)
                 if isJailedUserDeny, let ruleID = event.jailedRuleID {
-                    allowButton(label: event.path, itemKey: "jail-path") {
+                    allowButton(label: event.path, itemKey: "jail-path", risk: .noKnownRisk) {
                         try await JailStore.shared.allowPath(event.path, inRule: ruleID)
                     }
                     .font(.system(.body, design: .monospaced))
@@ -375,7 +386,11 @@ struct EventRow: View {
                     .foregroundColor(.secondary)
             } else if !event.signingID.isEmpty {
                 if canAllowDeny, let ruleID = event.matchedRuleID, event.jailedRuleID == nil {
-                    allowButton(label: "Signing: \(event.signingID)", itemKey: "process") {
+                    allowButton(
+                        label: "Signing: \(event.signingID)",
+                        itemKey: "process",
+                        risk: signatureAllowRisk(teamID: event.teamID, signingID: event.signingID)
+                    ) {
                         try await PolicyStore.shared.allowProcess(
                             teamID: event.teamID,
                             signingID: event.signingID,
@@ -395,6 +410,14 @@ struct EventRow: View {
                     .controlSize(.mini)
                 }
             }
+        }
+        if canQuietNotifications {
+            allowButton(label: "Don't notify for this process", itemKey: "quiet", risk: .noKnownRisk) {
+                try await QuietListStore.shared.add(
+                    .quieting(processPath: event.processPath, signingID: event.signingID, teamID: event.teamID)
+                )
+            }
+            .font(.caption)
         }
     }
 
@@ -422,7 +445,11 @@ struct EventRow: View {
                                     .foregroundColor(.secondary)
                             } else if !ancestor.signingID.isEmpty {
                                 if canAllowDeny, let ruleID = event.matchedRuleID, event.jailedRuleID == nil {
-                                    allowButton(label: "Signing: \(ancestor.signingID)", itemKey: "ancestor-\(index)") {
+                                    allowButton(
+                                        label: "Signing: \(ancestor.signingID)",
+                                        itemKey: "ancestor-\(index)",
+                                        risk: signatureAllowRisk(teamID: ancestor.teamID, signingID: ancestor.signingID)
+                                    ) {
                                         try await PolicyStore.shared.allowAncestor(
                                             teamID: ancestor.teamID,
                                             signingID: ancestor.signingID,
@@ -445,18 +472,20 @@ struct EventRow: View {
     }
 
     @ViewBuilder
-    private func allowButton(label: String, itemKey: String, action: @escaping () async throws -> Void) -> some View {
+    private func allowButton(label: String, itemKey: String, risk: AllowRisk, action: @escaping () async throws -> Void) -> some View {
         if allowedItems.contains(itemKey) {
             Text(label)
                 .strikethrough()
                 .foregroundColor(.secondary)
         } else {
             Button {
-                Task {
-                    do {
-                        try await action()
-                        allowedItems.insert(itemKey)
-                    } catch {}
+                riskGate.submit([RiskReviewItem(label: label, risk: risk)]) {
+                    Task {
+                        do {
+                            try await action()
+                            allowedItems.insert(itemKey)
+                        } catch {}
+                    }
                 }
             } label: {
                 Text(label)

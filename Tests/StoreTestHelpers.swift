@@ -20,6 +20,8 @@ final class FakePolicyService: PolicyServiceProtocol {
     private(set) var updatedJailRules: [JailRule] = []
     private(set) var removedJailRuleIDs: [UUID] = []
     private(set) var jailEnabledCalls: [Bool] = []
+    private(set) var addedQuietListEntries: [QuietListEntry] = []
+    private(set) var removedQuietListEntryIDs: [UUID] = []
 
     func addRule(_ rule: FAARule) { addedRules.append(rule) }
     func updateRule(_ rule: FAARule) { updatedRules.append(rule) }
@@ -33,6 +35,8 @@ final class FakePolicyService: PolicyServiceProtocol {
     func removeJailRule(ruleID: UUID) { removedJailRuleIDs.append(ruleID) }
     func setJailEnabled(_ enabled: Bool) { jailEnabledCalls.append(enabled) }
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {}
+    func addQuietListEntry(_ entry: QuietListEntry) { addedQuietListEntries.append(entry) }
+    func removeQuietListEntry(entryID: UUID) { removedQuietListEntryIDs.append(entryID) }
 }
 
 // MARK: - Auth helpers

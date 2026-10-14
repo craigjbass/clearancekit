@@ -7,6 +7,9 @@ import SwiftUI
 
 struct AllowlistView: View {
     @StateObject private var allowlistStore = AllowlistStore.shared
+    @StateObject private var quietListStore = QuietListStore.shared
+    @StateObject private var riskGate = SpotlightRiskGate()
+    @State private var isAddingQuietEntry = false
     @State private var isAddingEntry = false
     @State private var isAddingAncestorEntry = false
     @State private var editingEntry: AllowlistEntry? = nil
@@ -21,58 +24,84 @@ struct AllowlistView: View {
         }
         .sheet(isPresented: $isAddingEntry) {
             AllowlistEntryEditView { entry in
-                Task {
-                    do {
-                        try await allowlistStore.add(entry)
-                        isAddingEntry = false
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: entry)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.add(entry)
+                            isAddingEntry = false
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 isAddingEntry = false
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(isPresented: $isAddingAncestorEntry) {
             AncestorAllowlistEntryEditView { entry in
-                Task {
-                    do {
-                        try await allowlistStore.addAncestor(entry)
-                        isAddingAncestorEntry = false
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: entry)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.addAncestor(entry)
+                            isAddingAncestorEntry = false
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 isAddingAncestorEntry = false
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(item: $editingEntry) { entry in
             AllowlistEntryEditView(existing: entry) { updated in
-                Task {
-                    do {
-                        try await allowlistStore.update(updated)
-                        editingEntry = nil
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: updated)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.update(updated)
+                            editingEntry = nil
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 editingEntry = nil
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(item: $editingAncestorEntry) { entry in
             AncestorAllowlistEntryEditView(existing: entry) { updated in
+                riskGate.submit([riskReviewItem(for: updated)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.updateAncestor(updated)
+                            editingAncestorEntry = nil
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
+                    }
+                }
+            } onCancel: {
+                editingAncestorEntry = nil
+            }
+            .spotlightIndexerRiskConfirmation(riskGate)
+        }
+        .sheet(isPresented: $isAddingQuietEntry) {
+            QuietListEntryEditView { entry in
                 Task {
                     do {
-                        try await allowlistStore.updateAncestor(updated)
-                        editingAncestorEntry = nil
+                        try await quietListStore.add(entry)
+                        isAddingQuietEntry = false
                     } catch {
                         if !BiometricAuth.isUserCancellation(error) { authError = error }
                     }
                 }
             } onCancel: {
-                editingAncestorEntry = nil
+                isAddingQuietEntry = false
             }
         }
         .alert("Authentication Failed", isPresented: Binding(
@@ -90,11 +119,20 @@ struct AllowlistView: View {
     private var toolbar: some View {
         HStack {
             Spacer()
+            Button("Add Quiet Entry") { isAddingQuietEntry = true }
             Button("Add Ancestor Entry") { isAddingAncestorEntry = true }
             Button("Add Entry") { isAddingEntry = true }
         }
         .padding()
         .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private func riskReviewItem(for entry: AllowlistEntry) -> RiskReviewItem {
+        RiskReviewItem(label: entry.signingID.isEmpty ? entry.processPath : entry.signingID, risk: allowRisk(for: entry))
+    }
+
+    private func riskReviewItem(for entry: AncestorAllowlistEntry) -> RiskReviewItem {
+        RiskReviewItem(label: entry.signingID.isEmpty ? entry.processPath : entry.signingID, risk: allowRisk(for: entry))
     }
 
     @ViewBuilder
@@ -111,8 +149,13 @@ struct AllowlistView: View {
             if !allowlistStore.managedEntries.isEmpty {
                 Section("Managed Profile Entries") {
                     ForEach(allowlistStore.managedEntries) { entry in
-                        AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
-                            .padding(.vertical, 4)
+                        VStack(alignment: .leading, spacing: 4) {
+                            AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
+                            if allowRisk(for: entry) == .spotlightIndexer {
+                                SpotlightIndexerRiskBadge()
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -137,8 +180,13 @@ struct AllowlistView: View {
             if !allowlistStore.managedAncestorEntries.isEmpty {
                 Section("Managed Profile Ancestor Entries") {
                     ForEach(allowlistStore.managedAncestorEntries) { entry in
-                        AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
-                            .padding(.vertical, 4)
+                        VStack(alignment: .leading, spacing: 4) {
+                            AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
+                            if allowRisk(for: entry) == .spotlightIndexer {
+                                SpotlightIndexerRiskBadge()
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -156,6 +204,36 @@ struct AllowlistView: View {
                                 }
                             }
                         })
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            Section("Baseline Quiet List") {
+                ForEach(quietListStore.baselineEntries) { entry in
+                    QuietListEntryRow(entry: entry, source: .baseline, onDelete: { })
+                        .padding(.vertical, 4)
+                }
+            }
+            if !quietListStore.managedEntries.isEmpty {
+                Section("Managed Profile Quiet List") {
+                    ForEach(quietListStore.managedEntries) { entry in
+                        QuietListEntryRow(entry: entry, source: .managed, onDelete: { })
+                            .padding(.vertical, 4)
+                    }
+                }
+            }
+            if !quietListStore.userEntries.isEmpty {
+                Section("User Quiet List") {
+                    ForEach(quietListStore.userEntries) { entry in
+                        QuietListEntryRow(entry: entry, source: .user) {
+                            Task {
+                                do {
+                                    try await quietListStore.remove(entry)
+                                } catch {
+                                    if !BiometricAuth.isUserCancellation(error) { authError = error }
+                                }
+                            }
+                        }
                         .padding(.vertical, 4)
                     }
                 }
@@ -190,6 +268,7 @@ private struct AllowlistEntryRow: View {
 
     private var issueURL: URL? {
         guard entry.platformBinary else { return nil }
+        guard allowRisk(for: entry) == .noKnownRisk else { return nil }
         return suggestBaselineIssueURL(signingID: entry.signingID)
     }
 
@@ -505,6 +584,147 @@ struct AncestorAllowlistEntryEditView: View {
                         teamID:         platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
                     )
                     onSave(entry)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValid)
+            }
+            .padding()
+        }
+        .frame(width: 420)
+    }
+}
+
+// MARK: - QuietListEntryRow
+
+private struct QuietListEntryRow: View {
+    let entry: QuietListEntry
+    let source: AllowlistEntrySource
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top) {
+            HStack(spacing: 6) {
+                Image(systemName: "bell.slash")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                Text(entry.signingID.isEmpty ? entry.processPath : entry.signingID)
+                    .font(.system(.body, design: .monospaced))
+                    .lineLimit(1)
+                if entry.platformBinary {
+                    badge("apple")
+                } else if !entry.teamID.isEmpty {
+                    badge(entry.teamID)
+                }
+                sourceBadge
+            }
+            Spacer()
+            if source == .user {
+                Button { onDelete() } label: {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sourceBadge: some View {
+        switch source {
+        case .baseline: badge("baseline")
+        case .managed:  badge("managed")
+        case .user:     EmptyView()
+        }
+    }
+
+    private func badge(_ label: String) -> some View {
+        Text(label)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+// MARK: - QuietListEntryEditView
+
+struct QuietListEntryEditView: View {
+    @State private var matchType: AllowlistEntryEditView.MatchType = .signingID
+    @State private var value = ""
+    @State private var platformBinary = false
+    @State private var teamID = ""
+
+    let onSave: (QuietListEntry) -> Void
+    let onCancel: () -> Void
+
+    private var draftEntry: QuietListEntry {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return QuietListEntry(
+            id: UUID(),
+            signingID: matchType == .signingID ? trimmed : "",
+            processPath: matchType == .processPath ? trimmed : "",
+            platformBinary: platformBinary,
+            teamID: platformBinary ? "" : teamID.trimmingCharacters(in: .whitespaces)
+        )
+    }
+
+    private var isValid: Bool {
+        !value.trimmingCharacters(in: .whitespaces).isEmpty && draftEntry.validation == .valid
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Add Quiet List Entry")
+                .font(.headline)
+                .padding()
+
+            Text("Denies from a matching process are still enforced and logged. They do not show a notification.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+
+            Divider()
+
+            Form {
+                Picker("Match by", selection: $matchType) {
+                    ForEach(AllowlistEntryEditView.MatchType.allCases, id: \.self) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                TextField(
+                    matchType == .signingID ? "com.example.app" : "/usr/bin/example",
+                    text: $value
+                )
+                .font(.system(.body, design: .monospaced))
+
+                Toggle("Platform binary (Apple)", isOn: $platformBinary)
+
+                if !platformBinary {
+                    TextField("Team ID (optional)", text: $teamID)
+                        .font(.system(.body, design: .monospaced))
+                }
+
+                if draftEntry.validation == .matchesEveryProcess {
+                    Text("A signing ID of * with no team ID would silence every deny notification. Enter a team ID or choose platform binary.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding()
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Cancel") { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Add") {
+                    onSave(draftEntry)
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)

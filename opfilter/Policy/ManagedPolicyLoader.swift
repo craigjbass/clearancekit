@@ -56,6 +56,9 @@ enum ManagedPolicyLoader {
         }
         let rules = raw.compactMap(parseManagedPolicyRule)
         logger.info("ManagedPolicyLoader: Loaded \(rules.count, privacy: .public) managed rule(s)")
+        for rule in rules where allowRisk(for: rule) == .spotlightIndexer {
+            logger.warning("ManagedPolicyLoader: Managed rule \(rule.id.uuidString, privacy: .public) allows a Spotlight indexer — any account can read its protected files through it")
+        }
         return rules
     }
 

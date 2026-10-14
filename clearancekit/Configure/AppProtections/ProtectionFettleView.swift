@@ -14,6 +14,7 @@ struct ProtectionFettleView: View {
 
     @State private var showProcessPicker = false
     @State private var sigPickerForEntryID: UUID?
+    @StateObject private var riskGate = SpotlightRiskGate()
 
     init(initialDraft: ProtectionDraft, saveLabel: String, onSave: @escaping (ProtectionDraft) -> Void, onCancel: @escaping () -> Void) {
         self._draft = State(initialValue: initialDraft)
@@ -88,11 +89,17 @@ struct ProtectionFettleView: View {
         HStack {
             Button("Cancel", action: onCancel)
             Spacer()
-            Button(saveLabel) { onSave(draft) }
+            Button(saveLabel) {
+                let reviewedDraft = draft
+                riskGate.submit(RiskReviewItem.items(for: reviewedDraft.toRules())) {
+                    onSave(reviewedDraft)
+                }
+            }
                 .disabled(draft.entries.isEmpty)
                 .buttonStyle(.borderedProminent)
         }
         .padding()
+        .spotlightIndexerRiskConfirmation(riskGate)
     }
 
     private func addSignature(from process: RunningProcess, to entryID: UUID) {

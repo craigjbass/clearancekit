@@ -293,6 +293,20 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(context.policyRepository.encodedUserAncestorAllowlist()) }
     }
 
+    // MARK: - Quiet list mutations
+
+    fileprivate func applyAddQuietListEntry(_ entry: QuietListEntry) {
+        guard let context else { return }
+        context.policyRepository.addQuietListEntry(entry)
+        broadcaster.broadcastToAllClients { $0.quietListUpdated(context.policyRepository.encodedUserQuietList()) }
+    }
+
+    fileprivate func applyRemoveQuietListEntry(entryID: UUID) {
+        guard let context else { return }
+        context.policyRepository.removeQuietListEntry(entryID: entryID)
+        broadcaster.broadcastToAllClients { $0.quietListUpdated(context.policyRepository.encodedUserQuietList()) }
+    }
+
     // MARK: - Jail rule mutations
 
     fileprivate func applyAddJailRule(_ rule: JailRule) {
@@ -383,12 +397,15 @@ final class XPCServer: NSObject, @unchecked Sendable {
             guard let context else { reply(); return }
             let reloadedRules = ManagedPolicyLoader.loadWithSync()
             let reloadedAllowlist = ManagedAllowlistLoader.loadWithSync()
+            let reloadedQuietList = ManagedQuietListLoader.loadWithSync()
+                .resolved(keeping: context.policyRepository.managedQuietList())
             let reloadedJailRules = ManagedJailRuleLoader.loadWithSync()
             let reloadedXProtect = enumerateXProtectEntries()
 
             context.policyRepository.resync(
                 managedRules: reloadedRules,
                 managedAllowlist: reloadedAllowlist,
+                managedQuietList: reloadedQuietList,
                 managedJailRules: reloadedJailRules,
                 xprotectEntries: reloadedXProtect
             )
@@ -411,6 +428,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist())
         proxy.managedAncestorAllowlistUpdated(context.policyRepository.encodedManagedAncestorAllowlist())
         proxy.userAncestorAllowlistUpdated(context.policyRepository.encodedUserAncestorAllowlist())
+        proxy.managedQuietListUpdated(context.policyRepository.encodedManagedQuietList())
+        proxy.quietListUpdated(context.policyRepository.encodedUserQuietList())
         proxy.managedJailRulesUpdated(context.policyRepository.encodedManagedJailRules())
         proxy.userJailRulesUpdated(context.policyRepository.encodedUserJailRules())
         proxy.jailEnabledUpdated(isJailEnabled)
@@ -626,6 +645,26 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply(false); return }
         server.serverQueue.async {
             server.applyRemoveAncestorAllowlistEntry(entryID: entryID as UUID)
+            reply(true)
+        }
+    }
+
+    func addQuietListEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void) {
+        guard let server,
+              let entry = try? JSONDecoder().decode(QuietListEntry.self, from: entryData as Data) else {
+            reply(false)
+            return
+        }
+        server.serverQueue.async {
+            server.applyAddQuietListEntry(entry)
+            reply(true)
+        }
+    }
+
+    func removeQuietListEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.serverQueue.async {
+            server.applyRemoveQuietListEntry(entryID: entryID as UUID)
             reply(true)
         }
     }

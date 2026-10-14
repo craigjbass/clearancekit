@@ -30,6 +30,7 @@ let allMigrations: [Migration] = [
     Migration(version: 10, name: "Seed advanced_mode_enabled feature flag", up: migration010SeedAdvancedModeFlag),
     Migration(version: 11, name: "Add epoch column to data_signatures for replay protection", up: migration011AddEpochColumn),
     Migration(version: 12, name: "Add double_star_parent_matching column to user_rules", up: migration012AddDoubleStarParentMatchingColumn),
+    Migration(version: 13, name: "Create user quiet list table", up: migration013CreateQuietList),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -359,9 +360,9 @@ private func migration011AddEpochColumn(_ db: Database) {
 // FAARule.encode(to:) omits the field and the existing user_rules
 // signature still verifies on first launch after upgrade.
 //
-// The ALTER is skipped when the column exists, because another branch also
-// introduced a version-12 migration and a database may have run this ALTER
-// under a different version number.
+// The ALTER is skipped when the column exists, because pre-release builds of
+// the GHSA-p33j and GHSA-f875 fix branches both used version 12, so a test
+// database may have run this ALTER under a different version number.
 
 private func migration012AddDoubleStarParentMatchingColumn(_ db: Database) {
     var columnAlreadyExists = false
@@ -377,4 +378,19 @@ private func migration012AddDoubleStarParentMatchingColumn(_ db: Database) {
     }
     db.execute("ALTER TABLE user_rules ADD COLUMN double_star_parent_matching TEXT")
     NSLog("Migration 012: Added double_star_parent_matching column to user_rules")
+}
+
+// MARK: - Migration 013: Create user quiet list table
+
+private func migration013CreateQuietList(_ db: Database) {
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS user_quiet_list (
+            id TEXT PRIMARY KEY,
+            signing_id TEXT NOT NULL DEFAULT '',
+            process_path TEXT NOT NULL DEFAULT '',
+            platform_binary INTEGER NOT NULL DEFAULT 0,
+            team_id TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    NSLog("Migration 013: Created user_quiet_list table")
 }

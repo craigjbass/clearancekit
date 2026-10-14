@@ -151,8 +151,13 @@ struct PolicyView: View {
                 if !policyStore.managedRules.isEmpty {
                     Section("Managed Profile Rules") {
                         ForEach(policyStore.managedRules) { rule in
-                            RuleRow(rule: rule, source: source(for: rule), isEditable: false) { } onDelete: { }
-                                .padding(.vertical, 4)
+                            VStack(alignment: .leading, spacing: 4) {
+                                RuleRow(rule: rule, source: source(for: rule), isEditable: false) { } onDelete: { }
+                                if allowRisk(for: rule) == .spotlightIndexer {
+                                    SpotlightIndexerRiskBadge()
+                                }
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
                 }

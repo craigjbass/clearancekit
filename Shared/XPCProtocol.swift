@@ -77,6 +77,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let ancestors: [AncestorInfo]
     public let matchedRuleID: UUID?
     public let jailedRuleID: UUID?
+    public let notificationPolicy: NotificationPolicy
 
     public init(
         operation: String = "open",
@@ -93,6 +94,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         ancestors: [AncestorInfo] = [],
         matchedRuleID: UUID? = nil,
         jailedRuleID: UUID? = nil,
+        notificationPolicy: NotificationPolicy,
         eventID: UUID = UUID()
     ) {
         self.eventID = eventID
@@ -110,6 +112,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = ancestors
         self.matchedRuleID = matchedRuleID
         self.jailedRuleID = jailedRuleID
+        self.notificationPolicy = notificationPolicy
         super.init()
     }
 
@@ -135,6 +138,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = decoded?.compactMap { $0 as? AncestorInfo } ?? []
         self.matchedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "matchedRuleID") as UUID?
         self.jailedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "jailedRuleID") as UUID?
+        // An older opfilter omits the key, and decodeInteger returns 0 (.notify).
+        // An unknown value from a newer opfilter also notifies, so no deny is hidden.
+        self.notificationPolicy = NotificationPolicy(rawValue: coder.decodeInteger(forKey: "notificationPolicy")) ?? .notify
         super.init()
     }
 
@@ -154,6 +160,7 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(ancestors as NSArray, forKey: "ancestors")
         if let matchedRuleID { coder.encode(matchedRuleID as NSUUID, forKey: "matchedRuleID") }
         if let jailedRuleID { coder.encode(jailedRuleID as NSUUID, forKey: "jailedRuleID") }
+        coder.encode(notificationPolicy.rawValue, forKey: "notificationPolicy")
     }
 
     public override var description: String {
@@ -332,6 +339,9 @@ public protocol ServiceProtocol {
     func addAncestorAllowlistEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
     func removeAncestorAllowlistEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
 
+    func addQuietListEntry(_ entryData: NSData, withReply reply: @escaping (Bool) -> Void)
+    func removeQuietListEntry(_ entryID: NSUUID, withReply reply: @escaping (Bool) -> Void)
+
     // User jail-rule mutations (GUI → opfilter). Opfilter stores, then applies merged
     // jail rules directly and pushes updated user jail rules to all GUI clients.
     func addJailRule(_ ruleData: NSData, withReply reply: @escaping (Bool) -> Void)
@@ -417,6 +427,8 @@ public protocol ClientProtocol {
     func userAllowlistUpdated(_ allowlistData: NSData)
     func managedAncestorAllowlistUpdated(_ allowlistData: NSData)
     func userAncestorAllowlistUpdated(_ allowlistData: NSData)
+    func managedQuietListUpdated(_ quietListData: NSData)
+    func quietListUpdated(_ quietListData: NSData)
     func managedJailRulesUpdated(_ rulesData: NSData)
     func userJailRulesUpdated(_ rulesData: NSData)
     // Opfilter pushes the current jail-enabled state on connect and whenever it

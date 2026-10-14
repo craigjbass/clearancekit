@@ -9,6 +9,7 @@ struct PolicyImportView: View {
     let rules: [FAARule]
     @State private var isImporting = false
     @State private var importError: String?
+    @StateObject private var riskGate = SpotlightRiskGate()
     let onImport: ([FAARule]) async throws -> Void
     let onDismiss: () -> Void
 
@@ -28,6 +29,7 @@ struct PolicyImportView: View {
             footer
         }
         .frame(width: 520, height: 460)
+        .spotlightIndexerRiskConfirmation(riskGate)
     }
 
     private var header: some View {
@@ -84,7 +86,11 @@ struct PolicyImportView: View {
                 ProgressView()
                     .controlSize(.small)
             }
-            Button("Import") { Task { await performImport() } }
+            Button("Import") {
+                riskGate.submit(RiskReviewItem.items(for: rules)) {
+                    Task { await performImport() }
+                }
+            }
                 .buttonStyle(.borderedProminent)
                 .disabled(isImporting || rules.isEmpty)
         }

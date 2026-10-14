@@ -41,7 +41,7 @@ private func makeFAAInteractor(
     processTreeQueue: DispatchQueue = DispatchQueue(label: "test.process-tree")
 ) -> FAAFilterInteractor {
     let allowlistState = AllowlistState(initialAllowlist: allowlist, initialAncestorAllowlist: ancestorAllowlist)
-    let postRespondHandler = PostRespondHandler()
+    let postRespondHandler = PostRespondHandler(quietListProvider: { [] })
     let ref = WeakBox<FAAFilterInteractor>()
     let pipeline = FileAuthPipeline(
         processTree: processTree,

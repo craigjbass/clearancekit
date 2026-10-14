@@ -14,6 +14,35 @@
 
 import Foundation
 
+// MARK: - ProcessMatchCriteria
+
+public struct ProcessMatchCriteria: Equatable {
+    public let signingID: String
+    public let processPath: String
+    public let platformBinary: Bool
+    public let teamID: String
+
+    public init(signingID: String, processPath: String, platformBinary: Bool, teamID: String) {
+        self.signingID = signingID
+        self.processPath = processPath
+        self.platformBinary = platformBinary
+        self.teamID = teamID
+    }
+
+    public func matches(processPath candidateProcessPath: String, signingID candidateSigningID: String, teamID candidateTeamID: String) -> Bool {
+        guard acceptsTeam(candidateTeamID) else { return false }
+        if !signingID.isEmpty { return signingID == "*" || candidateSigningID == signingID }
+        if !processPath.isEmpty { return candidateProcessPath == processPath }
+        return false
+    }
+
+    private func acceptsTeam(_ candidateTeamID: String) -> Bool {
+        if platformBinary { return candidateTeamID == appleTeamID }
+        if teamID.isEmpty { return true }
+        return candidateTeamID == teamID
+    }
+}
+
 // MARK: - AllowlistEntry
 
 public struct AllowlistEntry: Identifiable, Codable {
@@ -41,15 +70,12 @@ public struct AllowlistEntry: Identifiable, Codable {
         self.teamID = teamID
     }
 
+    public var matchCriteria: ProcessMatchCriteria {
+        ProcessMatchCriteria(signingID: signingID, processPath: processPath, platformBinary: platformBinary, teamID: teamID)
+    }
+
     public func matches(processPath: String, signingID: String, teamID: String) -> Bool {
-        if platformBinary {
-            guard teamID == "apple" else { return false }
-        } else if !self.teamID.isEmpty {
-            guard teamID == self.teamID else { return false }
-        }
-        if !self.signingID.isEmpty { return self.signingID == "*" || signingID == self.signingID }
-        if !self.processPath.isEmpty { return processPath == self.processPath }
-        return false
+        matchCriteria.matches(processPath: processPath, signingID: signingID, teamID: teamID)
     }
 }
 
@@ -86,15 +112,12 @@ public struct AncestorAllowlistEntry: Identifiable, Codable {
         self.teamID = teamID
     }
 
+    public var matchCriteria: ProcessMatchCriteria {
+        ProcessMatchCriteria(signingID: signingID, processPath: processPath, platformBinary: platformBinary, teamID: teamID)
+    }
+
     public func matchesAncestor(path: String, signingID: String, teamID: String) -> Bool {
-        if platformBinary {
-            guard teamID == "apple" else { return false }
-        } else if !self.teamID.isEmpty {
-            guard teamID == self.teamID else { return false }
-        }
-        if !self.signingID.isEmpty { return self.signingID == "*" || signingID == self.signingID }
-        if !self.processPath.isEmpty { return path == self.processPath }
-        return false
+        matchCriteria.matches(processPath: path, signingID: signingID, teamID: teamID)
     }
 }
 
@@ -130,12 +153,8 @@ private func signingEntry(n: Int, signingID: String) -> AllowlistEntry {
 }
 
 public let baselineAllowlist: [AllowlistEntry] = [
-    signingEntry(n: 1,  signingID: "com.apple.mdworker"),
-    signingEntry(n: 2,  signingID: "com.apple.mdworker_shared"),
-    signingEntry(n: 3,  signingID: "com.apple.mds"),
     signingEntry(n: 4,  signingID: "com.apple.apfsd"),
     signingEntry(n: 5,  signingID: "com.apple.deleted"),
-    signingEntry(n: 6,  signingID: "com.apple.mdsync"),
     signingEntry(n: 7,  signingID: "com.apple.containermanagerd"),
     signingEntry(n: 8,  signingID: "com.apple.containermanagerd_system"),
     signingEntry(n: 9,  signingID: "com.apple.secinitd"),

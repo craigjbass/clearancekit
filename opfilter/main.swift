@@ -70,17 +70,22 @@ processTree.buildInitialTree()
 let database = Database(directory: dataDirectory)
 let managedRules = ManagedPolicyLoader.load()
 let managedAllowlist = ManagedAllowlistLoader.load()
+let managedQuietList = ManagedQuietListLoader.load().resolved(keeping: [])
 let managedJailRules = ManagedJailRuleLoader.load()
 let xprotectEntries = enumerateXProtectEntries()
 let policyRepository = PolicyRepository(
     database: database,
     managedRules: managedRules,
     managedAllowlist: managedAllowlist,
+    managedQuietList: managedQuietList,
     managedJailRules: managedJailRules,
     xprotectEntries: xprotectEntries
 )
 
-let postRespondHandler = PostRespondHandler(postRespondQueue: postRespondQueue)
+let postRespondHandler = PostRespondHandler(
+    quietListProvider: { policyRepository.mergedQuietList() },
+    postRespondQueue: postRespondQueue
+)
 let allowlistState = AllowlistState()
 let authorizationGate = AuthorizationGate()
 

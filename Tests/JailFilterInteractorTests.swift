@@ -24,7 +24,7 @@ private func makeJailInteractor(
     processTree: ProcessTreeProtocol = FakeProcessTree()
 ) -> JailFilterInteractor {
     let allowlistState = AllowlistState(initialAllowlist: allowlist)
-    let postRespondHandler = PostRespondHandler()
+    let postRespondHandler = PostRespondHandler(quietListProvider: { [] })
     return JailFilterInteractor(
         initialJailRules: jailRules,
         allowlistState: allowlistState,

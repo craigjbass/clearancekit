@@ -17,6 +17,8 @@ protocol PolicyServiceProtocol: AnyObject {
     func removeAllowlistEntry(entryID: UUID)
     func addAncestorAllowlistEntry(_ entry: AncestorAllowlistEntry)
     func removeAncestorAllowlistEntry(entryID: UUID)
+    func addQuietListEntry(_ entry: QuietListEntry)
+    func removeQuietListEntry(entryID: UUID)
     func addJailRule(_ rule: JailRule)
     func updateJailRule(_ rule: JailRule)
     func removeJailRule(ruleID: UUID)
