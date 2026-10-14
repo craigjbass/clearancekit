@@ -287,6 +287,7 @@ private struct DenyGroupRow: View {
     let group: DenyGroup
     @State private var isExpanded = false
     @State private var isAllowing = false
+    @StateObject private var riskGate = SpotlightRiskGate()
     @StateObject private var allowlistStore = AllowlistStore.shared
 
     private var displayTeamID: String {
@@ -343,6 +344,7 @@ private struct DenyGroupRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 4)
+        .spotlightIndexerRiskConfirmation(riskGate)
     }
 
     @ViewBuilder
@@ -353,10 +355,13 @@ private struct DenyGroupRow: View {
                 .font(.caption)
         } else {
             Button {
-                Task {
-                    isAllowing = true
-                    try? await AllowlistStore.shared.add(allowlistEntry)
-                    isAllowing = false
+                let entry = allowlistEntry
+                riskGate.submit([RiskReviewItem(label: group.signingID.isEmpty ? group.processPath : group.signingID, risk: allowRisk(for: entry))]) {
+                    Task {
+                        isAllowing = true
+                        try? await AllowlistStore.shared.add(entry)
+                        isAllowing = false
+                    }
                 }
             } label: {
                 Image(systemName: isAllowing ? "ellipsis.circle" : "plus.circle")

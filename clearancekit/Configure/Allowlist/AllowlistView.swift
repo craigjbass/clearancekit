@@ -8,6 +8,7 @@ import SwiftUI
 struct AllowlistView: View {
     @StateObject private var allowlistStore = AllowlistStore.shared
     @StateObject private var quietListStore = QuietListStore.shared
+    @StateObject private var riskGate = SpotlightRiskGate()
     @State private var isAddingQuietEntry = false
     @State private var isAddingEntry = false
     @State private var isAddingAncestorEntry = false
@@ -23,59 +24,71 @@ struct AllowlistView: View {
         }
         .sheet(isPresented: $isAddingEntry) {
             AllowlistEntryEditView { entry in
-                Task {
-                    do {
-                        try await allowlistStore.add(entry)
-                        isAddingEntry = false
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: entry)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.add(entry)
+                            isAddingEntry = false
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 isAddingEntry = false
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(isPresented: $isAddingAncestorEntry) {
             AncestorAllowlistEntryEditView { entry in
-                Task {
-                    do {
-                        try await allowlistStore.addAncestor(entry)
-                        isAddingAncestorEntry = false
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: entry)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.addAncestor(entry)
+                            isAddingAncestorEntry = false
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 isAddingAncestorEntry = false
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(item: $editingEntry) { entry in
             AllowlistEntryEditView(existing: entry) { updated in
-                Task {
-                    do {
-                        try await allowlistStore.update(updated)
-                        editingEntry = nil
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: updated)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.update(updated)
+                            editingEntry = nil
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 editingEntry = nil
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(item: $editingAncestorEntry) { entry in
             AncestorAllowlistEntryEditView(existing: entry) { updated in
-                Task {
-                    do {
-                        try await allowlistStore.updateAncestor(updated)
-                        editingAncestorEntry = nil
-                    } catch {
-                        if !BiometricAuth.isUserCancellation(error) { authError = error }
+                riskGate.submit([riskReviewItem(for: updated)]) {
+                    Task {
+                        do {
+                            try await allowlistStore.updateAncestor(updated)
+                            editingAncestorEntry = nil
+                        } catch {
+                            if !BiometricAuth.isUserCancellation(error) { authError = error }
+                        }
                     }
                 }
             } onCancel: {
                 editingAncestorEntry = nil
             }
+            .spotlightIndexerRiskConfirmation(riskGate)
         }
         .sheet(isPresented: $isAddingQuietEntry) {
             QuietListEntryEditView { entry in
@@ -114,6 +127,14 @@ struct AllowlistView: View {
         .background(Color(NSColor.windowBackgroundColor))
     }
 
+    private func riskReviewItem(for entry: AllowlistEntry) -> RiskReviewItem {
+        RiskReviewItem(label: entry.signingID.isEmpty ? entry.processPath : entry.signingID, risk: allowRisk(for: entry))
+    }
+
+    private func riskReviewItem(for entry: AncestorAllowlistEntry) -> RiskReviewItem {
+        RiskReviewItem(label: entry.signingID.isEmpty ? entry.processPath : entry.signingID, risk: allowRisk(for: entry))
+    }
+
     @ViewBuilder
     private var entryList: some View {
         List {
@@ -128,8 +149,13 @@ struct AllowlistView: View {
             if !allowlistStore.managedEntries.isEmpty {
                 Section("Managed Profile Entries") {
                     ForEach(allowlistStore.managedEntries) { entry in
-                        AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
-                            .padding(.vertical, 4)
+                        VStack(alignment: .leading, spacing: 4) {
+                            AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
+                            if allowRisk(for: entry) == .spotlightIndexer {
+                                SpotlightIndexerRiskBadge()
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -154,8 +180,13 @@ struct AllowlistView: View {
             if !allowlistStore.managedAncestorEntries.isEmpty {
                 Section("Managed Profile Ancestor Entries") {
                     ForEach(allowlistStore.managedAncestorEntries) { entry in
-                        AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
-                            .padding(.vertical, 4)
+                        VStack(alignment: .leading, spacing: 4) {
+                            AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
+                            if allowRisk(for: entry) == .spotlightIndexer {
+                                SpotlightIndexerRiskBadge()
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -237,6 +268,7 @@ private struct AllowlistEntryRow: View {
 
     private var issueURL: URL? {
         guard entry.platformBinary else { return nil }
+        guard allowRisk(for: entry) == .noKnownRisk else { return nil }
         return suggestBaselineIssueURL(signingID: entry.signingID)
     }
 
