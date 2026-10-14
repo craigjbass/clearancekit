@@ -1489,4 +1489,36 @@ struct SubtreeOperationTests {
             return
         }
     }
+
+    private let authorizationRule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", requiresAuthorization: true)
+    private let denyingRule = FAARule(protectedPathPrefix: "/Users/develop/vault", allowedProcessPaths: ["/Applications/Vault.app/Contents/MacOS/Vault"])
+
+    @Test("denying rule beneath wins over a rule that requires authorization")
+    func denyingRuleBeneathWinsOverAuthorizationRule() {
+        let decision = decide(rules: [authorizationRule, denyingRule], path: "/Users/develop", secondaryPath: "/Users/develop2", teamID: "TEAM")
+        guard case .denied = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+    }
+
+    @Test("denying rule beneath wins when listed before the authorization rule")
+    func denyingRuleListedFirstWinsOverAuthorizationRule() {
+        let decision = decide(rules: [denyingRule, authorizationRule], path: "/Users/develop", secondaryPath: "/Users/develop2", teamID: "TEAM")
+        guard case .denied = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+    }
+
+    @Test("denying rule beneath wins over authorization required by the path itself")
+    func denyingRuleBeneathWinsOverAuthorizationOnPath() {
+        let pathRule = FAARule(protectedPathPrefix: "/Users/develop/*", requiresAuthorization: true)
+        let beneathRule = FAARule(protectedPathPrefix: "/Users/develop/goal/vault", allowedProcessPaths: ["/Applications/Vault.app/Contents/MacOS/Vault"])
+        let decision = decide(rules: [pathRule, beneathRule], path: "/Users/develop/goal", secondaryPath: "/Users/develop/goal2", teamID: "TEAM")
+        guard case .denied = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+    }
 }
