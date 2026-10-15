@@ -173,6 +173,14 @@ public func patternContainsDoubleStarComponent(_ pattern: String) -> Bool {
     pattern.split(separator: "/", omittingEmptySubsequences: true).contains("**")
 }
 
+// MARK: - Responsible process checks
+
+public let defaultResponsibleProcessChecks: [ProcessSignature] = [
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking"),
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent"),
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU"),
+]
+
 // MARK: - FAARule
 
 public struct FAARule: Identifiable, Codable, Equatable {
@@ -199,6 +207,7 @@ public struct FAARule: Identifiable, Codable, Equatable {
     public let requiresAuthorization: Bool
     public let authorizationSessionDuration: TimeInterval
     public let doubleStarParentMatching: DoubleStarParentMatching
+    public var responsibleProcessChecks: [ProcessSignature]
 
     public var requiresAncestry: Bool {
         !allowedAncestorProcessPaths.isEmpty || !allowedAncestorSignatures.isEmpty
@@ -217,7 +226,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         authorizedSignatures: [ProcessSignature] = [],
         requiresAuthorization: Bool = false,
         authorizationSessionDuration: TimeInterval = 300,
-        doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories
+        doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories,
+        responsibleProcessChecks: [ProcessSignature] = defaultResponsibleProcessChecks
     ) {
         self.id = id
         self.protectedPathPrefix = protectedPathPrefix
@@ -232,13 +242,15 @@ public struct FAARule: Identifiable, Codable, Equatable {
         self.requiresAuthorization = requiresAuthorization
         self.authorizationSessionDuration = authorizationSessionDuration
         self.doubleStarParentMatching = doubleStarParentMatching
+        self.responsibleProcessChecks = responsibleProcessChecks
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, protectedPathPrefix, source, allowedProcessPaths, allowedSignatures,
              allowedAncestorProcessPaths, allowedAncestorSignatures,
              enforceOnWriteOnly, requireValidSigning,
-             authorizedSignatures, requiresAuthorization, authorizationSessionDuration, doubleStarParentMatching
+             authorizedSignatures, requiresAuthorization, authorizationSessionDuration, doubleStarParentMatching,
+             responsibleProcessChecks
     }
 
     public init(from decoder: Decoder) throws {
@@ -257,6 +269,8 @@ public struct FAARule: Identifiable, Codable, Equatable {
         authorizationSessionDuration = (try? c.decode(TimeInterval.self, forKey: .authorizationSessionDuration)) ?? 300
         doubleStarParentMatching = try c.decodeIfPresent(DoubleStarParentMatching.self, forKey: .doubleStarParentMatching)
             ?? .implied(by: protectedPathPrefix)
+        responsibleProcessChecks = try c.decodeIfPresent([ProcessSignature].self, forKey: .responsibleProcessChecks)
+            ?? defaultResponsibleProcessChecks
     }
 
     /// Custom encoder that omits fields when they equal their defaults. This is
@@ -291,6 +305,9 @@ public struct FAARule: Identifiable, Codable, Equatable {
         }
         if doubleStarParentMatching != .implied(by: protectedPathPrefix) {
             try c.encode(doubleStarParentMatching, forKey: .doubleStarParentMatching)
+        }
+        if responsibleProcessChecks != defaultResponsibleProcessChecks {
+            try c.encode(responsibleProcessChecks, forKey: .responsibleProcessChecks)
         }
     }
 }

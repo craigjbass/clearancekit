@@ -297,4 +297,73 @@ struct CanonicalRulesEncodingTests {
 
         #expect(decoded == presetRule)
     }
+
+    // MARK: - responsibleProcessChecks
+
+    @Test("stored rule without responsibleProcessChecks decodes to the default list")
+    func storedRuleWithoutResponsibleProcessChecksDecodesToDefault() throws {
+        let storedJSON = #"{"id":"00000000-0000-0000-0000-000000000010","protectedPathPrefix":"\/Users\/*\/goal"}"#
+
+        let decoded = try JSONDecoder().decode(FAARule.self, from: Data(storedJSON.utf8))
+
+        #expect(decoded.responsibleProcessChecks == defaultResponsibleProcessChecks)
+    }
+
+    @Test("default responsibleProcessChecks lists the three Apple WebKit services")
+    func defaultResponsibleProcessChecksListsWebKitServices() {
+        #expect(defaultResponsibleProcessChecks == [
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU"),
+        ])
+    }
+
+    @Test("empty responsibleProcessChecks writes the key and round-trips as empty")
+    func emptyResponsibleProcessChecksRoundTrips() throws {
+        let original = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!,
+            protectedPathPrefix: "/Users/*/goal",
+            responsibleProcessChecks: []
+        )
+
+        let encoded = canonicalRulesJSON([original])
+        let decoded = try JSONDecoder().decode([FAARule].self, from: encoded)
+
+        #expect(String(data: encoded, encoding: .utf8)?.contains(#""responsibleProcessChecks":[]"#) == true)
+        #expect(decoded[0].responsibleProcessChecks == [])
+        #expect(decoded == [original])
+    }
+
+    @Test("custom responsibleProcessChecks writes the key and round-trips")
+    func customResponsibleProcessChecksRoundTrips() throws {
+        let original = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!,
+            protectedPathPrefix: "/Users/*/goal",
+            responsibleProcessChecks: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking")]
+        )
+
+        let encoded = canonicalRulesJSON([original])
+        let decoded = try JSONDecoder().decode([FAARule].self, from: encoded)
+
+        #expect(String(data: encoded, encoding: .utf8)?.contains(#""responsibleProcessChecks":["apple:com.apple.WebKit.Networking"]"#) == true)
+        #expect(decoded == [original])
+    }
+
+    @Test("default responsibleProcessChecks is omitted and the canonical JSON is unchanged")
+    func defaultResponsibleProcessChecksIsOmitted() {
+        // Canonical JSON of this rule before responsibleProcessChecks existed.
+        // If this string ever needs editing, existing user_rules signatures stop verifying.
+        let expectedJSON = #"[{"allowedAncestorProcessPaths":[],"allowedAncestorSignatures":[],"allowedProcessPaths":["\/usr\/bin\/example"],"allowedSignatures":["apple:com.apple.Safari"],"id":"00000000-0000-0000-0000-000000000013","protectedPathPrefix":"\/Users\/*\/Library\/Safari","source":"user"}]"#
+        let rule = FAARule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000013")!,
+            protectedPathPrefix: "/Users/*/Library/Safari",
+            allowedProcessPaths: ["/usr/bin/example"],
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Safari")]
+        )
+
+        let json = String(data: canonicalRulesJSON([rule]), encoding: .utf8)
+
+        #expect(json == expectedJSON)
+        #expect(json?.contains("responsibleProcessChecks") == false)
+    }
 }
