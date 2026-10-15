@@ -41,7 +41,7 @@ struct EventListFilter {
     private func passesDefaultAllowVisibility(_ event: FolderOpenEvent) -> Bool {
         switch defaultAllows {
         case .shown:  return true
-        case .hidden: return !event.accessAllowed || event.matchedRuleID != nil || event.jailedRuleID != nil
+        case .hidden: return !event.isDefaultAllow
         }
     }
 
@@ -50,5 +50,11 @@ struct EventListFilter {
         case .shown:  return true
         case .hidden: return !event.isQuietDeny
         }
+    }
+}
+
+private extension FolderOpenEvent {
+    var isDefaultAllow: Bool {
+        accessAllowed && matchedRuleID == nil && jailedRuleID == nil
     }
 }

@@ -366,4 +366,25 @@ struct EventBroadcasterTests {
 
         #expect(broadcaster.recentEvents(for: conn).map(\.eventID) == [quietDeny.eventID, notifyDeny.eventID])
     }
+
+    @Test("allow events reach allow-stream subscribers only")
+    func allowEventDeliveredToAllowStreamSubscribersOnly() {
+        let recorder = FakeDeliveryRecorder()
+        let broadcaster = EventBroadcaster(deliverFolderOpened: recorder.deliver)
+        let allowSubscriber = NSXPCConnection()
+        let quietOnlySubscriber = NSXPCConnection()
+        let unsubscribed = NSXPCConnection()
+        for conn in [allowSubscriber, quietOnlySubscriber, unsubscribed] {
+            broadcaster.addClient(conn)
+        }
+        broadcaster.beginAllowStream(for: allowSubscriber)
+        broadcaster.beginQuietStream(for: quietOnlySubscriber)
+        let allow = makeEvent()
+
+        broadcaster.broadcast(allow)
+
+        #expect(recorder.eventIDs(deliveredTo: allowSubscriber) == [allow.eventID])
+        #expect(recorder.eventIDs(deliveredTo: quietOnlySubscriber).isEmpty)
+        #expect(recorder.eventIDs(deliveredTo: unsubscribed).isEmpty)
+    }
 }

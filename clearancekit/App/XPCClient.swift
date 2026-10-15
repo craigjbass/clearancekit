@@ -67,7 +67,7 @@ final class XPCClient: NSObject, ObservableObject {
 
     private func flushPendingEvents() {
         guard !pendingEvents.isEmpty else { return }
-        events.insert(contentsOf: pendingEvents.reversed(), at: 0)
+        events = EventListMerge.prepending(incoming: pendingEvents, to: events)
         pendingEvents.removeAll(keepingCapacity: true)
     }
 
