@@ -51,6 +51,18 @@ public enum CheckedProcess: Equatable, Sendable {
     case unknownResponsible
 }
 
+public enum IdentifiedProcess: Equatable, Sendable {
+    case itself
+    case responsible(ProcessFacts)
+
+    public var checkedProcess: CheckedProcess {
+        switch self {
+        case .itself: return .itself
+        case .responsible(let facts): return .responsible(facts)
+        }
+    }
+}
+
 public struct PolicySubject: Sendable {
     public let process: ProcessFacts
     public let ancestors: [AncestorInfo]
@@ -93,7 +105,7 @@ public enum PolicyDecision {
         ruleSource: RuleSource,
         criterion: String,
         sessionDuration: TimeInterval,
-        checkedProcess: CheckedProcess
+        checkedProcess: IdentifiedProcess
     )
 
     public var isAllowed: Bool {
@@ -146,7 +158,7 @@ public enum PolicyDecision {
         switch self {
         case .allowed(_, _, _, _, let checkedProcess): return checkedProcess
         case .denied(_, _, _, _, let checkedProcess): return checkedProcess
-        case .requiresAuthorization(_, _, _, _, _, let checkedProcess): return checkedProcess
+        case .requiresAuthorization(_, _, _, _, _, let identifiedProcess): return identifiedProcess.checkedProcess
         case .globallyAllowed, .noRuleApplies, .jailAllowed, .jailDenied: return .itself
         }
     }
@@ -506,24 +518,27 @@ public enum OperationReach {
 
 // MARK: - Policy evaluation
 
-private struct RuleSubject {
+private struct IdentifiedRuleSubject {
     let process: ProcessFacts
     let ancestors: [AncestorInfo]
-    let checkedProcess: CheckedProcess
+    let identifiedProcess: IdentifiedProcess
 }
 
-private let unknownProcessFacts = ProcessFacts(processPath: "", teamID: "", signingID: "")
+private enum RuleSubject {
+    case identified(IdentifiedRuleSubject)
+    case unknownResponsible
+}
 
 private extension PolicySubject {
     func ruleSubject(for rule: FAARule) -> RuleSubject {
         guard rule.checksResponsibleProcess(of: process) else {
-            return RuleSubject(process: process, ancestors: ancestors, checkedProcess: .itself)
+            return .identified(IdentifiedRuleSubject(process: process, ancestors: ancestors, identifiedProcess: .itself))
         }
         switch responsibleProcess {
         case .known(let responsibleFacts):
-            return RuleSubject(process: responsibleFacts, ancestors: responsibleAncestors, checkedProcess: .responsible(responsibleFacts))
+            return .identified(IdentifiedRuleSubject(process: responsibleFacts, ancestors: responsibleAncestors, identifiedProcess: .responsible(responsibleFacts)))
         case .unknown:
-            return RuleSubject(process: unknownProcessFacts, ancestors: [], checkedProcess: .unknownResponsible)
+            return .unknownResponsible
         }
     }
 }
@@ -561,7 +576,8 @@ private func decision(
 ) -> PolicyDecision? {
     if rule.enforceOnWriteOnly && accessKind == .read { return nil }
 
-    if case .unknownResponsible = subject.checkedProcess {
+    switch subject {
+    case .unknownResponsible:
         return .denied(
             ruleID: rule.id,
             ruleName: rule.protectedPathPrefix,
@@ -569,12 +585,20 @@ private func decision(
             allowedCriteria: "known responsible process required",
             checkedProcess: .unknownResponsible
         )
+    case .identified(let identifiedSubject):
+        return decision(for: rule, identifiedSubject: identifiedSubject)
     }
+}
 
+private func decision(
+    for rule: FAARule,
+    identifiedSubject subject: IdentifiedRuleSubject
+) -> PolicyDecision {
     let processPath = subject.process.processPath
     let teamID = subject.process.teamID
     let signingID = subject.process.signingID
-    let checkedProcess = subject.checkedProcess
+    let identifiedProcess = subject.identifiedProcess
+    let checkedProcess = identifiedProcess.checkedProcess
 
     if rule.requireValidSigning && teamID.isEmpty {
         return .denied(
@@ -603,7 +627,7 @@ private func decision(
             ruleSource: rule.source,
             criterion: "authorizedSignature",
             sessionDuration: rule.authorizationSessionDuration,
-            checkedProcess: checkedProcess
+            checkedProcess: identifiedProcess
         )
     }
 
@@ -614,7 +638,7 @@ private func decision(
             ruleSource: rule.source,
             criterion: "requiresAuthorization",
             sessionDuration: rule.authorizationSessionDuration,
-            checkedProcess: checkedProcess
+            checkedProcess: identifiedProcess
         )
     }
 

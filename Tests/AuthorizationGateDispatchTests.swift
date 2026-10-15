@@ -110,7 +110,7 @@ struct AuthorizationGateDispatchTests {
     }
 
     @Test("responsible process subject is shown in the prompt and opens its own session")
-    func responsibleSubjectPromptsAndOpensSession() async {
+    func responsibleSubjectPromptsAndOpensSession() {
         let gate = AuthorizationGate()
         let broadcaster = FakeBroadcaster(answer: true)
         let postRespondCalled = DispatchSemaphore(value: 0)
@@ -123,7 +123,7 @@ struct AuthorizationGateDispatchTests {
             teamID: safariFacts.teamID,
             signingID: safariFacts.signingID,
             processIdentity: ProcessIdentity(pid: 300, pidVersion: 4),
-            parentIdentity: ProcessIdentity(pid: 1, pidVersion: 9),
+            sessionOwnerIdentity: ProcessIdentity(pid: 300, pidVersion: 4),
             ancestors: safariAncestors
         )
 
@@ -152,8 +152,8 @@ struct AuthorizationGateDispatchTests {
         #expect(gate.hasActiveSession(
             teamID: appleTeamID,
             signingID: "com.apple.Safari",
-            parentPID: 1,
-            parentPIDVersion: 9,
+            parentPID: 300,
+            parentPIDVersion: 4,
             ancestors: safariAncestors,
             prefix: "/Secrets"
         ) == true)
@@ -176,7 +176,7 @@ struct AuthorizationGateDispatchTests {
             teamID: event.teamID,
             signingID: event.signingID,
             processIdentity: event.processIdentity,
-            parentIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
+            sessionOwnerIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
             ancestors: []
         )
     }

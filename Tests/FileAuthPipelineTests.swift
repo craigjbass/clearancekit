@@ -13,6 +13,7 @@ private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreePro
     var containsResult = false
     var ancestorsResult: [AncestorInfo] = []
     var recordsByIdentity: [ProcessIdentity: ProcessRecord] = [:]
+    var ancestorsByIdentity: [ProcessIdentity: [AncestorInfo]] = [:]
 
     func insert(_ record: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
@@ -22,7 +23,7 @@ private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreePro
     }
 
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] {
-        ancestorsResult
+        ancestorsByIdentity[identity] ?? ancestorsResult
     }
 
     func record(of identity: ProcessIdentity) -> ProcessRecord? {
@@ -1067,6 +1068,29 @@ struct FileAuthPipelineResponsibleProcessTests {
 
         #expect(outcome.allowed == false)
         #expect(outcome.decision.checkedProcess == .unknownResponsible)
+    }
+
+    @Test("slow path checks the responsible ancestors of a Networking event", arguments: [AncestryOutcome.matching, .mismatching])
+    func slowPathUsesResponsibleAncestors(outcome: AncestryOutcome) {
+        let launcher = AncestorInfo(path: "/Applications/Launcher.app/Contents/MacOS/Launcher", teamID: "LAUNCH1234", signingID: "com.example.launcher")
+        let stranger = AncestorInfo(path: "/usr/bin/stranger", teamID: "OTHER12345", signingID: "com.example.stranger")
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        processTree.recordsByIdentity = [webKitResponsibleIdentity: responsibleRecord(signingID: "com.example.browser", teamID: "BROWSE1234")]
+        switch outcome {
+        case .matching:
+            processTree.ancestorsByIdentity = [identity(): [stranger], webKitResponsibleIdentity: [launcher]]
+        case .mismatching:
+            processTree.ancestorsByIdentity = [identity(): [launcher], webKitResponsibleIdentity: [stranger]]
+        }
+        let launcherAncestorRule = FAARule(
+            protectedPathPrefix: "/protected",
+            allowedAncestorSignatures: [ProcessSignature(teamID: "LAUNCH1234", signingID: "com.example.launcher")]
+        )
+
+        let pipelineOutcome = runPipeline(processTree: processTree, rules: [launcherAncestorRule]) { networkingEvent(path: "/protected/file", respond: $0) }
+
+        #expect(pipelineOutcome.allowed == outcome.expectedAllowed)
     }
 
     @Test("Networking event that no rule covers is allowed without cache")

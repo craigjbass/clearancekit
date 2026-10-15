@@ -183,6 +183,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         guard let context else { return }
         context.faaInteractor.updateAllowlist(context.policyRepository.mergedAllowlist())
         context.faaInteractor.updateAncestorAllowlist(context.policyRepository.mergedAncestorAllowlist())
+        context.adapter.clearCache()
     }
 
     func applyJailRulesToFilter() {

@@ -176,7 +176,7 @@ final class FileAuthPipeline: @unchecked Sendable {
                 accessKind: event.accessKind
             )
             let hotAncestors = processTree.ancestors(of: event.processIdentity)
-            if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, responsibleRecord: responsibleRecord, dwellNanoseconds: 0) {
+            if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, dwellNanoseconds: 0) {
                 metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
                 return
             }
@@ -254,7 +254,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         )
 
         let logAncestors = processTree.ancestors(of: event.processIdentity)
-        if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, responsibleRecord: responsibleRecord, dwellNanoseconds: dwellNanoseconds) {
+        if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds) {
             return
         }
         event.respond(decision.isAllowed, false)
@@ -339,33 +339,25 @@ final class FileAuthPipeline: @unchecked Sendable {
         _ decision: PolicyDecision,
         event: FileAuthEvent,
         ancestors: [AncestorInfo],
-        responsibleRecord: ProcessRecord?,
         dwellNanoseconds: UInt64
     ) -> Bool {
-        guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration, let checkedProcess) = decision else {
+        guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration, let identifiedProcess) = decision else {
             return false
         }
-        guard let subject = authorizationSubject(
-            for: checkedProcess,
-            event: event,
-            ancestors: ancestors,
-            responsibleRecord: responsibleRecord
-        ) else {
-            return false
-        }
+        let subject = authorizationSubject(for: identifiedProcess, event: event, ancestors: ancestors)
         if authorizationGate.hasActiveSession(
             teamID: subject.teamID,
             signingID: subject.signingID,
-            parentPID: subject.parentIdentity.pid,
-            parentPIDVersion: subject.parentIdentity.pidVersion,
+            parentPID: subject.sessionOwnerIdentity.pid,
+            parentPIDVersion: subject.sessionOwnerIdentity.pidVersion,
             ancestors: subject.ancestors,
             prefix: ruleName
         ) {
             authorizationGate.touchSession(
                 teamID: subject.teamID,
                 signingID: subject.signingID,
-                parentPID: subject.parentIdentity.pid,
-                parentPIDVersion: subject.parentIdentity.pidVersion,
+                parentPID: subject.sessionOwnerIdentity.pid,
+                parentPIDVersion: subject.sessionOwnerIdentity.pidVersion,
                 ancestors: subject.ancestors,
                 prefix: ruleName
             )
@@ -374,7 +366,7 @@ final class FileAuthPipeline: @unchecked Sendable {
                 ruleName: ruleName,
                 ruleSource: ruleSource,
                 matchedCriterion: "authorized session",
-                checkedProcess: checkedProcess
+                checkedProcess: identifiedProcess.checkedProcess
             )
             event.respond(true, false)
             postRespondHandler(event, sessionDecision, ancestors, dwellNanoseconds)
@@ -384,38 +376,32 @@ final class FileAuthPipeline: @unchecked Sendable {
         return true
     }
 
-    // The domain denies an unknown responsible process before it asks for
-    // authorization, so `.unknownResponsible` returns nil and the caller denies.
     private func authorizationSubject(
-        for checkedProcess: CheckedProcess,
+        for identifiedProcess: IdentifiedProcess,
         event: FileAuthEvent,
-        ancestors: [AncestorInfo],
-        responsibleRecord: ProcessRecord?
-    ) -> AuthorizationSubject? {
-        switch checkedProcess {
+        ancestors: [AncestorInfo]
+    ) -> AuthorizationSubject {
+        switch identifiedProcess {
         case .itself:
             return AuthorizationSubject(
-                checkedProcess: checkedProcess,
+                checkedProcess: identifiedProcess.checkedProcess,
                 processPath: event.processPath,
                 teamID: event.teamID,
                 signingID: event.signingID,
                 processIdentity: event.processIdentity,
-                parentIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
+                sessionOwnerIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
                 ancestors: ancestors
             )
         case .responsible(let facts):
-            guard let responsibleRecord else { return nil }
             return AuthorizationSubject(
-                checkedProcess: checkedProcess,
+                checkedProcess: identifiedProcess.checkedProcess,
                 processPath: facts.processPath,
                 teamID: facts.teamID,
                 signingID: facts.signingID,
-                processIdentity: responsibleRecord.identity,
-                parentIdentity: responsibleRecord.parentIdentity,
-                ancestors: responsibleAncestors(of: responsibleRecord)
+                processIdentity: event.responsibleIdentity,
+                sessionOwnerIdentity: event.responsibleIdentity,
+                ancestors: processTree.ancestors(of: event.responsibleIdentity)
             )
-        case .unknownResponsible:
-            return nil
         }
     }
 

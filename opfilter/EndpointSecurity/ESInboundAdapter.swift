@@ -120,14 +120,16 @@ final class ESInboundAdapter {
     }
 
     /// Applies an updated policy: diffs the effective muted prefix set (policy ∪ discovery),
-    /// clears the ES authorization cache, and updates the interactor's rule set.
+    /// updates the interactor's rule set, then clears the ES authorization cache.
+    /// The clear comes last: an event evaluated with the old rules before the
+    /// update would otherwise leave its cacheable allow in the cache.
     func updatePolicy(_ rules: [FAARule]) {
         guard let client else { return }
         let old = policyMuteTargets.union(discoveryMuteTargets)
         policyMuteTargets = muteTargets(for: rules)
         applyMuteTargetDiff(from: old, to: policyMuteTargets.union(discoveryMuteTargets), client: client)
-        es_clear_cache(client)
         interactor.updatePolicy(rules)
+        es_clear_cache(client)
     }
 
     /// Temporarily widens monitoring to deliver events for paths with no policy rules.

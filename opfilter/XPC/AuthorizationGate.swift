@@ -25,13 +25,17 @@ protocol AuthorizationBroadcasting: AnyObject, Sendable {
 
 // MARK: - AuthorizationSubject
 
+// A session belongs to the parent of a process that is checked as itself, so
+// commands from one shell share a session. A session for a responsible process
+// belongs to that responsible process instance, so its WebKit services share
+// the session and a new instance of the app asks again.
 struct AuthorizationSubject {
     let checkedProcess: CheckedProcess
     let processPath: String
     let teamID: String
     let signingID: String
     let processIdentity: ProcessIdentity
-    let parentIdentity: ProcessIdentity
+    let sessionOwnerIdentity: ProcessIdentity
     let ancestors: [AncestorInfo]
 }
 
@@ -163,8 +167,8 @@ extension AuthorizationGate {
                 gate.createSession(
                     teamID: subject.teamID,
                     signingID: subject.signingID,
-                    parentPID: subject.parentIdentity.pid,
-                    parentPIDVersion: subject.parentIdentity.pidVersion,
+                    parentPID: subject.sessionOwnerIdentity.pid,
+                    parentPIDVersion: subject.sessionOwnerIdentity.pidVersion,
                     ancestors: subject.ancestors,
                     prefix: rulePrefix,
                     duration: sessionDuration

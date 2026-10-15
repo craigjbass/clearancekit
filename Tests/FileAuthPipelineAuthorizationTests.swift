@@ -170,7 +170,7 @@ struct FileAuthPipelineAuthorizationTests {
         #expect(subject?.signingID == "com.apple.Safari")
         #expect(subject?.processPath == "/Applications/Safari.app/Contents/MacOS/Safari")
         #expect(subject?.processIdentity == safariIdentity)
-        #expect(subject?.parentIdentity == safariParentIdentity)
+        #expect(subject?.sessionOwnerIdentity == safariIdentity)
         #expect(subject?.checkedProcess == .responsible(ProcessFacts(processPath: "/Applications/Safari.app/Contents/MacOS/Safari", teamID: appleTeamID, signingID: "com.apple.Safari")))
     }
 
@@ -179,7 +179,7 @@ struct FileAuthPipelineAuthorizationTests {
         let processTree = FakeAuthPipelineProcessTree()
         processTree.recordsByIdentity = [safariIdentity: safariRecord()]
         let gate = AuthorizationGate()
-        gate.createSession(teamID: appleTeamID, signingID: "com.apple.Safari", parentPID: safariParentIdentity.pid, parentPIDVersion: safariParentIdentity.pidVersion, ancestors: [], prefix: "/Secrets", duration: 300)
+        gate.createSession(teamID: appleTeamID, signingID: "com.apple.Safari", parentPID: safariIdentity.pid, parentPIDVersion: safariIdentity.pidVersion, ancestors: [], prefix: "/Secrets", duration: 300)
 
         let responded = DispatchSemaphore(value: 0)
         let postRespondCalled = DispatchSemaphore(value: 0)
