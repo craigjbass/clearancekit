@@ -126,4 +126,100 @@ struct AllowRiskTests {
 
         #expect(allowRisk(for: rule) == .noKnownRisk)
     }
+
+    @Test("WebKit service signature is a risk", arguments: defaultResponsibleProcessChecks.map(\.signingID))
+    func webKitSignatureIsRisk(signingID: String) {
+        #expect(allowRisk(for: ProcessSignature(teamID: appleTeamID, signingID: signingID)) == .webKitService)
+    }
+
+    @Test("third-party team with a WebKit signing ID is not a risk")
+    func thirdPartyWebKitSignatureIsNotRisk() {
+        #expect(allowRisk(for: ProcessSignature(teamID: "TEAM123", signingID: "com.apple.WebKit.Networking")) == .noKnownRisk)
+    }
+
+    @Test("allowlist entries for a WebKit service are a risk", arguments: defaultResponsibleProcessChecks.map(\.signingID))
+    func webKitAllowlistEntryIsRisk(signingID: String) {
+        #expect(allowRisk(for: AllowlistEntry(signingID: signingID, platformBinary: true)) == .webKitService)
+        #expect(allowRisk(for: AncestorAllowlistEntry(signingID: signingID, platformBinary: true)) == .webKitService)
+    }
+
+    @Test("signing-ID entry for a WebKit service is a risk, wildcard stays an indexer risk")
+    func webKitWildcardEntryIsRisk() {
+        #expect(allowRisk(for: AllowlistEntry(signingID: "*", platformBinary: true)) == .spotlightIndexer)
+        #expect(allowRisk(for: AllowlistEntry(signingID: "com.apple.WebKit.Networking")) == .webKitService)
+    }
+
+    @Test("path-only entry for a WebKit service binary is a risk", arguments: defaultResponsibleProcessChecks.map(\.signingID))
+    func webKitPathEntryIsRisk(signingID: String) {
+        let path = "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/\(signingID).xpc/Contents/MacOS/\(signingID)"
+
+        #expect(allowRisk(for: AllowlistEntry(processPath: path)) == .webKitService)
+        #expect(allowRisk(for: AncestorAllowlistEntry(processPath: path)) == .webKitService)
+    }
+
+    @Test("path that only resembles a WebKit service is not a risk")
+    func lookalikeWebKitPathIsNotRisk() {
+        #expect(allowRisk(for: AllowlistEntry(processPath: "/tmp/com.apple.WebKit.Networking.helper")) == .noKnownRisk)
+    }
+
+    @Test("rule allowing a WebKit signature with default checks is not a risk")
+    func ruleWithWebKitSignatureAndDefaultChecksIsNotRisk() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking")]
+        )
+
+        #expect(allowRisk(for: rule) == .noKnownRisk)
+    }
+
+    @Test("rule allowing a WebKit signature with empty checks is a risk", arguments: 0..<3)
+    func ruleWithWebKitSignatureAndEmptyChecksIsRisk(listIndex: Int) {
+        let webKit = [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU")]
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: listIndex == 0 ? webKit : [],
+            allowedAncestorSignatures: listIndex == 1 ? webKit : [],
+            authorizedSignatures: listIndex == 2 ? webKit : [],
+            responsibleProcessChecks: []
+        )
+
+        #expect(allowRisk(for: rule) == .webKitService)
+    }
+
+    @Test("rule risk covers only the WebKit services the checks omit")
+    func ruleWithPartialChecksIsRiskForOmittedService() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent")],
+            responsibleProcessChecks: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking")]
+        )
+
+        #expect(allowRisk(for: rule) == .webKitService)
+    }
+
+    @Test("rule allowing a WebKit service path is a risk only when checks omit it")
+    func ruleWithWebKitPath() {
+        let path = "/System/Library/Frameworks/WebKit.framework/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking"
+        let unchecked = FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedProcessPaths: [path], responsibleProcessChecks: [])
+        let uncheckedAncestor = FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedAncestorProcessPaths: [path], responsibleProcessChecks: [])
+        let checked = FAARule(protectedPathPrefix: "/Users/*/Secrets", allowedProcessPaths: [path])
+
+        #expect(allowRisk(for: unchecked) == .webKitService)
+        #expect(allowRisk(for: uncheckedAncestor) == .webKitService)
+        #expect(allowRisk(for: checked) == .noKnownRisk)
+    }
+
+    @Test("Spotlight indexer risk wins over WebKit service risk")
+    func spotlightWinsOverWebKit() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [
+                ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU"),
+                ProcessSignature(teamID: appleTeamID, signingID: "com.apple.mds"),
+            ],
+            responsibleProcessChecks: []
+        )
+
+        #expect(allowRisk(for: rule) == .spotlightIndexer)
+    }
 }

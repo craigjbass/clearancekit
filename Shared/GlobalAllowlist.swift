@@ -161,7 +161,6 @@ public let baselineAllowlist: [AllowlistEntry] = [
     signingEntry(n: 10, signingID: "com.apple.CrashReporter"),
     signingEntry(n: 11, signingID: "com.apple.filecoordinationd"),
     signingEntry(n: 12, signingID: "com.apple.ANECompilerService"),
-    signingEntry(n: 13, signingID: "com.apple.WebKit.Networking"),
     signingEntry(n: 14, signingID: "com.apple.finder"),
     signingEntry(n: 15, signingID: "com.apple.appkit.xpc.openAndSavePanelService"),
     signingEntry(n: 16, signingID: "com.apple.lsd"),

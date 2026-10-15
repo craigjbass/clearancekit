@@ -2063,3 +2063,15 @@ struct ResponsibleProcessCheckTests {
         #expect(responsibleProviderCalls.withLock { $0 } == 0)
     }
 }
+
+
+@Suite("baselineAllowlist WebKit services")
+struct BaselineAllowlistWebKitTests {
+    @Test("baseline contains no WebKit signing ID")
+    func baselineContainsNoWebKitSigningID() {
+        let webKitSigningIDs = Set(defaultResponsibleProcessChecks.map(\.signingID))
+        let baselineSigningIDs = baselineAllowlist.map(\.signingID)
+
+        #expect(baselineSigningIDs.filter { webKitSigningIDs.contains($0) }.isEmpty)
+    }
+}

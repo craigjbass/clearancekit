@@ -8,10 +8,13 @@ import Foundation
 public enum AllowRisk: Equatable {
     case noKnownRisk
     case spotlightIndexer
+    case webKitService
 }
 
 public func allowRisk(for signature: ProcessSignature) -> AllowRisk {
-    riskWhenAnyIndexerMatches { signature.matches(resolvedTeamID: appleTeamID, signingID: $0) }
+    let indexerRisk = riskWhenAnyIndexerMatches { signature.matches(resolvedTeamID: appleTeamID, signingID: $0) }
+    guard indexerRisk == .noKnownRisk else { return indexerRisk }
+    return signatureMatchesWebKitService(signature) ? .webKitService : .noKnownRisk
 }
 
 public func allowRisk(for entry: AllowlistEntry) -> AllowRisk {
@@ -26,7 +29,23 @@ public func allowRisk(for rule: FAARule) -> AllowRisk {
     let signatures = rule.allowedSignatures + rule.allowedAncestorSignatures + rule.authorizedSignatures
     let allowsIndexerSignature = signatures.contains { allowRisk(for: $0) == .spotlightIndexer }
     let allowsIndexerPath = (rule.allowedProcessPaths + rule.allowedAncestorProcessPaths).contains(where: isSpotlightIndexerPath)
-    return allowsIndexerSignature || allowsIndexerPath ? .spotlightIndexer : .noKnownRisk
+    if allowsIndexerSignature || allowsIndexerPath { return .spotlightIndexer }
+    let allowsUncheckedWebKitService = defaultResponsibleProcessChecks.contains { webKitService in
+        guard !rule.responsibleProcessChecks.contains(where: { $0.matches(resolvedTeamID: webKitService.teamID, signingID: webKitService.signingID) }) else { return false }
+        let allowedBySignature = signatures.contains { $0.matches(resolvedTeamID: webKitService.teamID, signingID: webKitService.signingID) }
+        let allowedByPath = (rule.allowedProcessPaths + rule.allowedAncestorProcessPaths).contains { isWebKitServicePath($0, of: webKitService) }
+        return allowedBySignature || allowedByPath
+    }
+    return allowsUncheckedWebKitService ? .webKitService : .noKnownRisk
+}
+
+private func signatureMatchesWebKitService(_ signature: ProcessSignature) -> Bool {
+    defaultResponsibleProcessChecks.contains { signature.matches(resolvedTeamID: $0.teamID, signingID: $0.signingID) }
+}
+
+private func isWebKitServicePath(_ processPath: String, of webKitService: ProcessSignature) -> Bool {
+    guard !processPath.isEmpty else { return false }
+    return URL(fileURLWithPath: processPath).lastPathComponent == webKitService.signingID
 }
 
 private func isSpotlightIndexerPath(_ processPath: String) -> Bool {
@@ -36,7 +55,13 @@ private func isSpotlightIndexerPath(_ processPath: String) -> Bool {
 
 private func riskOfMatchCriteria(_ criteria: ProcessMatchCriteria) -> AllowRisk {
     if isSpotlightIndexerPath(criteria.processPath) { return .spotlightIndexer }
-    return riskWhenAnyIndexerMatches { criteria.matches(processPath: "", signingID: $0, teamID: appleTeamID) }
+    let indexerRisk = riskWhenAnyIndexerMatches { criteria.matches(processPath: "", signingID: $0, teamID: appleTeamID) }
+    guard indexerRisk == .noKnownRisk else { return indexerRisk }
+    let allowsWebKitService = defaultResponsibleProcessChecks.contains {
+        isWebKitServicePath(criteria.processPath, of: $0)
+            || criteria.matches(processPath: "", signingID: $0.signingID, teamID: $0.teamID)
+    }
+    return allowsWebKitService ? .webKitService : .noKnownRisk
 }
 
 private func riskWhenAnyIndexerMatches(_ matchesIndexer: (String) -> Bool) -> AllowRisk {
