@@ -256,6 +256,23 @@ struct ManagedPolicyRuleParserTests {
 
 // MARK: - parseManagedAllowlistEntry
 
+@Suite("managed allowlist risk")
+struct ManagedAllowlistRiskTests {
+    @Test("a Networking allowlist entry is reported as a WebKit service risk")
+    func networkingEntryIsReported() throws {
+        let entry = try #require(parseManagedAllowlistEntry(["SigningID": "com.apple.WebKit.Networking", "PlatformBinary": true]))
+
+        #expect(managedAllowlistEntriesWithRisk([entry]).map(\.id) == [entry.id])
+    }
+
+    @Test("an ordinary allowlist entry is not reported")
+    func ordinaryEntryIsNotReported() throws {
+        let entry = try #require(parseManagedAllowlistEntry(["SigningID": "com.apple.finder", "PlatformBinary": true]))
+
+        #expect(managedAllowlistEntriesWithRisk([entry]).isEmpty)
+    }
+}
+
 @Suite("parseManagedAllowlistEntry")
 struct ManagedAllowlistEntryParserTests {
 

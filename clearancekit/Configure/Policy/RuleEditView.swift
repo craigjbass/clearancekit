@@ -20,7 +20,7 @@ struct RuleEditView: View {
     private let existingID: UUID?
     @State private var draft: DraftRule
     @State private var processPicker: ProcessPickerTarget?
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
     let onSave: (FAARule) -> Void
     let onCancel: () -> Void
 
@@ -154,7 +154,7 @@ struct RuleEditView: View {
                 .buttonStyle(.borderedProminent)
             }
             .padding()
-            .spotlightIndexerRiskConfirmation(riskGate)
+            .allowRiskConfirmation(riskGate)
         }
         .frame(width: 520, height: 640)
         .sheet(item: $processPicker) { target in

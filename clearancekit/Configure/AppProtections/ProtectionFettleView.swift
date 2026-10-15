@@ -14,7 +14,7 @@ struct ProtectionFettleView: View {
 
     @State private var showProcessPicker = false
     @State private var sigPickerForEntryID: UUID?
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
 
     init(initialDraft: ProtectionDraft, saveLabel: String, onSave: @escaping (ProtectionDraft) -> Void, onCancel: @escaping () -> Void) {
         self._draft = State(initialValue: initialDraft)
@@ -99,7 +99,7 @@ struct ProtectionFettleView: View {
                 .buttonStyle(.borderedProminent)
         }
         .padding()
-        .spotlightIndexerRiskConfirmation(riskGate)
+        .allowRiskConfirmation(riskGate)
     }
 
     private func addSignature(from process: RunningProcess, to entryID: UUID) {

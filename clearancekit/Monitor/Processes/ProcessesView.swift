@@ -287,7 +287,7 @@ private struct DenyGroupRow: View {
     let group: DenyGroup
     @State private var isExpanded = false
     @State private var isAllowing = false
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
     @StateObject private var allowlistStore = AllowlistStore.shared
 
     private var displayTeamID: String {
@@ -344,7 +344,7 @@ private struct DenyGroupRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 4)
-        .spotlightIndexerRiskConfirmation(riskGate)
+        .allowRiskConfirmation(riskGate)
     }
 
     @ViewBuilder

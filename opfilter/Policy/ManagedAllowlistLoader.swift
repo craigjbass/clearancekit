@@ -31,8 +31,8 @@ enum ManagedAllowlistLoader {
         }
         let entries = raw.compactMap(parseManagedAllowlistEntry)
         logger.info("ManagedAllowlistLoader: Loaded \(entries.count, privacy: .public) managed allowlist entry/entries")
-        for entry in entries where allowRisk(for: entry) == .spotlightIndexer {
-            logger.warning("ManagedAllowlistLoader: Managed allowlist entry \(entry.id.uuidString, privacy: .public) allows a Spotlight indexer — any account can read protected files through it")
+        for entry in managedAllowlistEntriesWithRisk(entries) {
+            logger.warning("ManagedAllowlistLoader: Managed allowlist entry \(entry.id.uuidString, privacy: .public) allows \(allowRisk(for: entry).subject, privacy: .public) — it can read protected files through this entry")
         }
         return entries
     }

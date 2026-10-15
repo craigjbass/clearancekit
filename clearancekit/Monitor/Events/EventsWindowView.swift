@@ -137,7 +137,7 @@ struct EventRow: View {
     let isHighlighted: Bool
     @State private var allowedItems: Set<String> = []
     @State private var isExpanded = false
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
 
     private static let baselineRuleIDs: Set<UUID> = Set(faaPolicy.map(\.id))
 
@@ -224,7 +224,7 @@ struct EventRow: View {
                 .stroke(Color.orange, lineWidth: isHighlighted ? 2 : 0)
                 .animation(.easeOut(duration: 0.3), value: isHighlighted)
         )
-        .spotlightIndexerRiskConfirmation(riskGate)
+        .allowRiskConfirmation(riskGate)
     }
 
     // MARK: - Compact read-only row (baseline + managed, expandable)

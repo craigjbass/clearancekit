@@ -9,7 +9,7 @@ struct PolicyImportView: View {
     let rules: [FAARule]
     @State private var isImporting = false
     @State private var importError: String?
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
     let onImport: ([FAARule]) async throws -> Void
     let onDismiss: () -> Void
 
@@ -29,7 +29,7 @@ struct PolicyImportView: View {
             footer
         }
         .frame(width: 520, height: 460)
-        .spotlightIndexerRiskConfirmation(riskGate)
+        .allowRiskConfirmation(riskGate)
     }
 
     private var header: some View {

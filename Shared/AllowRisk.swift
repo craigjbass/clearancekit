@@ -5,10 +5,20 @@
 
 import Foundation
 
-public enum AllowRisk: Equatable {
+public enum AllowRisk: Hashable {
     case noKnownRisk
     case spotlightIndexer
     case webKitService
+}
+
+public extension AllowRisk {
+    var subject: String {
+        switch self {
+        case .noKnownRisk: return "no known risk"
+        case .spotlightIndexer: return "a Spotlight indexer"
+        case .webKitService: return "a WebKit service"
+        }
+    }
 }
 
 public func allowRisk(for signature: ProcessSignature) -> AllowRisk {

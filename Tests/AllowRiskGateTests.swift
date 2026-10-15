@@ -1,5 +1,5 @@
 //
-//  SpotlightRiskGateTests.swift
+//  AllowRiskGateTests.swift
 //  clearancekitTests
 //
 
@@ -12,9 +12,9 @@ private final class ApplyCounter {
     func apply() { count += 1 }
 }
 
-@Suite("SpotlightRiskGate")
+@Suite("AllowRiskGate")
 @MainActor
-struct SpotlightRiskGateTests {
+struct AllowRiskGateTests {
     @Test("rules are reviewed by protected path and flag only an indexer allow")
     func rulesAreReviewedByProtectedPath() {
         let safeRule = FAARule(
@@ -34,7 +34,7 @@ struct SpotlightRiskGateTests {
 
     @Test("change without risk applies at once")
     func changeWithoutRiskAppliesAtOnce() {
-        let gate = SpotlightRiskGate()
+        let gate = AllowRiskGate()
         let counter = ApplyCounter()
 
         gate.submit([RiskReviewItem(label: "com.apple.finder", risk: .noKnownRisk)], apply: counter.apply)
@@ -45,7 +45,7 @@ struct SpotlightRiskGateTests {
 
     @Test("risky change waits for confirmation and lists only risky items")
     func riskyChangeWaits() {
-        let gate = SpotlightRiskGate()
+        let gate = AllowRiskGate()
         let counter = ApplyCounter()
 
         gate.submit([
@@ -57,9 +57,26 @@ struct SpotlightRiskGateTests {
         #expect(gate.pendingChange?.riskyLabels == ["/Users/*/Secrets"])
     }
 
+    @Test("change allowing a WebKit service waits for confirmation and names the risk")
+    func webKitServiceChangeWaits() {
+        let gate = AllowRiskGate()
+        let counter = ApplyCounter()
+
+        gate.submit([RiskReviewItem(label: "com.apple.WebKit.Networking", risk: .webKitService)], apply: counter.apply)
+
+        #expect(counter.count == 0)
+        #expect(gate.pendingChange?.riskyLabels == ["com.apple.WebKit.Networking"])
+        #expect(gate.pendingChange?.risks == [.webKitService])
+    }
+
+    @Test("the sheet copy for a WebKit service names web content")
+    func webKitServiceCopy() {
+        #expect(AllowRiskCopy.body(for: .webKitService) == "Any app that shows web content can use WebKit services to read files this entry allows.")
+    }
+
     @Test("allow anyway applies the pending change once and clears it")
     func allowAnywayAppliesOnce() {
-        let gate = SpotlightRiskGate()
+        let gate = AllowRiskGate()
         let counter = ApplyCounter()
         gate.submit([RiskReviewItem(label: "com.apple.mds", risk: .spotlightIndexer)], apply: counter.apply)
 
@@ -72,7 +89,7 @@ struct SpotlightRiskGateTests {
 
     @Test("cancel clears the pending change without applying it")
     func cancelClearsWithoutApplying() {
-        let gate = SpotlightRiskGate()
+        let gate = AllowRiskGate()
         let counter = ApplyCounter()
         gate.submit([RiskReviewItem(label: "com.apple.mds", risk: .spotlightIndexer)], apply: counter.apply)
 

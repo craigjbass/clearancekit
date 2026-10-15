@@ -319,7 +319,7 @@ enum MCPDispatcher {
             doubleStarParentMatching: doubleStarParentMatching,
             responsibleProcessChecks: responsibleProcessChecks
         )
-        try requireSpotlightRiskAcknowledgement(for: rule, acknowledgement: spotlightRiskAcknowledgement(from: args))
+        try requireAllowRiskAcknowledgement(for: rule, acknowledgement: allowRiskAcknowledgement(from: args))
         try await PolicyStore.shared.add(rule)
         var lines = ["Rule added:", "  ID: \(rule.id.uuidString)", "  Path: \(pathPrefix)"]
         if !signatures.isEmpty { lines.append("  Signatures: \(signatures.map(\.description).joined(separator: ", "))") }
@@ -351,7 +351,7 @@ enum MCPDispatcher {
             doubleStarParentMatching: doubleStarParentMatching,
             responsibleProcessChecks: responsibleProcessChecks
         )
-        try requireSpotlightRiskAcknowledgement(for: updated, acknowledgement: spotlightRiskAcknowledgement(from: args))
+        try requireAllowRiskAcknowledgement(for: updated, acknowledgement: allowRiskAcknowledgement(from: args))
         try await store.update(updated)
         var lines = [
             "Rule updated:",
@@ -442,15 +442,15 @@ enum MCPDispatcher {
         rule.usesDoubleStarCompatibilityMode ? " [** compatibility]" : ""
     }
 
-    private static func spotlightRiskAcknowledgement(from args: [String: JSONValue]) -> SpotlightRiskAcknowledgement {
-        args["acknowledge_spotlight_risk"]?.boolValue == true ? .acknowledged : .notAcknowledged
+    private static func allowRiskAcknowledgement(from args: [String: JSONValue]) -> AllowRiskAcknowledgement {
+        args["acknowledge_allow_risk"]?.boolValue == true ? .acknowledged : .notAcknowledged
     }
 
     private static func responsibleProcessChecksParameterDescription(omittedMeans: String) -> String {
         "Signatures as [\"teamID:signingID\"]. A process that matches an entry is checked against this rule as its responsible process, not as itself. Pass [] to check every process as itself. Omit for \(omittedMeans)."
     }
 
-    private static let spotlightRiskParameterDescription = "Set to true only when the user accepts that this rule allows a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them). An allowed indexer lets any account read the protected files with mdimport. Without this flag such a rule is refused and not saved."
+    private static let allowRiskParameterDescription = "Set to true only when the user accepts the risk of this rule. The risk is either a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them), which lets any account read the protected files with mdimport, or a WebKit service (com.apple.WebKit.Networking, com.apple.WebKit.WebContent, com.apple.WebKit.GPU) allowed without a responsible process check, which lets any app that shows web content read the protected files. Without this flag such a rule is refused and not saved."
 
     private static func parseSignatures(from value: JSONValue?) throws -> [ProcessSignature] {
         guard let value else { return [] }
@@ -546,7 +546,7 @@ enum MCPDispatcher {
                 "double_star_parent_matching": (type: "string", description: "Only for patterns with a ** component. \"all_nested_directories\" (default): a rename, clone or copy of any directory that can hold a protected path needs this rule's permission. \"stop_at_double_star\": compatibility mode. Directories below ** can be moved or copied without this rule's permission, so protected files can be moved out of the protected location.", required: false),
                 "responsible_process_checks": (type: "array", description: responsibleProcessChecksParameterDescription(omittedMeans: "the default list: com.apple.WebKit.Networking, com.apple.WebKit.WebContent and com.apple.WebKit.GPU"), required: false),
                 "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false),
-                "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
+                "acknowledge_allow_risk": (type: "boolean", description: allowRiskParameterDescription, required: false)
             ]
         ),
         toolDef(
@@ -558,7 +558,7 @@ enum MCPDispatcher {
                 "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false),
                 "double_star_parent_matching": (type: "string", description: "Optional: \"all_nested_directories\" or \"stop_at_double_star\" (compatibility mode, directories below ** can be moved or copied without this rule's permission). Omit to preserve the current value.", required: false),
                 "responsible_process_checks": (type: "array", description: responsibleProcessChecksParameterDescription(omittedMeans: "the current value of the rule"), required: false),
-                "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
+                "acknowledge_allow_risk": (type: "boolean", description: allowRiskParameterDescription, required: false)
             ]
         ),
         toolDef(

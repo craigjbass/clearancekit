@@ -1,22 +1,25 @@
 //
-//  SpotlightIndexerRiskSheet.swift
+//  AllowRiskSheet.swift
 //  clearancekit
 //
 
 import SwiftUI
 
-struct SpotlightIndexerRiskSheet: View {
+struct AllowRiskSheet: View {
     let riskyLabels: [String]
+    let risks: [AllowRisk]
     let onAllowAnyway: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(SpotlightIndexerRiskCopy.title, systemImage: "exclamationmark.triangle.fill")
-                .font(.headline)
-                .foregroundStyle(.orange)
-            Text(LocalizedStringKey(SpotlightIndexerRiskCopy.body))
-                .fixedSize(horizontal: false, vertical: true)
+            ForEach(risks, id: \.self) { risk in
+                Label(AllowRiskCopy.title(for: risk), systemImage: "exclamationmark.triangle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Text(LocalizedStringKey(AllowRiskCopy.body(for: risk)))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(riskyLabels, id: \.self) { label in
                     Text(label)
@@ -25,8 +28,8 @@ struct SpotlightIndexerRiskSheet: View {
             }
             HStack {
                 Spacer()
-                Button(SpotlightIndexerRiskCopy.allowAnyway, role: .destructive, action: onAllowAnyway)
-                Button(SpotlightIndexerRiskCopy.cancel, action: onCancel)
+                Button(AllowRiskCopy.allowAnyway, role: .destructive, action: onAllowAnyway)
+                Button(AllowRiskCopy.cancel, action: onCancel)
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -35,10 +38,12 @@ struct SpotlightIndexerRiskSheet: View {
     }
 }
 
-struct SpotlightIndexerRiskBadge: View {
+struct AllowRiskBadge: View {
+    let risk: AllowRisk
+
     var body: some View {
         Label {
-            Text(LocalizedStringKey(SpotlightIndexerRiskCopy.body))
+            Text(LocalizedStringKey(AllowRiskCopy.body(for: risk)))
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -49,13 +54,14 @@ struct SpotlightIndexerRiskBadge: View {
 }
 
 extension View {
-    func spotlightIndexerRiskConfirmation(_ gate: SpotlightRiskGate) -> some View {
+    func allowRiskConfirmation(_ gate: AllowRiskGate) -> some View {
         sheet(item: Binding(
             get: { gate.pendingChange },
             set: { if $0 == nil { gate.cancel() } }
         )) { change in
-            SpotlightIndexerRiskSheet(
+            AllowRiskSheet(
                 riskyLabels: change.riskyLabels,
+                risks: change.risks,
                 onAllowAnyway: { gate.allowAnyway() },
                 onCancel: { gate.cancel() }
             )

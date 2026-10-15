@@ -37,3 +37,7 @@ func parseManagedAllowlistEntry(_ dict: [String: Any]) -> AllowlistEntry? {
         teamID: teamID
     )
 }
+
+func managedAllowlistEntriesWithRisk(_ entries: [AllowlistEntry]) -> [AllowlistEntry] {
+    entries.filter { allowRisk(for: $0) != .noKnownRisk }
+}

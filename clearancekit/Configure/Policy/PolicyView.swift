@@ -153,8 +153,9 @@ struct PolicyView: View {
                         ForEach(policyStore.managedRules) { rule in
                             VStack(alignment: .leading, spacing: 4) {
                                 RuleRow(rule: rule, source: source(for: rule), isEditable: false) { } onDelete: { }
-                                if allowRisk(for: rule) == .spotlightIndexer {
-                                    SpotlightIndexerRiskBadge()
+                                let risk = allowRisk(for: rule)
+                                if risk != .noKnownRisk {
+                                    AllowRiskBadge(risk: risk)
                                 }
                             }
                             .padding(.vertical, 4)

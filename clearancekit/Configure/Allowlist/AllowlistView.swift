@@ -8,7 +8,7 @@ import SwiftUI
 struct AllowlistView: View {
     @StateObject private var allowlistStore = AllowlistStore.shared
     @StateObject private var quietListStore = QuietListStore.shared
-    @StateObject private var riskGate = SpotlightRiskGate()
+    @StateObject private var riskGate = AllowRiskGate()
     @State private var isAddingQuietEntry = false
     @State private var isAddingEntry = false
     @State private var isAddingAncestorEntry = false
@@ -37,7 +37,7 @@ struct AllowlistView: View {
             } onCancel: {
                 isAddingEntry = false
             }
-            .spotlightIndexerRiskConfirmation(riskGate)
+            .allowRiskConfirmation(riskGate)
         }
         .sheet(isPresented: $isAddingAncestorEntry) {
             AncestorAllowlistEntryEditView { entry in
@@ -54,7 +54,7 @@ struct AllowlistView: View {
             } onCancel: {
                 isAddingAncestorEntry = false
             }
-            .spotlightIndexerRiskConfirmation(riskGate)
+            .allowRiskConfirmation(riskGate)
         }
         .sheet(item: $editingEntry) { entry in
             AllowlistEntryEditView(existing: entry) { updated in
@@ -71,7 +71,7 @@ struct AllowlistView: View {
             } onCancel: {
                 editingEntry = nil
             }
-            .spotlightIndexerRiskConfirmation(riskGate)
+            .allowRiskConfirmation(riskGate)
         }
         .sheet(item: $editingAncestorEntry) { entry in
             AncestorAllowlistEntryEditView(existing: entry) { updated in
@@ -88,7 +88,7 @@ struct AllowlistView: View {
             } onCancel: {
                 editingAncestorEntry = nil
             }
-            .spotlightIndexerRiskConfirmation(riskGate)
+            .allowRiskConfirmation(riskGate)
         }
         .sheet(isPresented: $isAddingQuietEntry) {
             QuietListEntryEditView { entry in
@@ -151,8 +151,9 @@ struct AllowlistView: View {
                     ForEach(allowlistStore.managedEntries) { entry in
                         VStack(alignment: .leading, spacing: 4) {
                             AllowlistEntryRow(entry: entry, source: .managed, isEditable: false, onEdit: { }, onDelete: { })
-                            if allowRisk(for: entry) == .spotlightIndexer {
-                                SpotlightIndexerRiskBadge()
+                            let risk = allowRisk(for: entry)
+                            if risk != .noKnownRisk {
+                                AllowRiskBadge(risk: risk)
                             }
                         }
                         .padding(.vertical, 4)
@@ -182,8 +183,9 @@ struct AllowlistView: View {
                     ForEach(allowlistStore.managedAncestorEntries) { entry in
                         VStack(alignment: .leading, spacing: 4) {
                             AncestorAllowlistEntryRow(entry: entry, isEditable: false, onEdit: { }, onDelete: { })
-                            if allowRisk(for: entry) == .spotlightIndexer {
-                                SpotlightIndexerRiskBadge()
+                            let risk = allowRisk(for: entry)
+                            if risk != .noKnownRisk {
+                                AllowRiskBadge(risk: risk)
                             }
                         }
                         .padding(.vertical, 4)

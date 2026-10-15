@@ -104,7 +104,7 @@
 				Configure/Policy/PolicyView.swift,
 				Configure/Policy/RuleEditView.swift,
 				Configure/ProcessPickerView.swift,
-				Configure/SpotlightIndexerRiskSheet.swift,
+				Configure/AllowRiskSheet.swift,
 				Export/ClearanceKitExportView.swift,
 				Export/ClearanceKitMobileconfigExporter.swift,
 				Export/SantaExportView.swift,
