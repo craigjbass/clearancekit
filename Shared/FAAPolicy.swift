@@ -220,6 +220,8 @@ public struct ProcessSignature: Codable, Equatable, Hashable {
 
 extension ProcessSignature: CustomStringConvertible {
     public var description: String { "\(teamID):\(signingID)" }
+
+    public var containsWildcard: Bool { teamID == "*" || signingID == "*" }
 }
 
 // MARK: - DoubleStarParentMatching

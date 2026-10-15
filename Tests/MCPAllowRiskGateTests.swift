@@ -31,6 +31,18 @@ private let webKitRuleWithDefaultChecks = FAARule(
 
 @Suite("requireAllowRiskAcknowledgement")
 struct MCPAllowRiskGateTests {
+    @Test("rule with a broad responsible process check is refused without the flag")
+    func broadResponsibleProcessCheckIsRefused() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            responsibleProcessChecks: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")]
+        )
+
+        #expect(throws: AllowRiskNotAcknowledgedError.self) {
+            try requireAllowRiskAcknowledgement(for: rule, acknowledgement: .notAcknowledged)
+        }
+    }
+
     @Test("risky rule without the flag is refused")
     func riskyRuleWithoutFlagIsRefused() {
         #expect(throws: AllowRiskNotAcknowledgedError.self) {

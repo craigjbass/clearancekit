@@ -10,6 +10,7 @@ public enum AllowRisk: Hashable {
     case spotlightIndexer
     case webKitService
     case responsibleProcessAllow
+    case broadResponsibleProcessCheck
 }
 
 public extension AllowRisk {
@@ -19,6 +20,7 @@ public extension AllowRisk {
         case .spotlightIndexer: return "a Spotlight indexer"
         case .webKitService: return "a WebKit service"
         case .responsibleProcessAllow: return "an app that is the responsible process for WebKit services"
+        case .broadResponsibleProcessCheck: return "the processes that an app starts, through a responsible process check outside Apple's WebKit services"
         }
     }
 }
@@ -48,7 +50,12 @@ public func allowRisk(for rule: FAARule) -> AllowRisk {
         let allowedByPath = (rule.allowedProcessPaths + rule.allowedAncestorProcessPaths).contains { isWebKitServicePath($0, of: webKitService) }
         return allowedBySignature || allowedByPath
     }
-    return allowsUncheckedWebKitService ? .webKitService : .noKnownRisk
+    if allowsUncheckedWebKitService { return .webKitService }
+    return rule.responsibleProcessChecks.contains(where: isBroadResponsibleProcessCheck) ? .broadResponsibleProcessCheck : .noKnownRisk
+}
+
+private func isBroadResponsibleProcessCheck(_ check: ProcessSignature) -> Bool {
+    check.containsWildcard || !defaultResponsibleProcessChecks.contains(check)
 }
 
 private func signatureMatchesWebKitService(_ signature: ProcessSignature) -> Bool {

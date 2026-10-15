@@ -80,6 +80,11 @@ struct AllowRiskGateTests {
         #expect(AllowRiskCopy.body(for: .responsibleProcessAllow) == "A WebKit service opened this file for this app. If you allow this app, the rule also allows web content loaded by any process the app starts.")
     }
 
+    @Test("the sheet copy for a broad responsible process check names the started processes")
+    func broadResponsibleProcessCheckCopy() {
+        #expect(AllowRiskCopy.body(for: .broadResponsibleProcessCheck) == "This rule checks processes other than Apple's WebKit services as the app responsible for them. Any process that app starts can then use this rule's access.")
+    }
+
     @Test("allow anyway applies the pending change once and clears it")
     func allowAnywayAppliesOnce() {
         let gate = AllowRiskGate()

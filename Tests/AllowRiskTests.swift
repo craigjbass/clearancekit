@@ -235,4 +235,58 @@ struct AllowRiskTests {
 
         #expect(allowRisk(for: rule) == .spotlightIndexer)
     }
+
+    @Test("rule checking a process outside the default list is a broad responsible process check")
+    func ruleWithNonDefaultCheckIsBroad() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: "TEAM123", signingID: "com.example.app")],
+            responsibleProcessChecks: defaultResponsibleProcessChecks + [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")]
+        )
+
+        #expect(allowRisk(for: rule) == .broadResponsibleProcessCheck)
+    }
+
+    @Test("rule with a wildcard responsible process check is a broad responsible process check", arguments: [
+        ProcessSignature(teamID: "*", signingID: "*"),
+        ProcessSignature(teamID: appleTeamID, signingID: "*"),
+        ProcessSignature(teamID: "*", signingID: "com.apple.WebKit.Networking"),
+    ])
+    func ruleWithWildcardCheckIsBroad(check: ProcessSignature) {
+        let rule = FAARule(protectedPathPrefix: "/Users/*/Secrets", responsibleProcessChecks: [check])
+
+        #expect(allowRisk(for: rule) == .broadResponsibleProcessCheck)
+    }
+
+    @Test("rule checking part of the default list is not a risk")
+    func ruleWithPartOfDefaultChecksIsNotRisk() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            responsibleProcessChecks: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking")]
+        )
+
+        #expect(allowRisk(for: rule) == .noKnownRisk)
+    }
+
+    @Test("WebKit service risk wins over broad responsible process check risk")
+    func webKitWinsOverBroadCheck() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU")],
+            responsibleProcessChecks: [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")]
+        )
+
+        #expect(allowRisk(for: rule) == .webKitService)
+    }
+
+    @Test("Spotlight indexer risk wins over broad responsible process check risk")
+    func spotlightWinsOverBroadCheck() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/*/Secrets",
+            allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.mds")],
+            responsibleProcessChecks: [ProcessSignature(teamID: "*", signingID: "*")]
+        )
+
+        #expect(allowRisk(for: rule) == .spotlightIndexer)
+    }
 }

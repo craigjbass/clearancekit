@@ -51,7 +51,11 @@ struct RuleEditView: View {
     }
 
     private var isValid: Bool {
-        !draft.protectedPathPrefix.trimmingCharacters(in: .whitespaces).isEmpty
+        !draft.protectedPathPrefix.trimmingCharacters(in: .whitespaces).isEmpty && !hasWildcardResponsibleProcessCheck
+    }
+
+    private var hasWildcardResponsibleProcessCheck: Bool {
+        draft.toRule(preservingID: existingID).responsibleProcessChecks.contains(where: \.containsWildcard)
     }
 
     var body: some View {
@@ -199,9 +203,15 @@ struct RuleEditView: View {
 
     @ViewBuilder
     private var responsibleProcessWarning: some View {
+        if hasWildcardResponsibleProcessCheck {
+            Label("Wildcard entries are not allowed here. List each process by team ID and signing ID.", systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+        }
         switch allowRisk(for: draft.toRule(preservingID: existingID)) {
         case .webKitService:
             AllowRiskBadge(risk: .webKitService)
+        case .broadResponsibleProcessCheck:
+            AllowRiskBadge(risk: .broadResponsibleProcessCheck)
         case .spotlightIndexer, .responsibleProcessAllow, .noKnownRisk:
             Text("When a listed WebKit service opens a protected file, this rule checks the app that started the service instead.")
                 .foregroundStyle(.secondary)

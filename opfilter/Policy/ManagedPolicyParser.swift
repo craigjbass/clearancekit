@@ -44,7 +44,11 @@ private func parseResponsibleProcessChecks(_ value: Any?, pattern: String) -> [P
         NSLog("ManagedPolicyLoader: ResponsibleProcessChecks for %@ is not an array of strings — using the default list", pattern)
         return defaultResponsibleProcessChecks
     }
-    return parseSignatures(entries)
+    let checks = parseSignatures(entries)
+    for wildcardEntry in checks where wildcardEntry.containsWildcard {
+        NSLog("ManagedPolicyLoader: Dropping wildcard ResponsibleProcessChecks entry %@ for %@", wildcardEntry.description, pattern)
+    }
+    return checks.filter { !$0.containsWildcard }
 }
 
 // An unknown value gives the stricter matching, so a typo in a profile

@@ -196,6 +196,16 @@ struct ManagedPolicyRuleParserTests {
         #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")])
     }
 
+    @Test("wildcard ResponsibleProcessChecks entries are dropped")
+    func wildcardResponsibleProcessChecksAreDropped() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/secret",
+            "ResponsibleProcessChecks": ["*:*", "apple:*", "*:com.example.other", "TEAM1:com.example.helper"],
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")])
+    }
+
     @Test("empty ResponsibleProcessChecks turns the checks off")
     func responsibleProcessChecksEmpty() {
         let dict: [String: Any] = [

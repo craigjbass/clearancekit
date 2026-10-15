@@ -311,6 +311,7 @@ enum MCPDispatcher {
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? false
         let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? .allNestedDirectories
         let responsibleProcessChecks = try parseOptionalSignatures(from: args["responsible_process_checks"])
+        try requireNoWildcardResponsibleProcessChecks(responsibleProcessChecks)
         let rule = ruleForMCPAdd(
             id: id,
             protectedPathPrefix: pathPrefix,
@@ -344,6 +345,7 @@ enum MCPDispatcher {
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? existing.enforceOnWriteOnly
         let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? existing.doubleStarParentMatching
         let responsibleProcessChecks = try parseOptionalSignatures(from: args["responsible_process_checks"])
+        try requireNoWildcardResponsibleProcessChecks(responsibleProcessChecks)
         let updated = ruleForMCPUpdate(
             existing: existing,
             allowedSignatures: signatures,
@@ -447,10 +449,10 @@ enum MCPDispatcher {
     }
 
     private static func responsibleProcessChecksParameterDescription(omittedMeans: String) -> String {
-        "Signatures as [\"teamID:signingID\"]. A process that matches an entry is checked against this rule as its responsible process, not as itself. Pass [] to check every process as itself. Omit for \(omittedMeans)."
+        "Signatures as [\"teamID:signingID\"]. A process that matches an entry is checked against this rule as its responsible process, not as itself. Pass [] to check every process as itself. Wildcard entries (\"*\" as team ID or signing ID) are refused. An entry outside the default list needs acknowledge_allow_risk. Omit for \(omittedMeans)."
     }
 
-    private static let allowRiskParameterDescription = "Set to true only when the user accepts the risk of this rule. The risk is either a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them), which lets any account read the protected files with mdimport, or a WebKit service (com.apple.WebKit.Networking, com.apple.WebKit.WebContent, com.apple.WebKit.GPU and the com.apple.WebKit.WebContent variants) allowed without a responsible process check, which lets any app that shows web content read the protected files. Without this flag such a rule is refused and not saved."
+    private static let allowRiskParameterDescription = "Set to true only when the user accepts the risk of this rule. The risk is a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them), which lets any account read the protected files with mdimport, or a WebKit service (com.apple.WebKit.Networking, com.apple.WebKit.WebContent, com.apple.WebKit.GPU and the com.apple.WebKit.WebContent variants) allowed without a responsible process check, which lets any app that shows web content read the protected files, or a responsible_process_checks entry outside the default list, which lets any process that the responsible app starts use this rule's access. Without this flag such a rule is refused and not saved."
 
     private static func parseSignatures(from value: JSONValue?) throws -> [ProcessSignature] {
         guard let value else { return [] }

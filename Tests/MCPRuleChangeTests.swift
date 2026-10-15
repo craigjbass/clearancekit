@@ -12,6 +12,33 @@ private let allowedSignatures = [ProcessSignature(teamID: "TEAM3", signingID: "c
 
 @Suite("MCP rule changes")
 struct MCPRuleChangeTests {
+    @Test("wildcard responsible_process_checks entries are refused", arguments: [
+        ProcessSignature(teamID: "*", signingID: "*"),
+        ProcessSignature(teamID: appleTeamID, signingID: "*"),
+        ProcessSignature(teamID: "*", signingID: "com.example.helper"),
+    ])
+    func wildcardChecksAreRefused(check: ProcessSignature) {
+        #expect(throws: WildcardResponsibleProcessCheckError.self) {
+            try requireNoWildcardResponsibleProcessChecks(customChecks + [check])
+        }
+    }
+
+    @Test("responsible_process_checks without a wildcard entry are accepted")
+    func checksWithoutWildcardAreAccepted() {
+        #expect(throws: Never.self) {
+            try requireNoWildcardResponsibleProcessChecks(customChecks)
+            try requireNoWildcardResponsibleProcessChecks(nil)
+        }
+    }
+
+    @Test("the wildcard refusal names the entry and the parameter")
+    func wildcardRefusalText() {
+        let message = WildcardResponsibleProcessCheckError(entry: ProcessSignature(teamID: appleTeamID, signingID: "*")).errorDescription ?? ""
+
+        #expect(message.contains("apple:*"))
+        #expect(message.contains("responsible_process_checks"))
+    }
+
     @Test("add without responsible_process_checks gives the default list")
     func addWithoutChecksGivesDefault() {
         let rule = ruleForMCPAdd(

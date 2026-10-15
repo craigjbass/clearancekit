@@ -44,3 +44,16 @@ func ruleForMCPUpdate(
         responsibleProcessChecks: responsibleProcessChecks ?? existing.responsibleProcessChecks
     )
 }
+
+struct WildcardResponsibleProcessCheckError: LocalizedError {
+    let entry: ProcessSignature
+
+    var errorDescription: String? {
+        "The rule was not saved. The responsible_process_checks entry \"\(entry.description)\" contains a wildcard. List each process by team ID and signing ID."
+    }
+}
+
+func requireNoWildcardResponsibleProcessChecks(_ checks: [ProcessSignature]?) throws {
+    guard let wildcardEntry = checks?.first(where: \.containsWildcard) else { return }
+    throw WildcardResponsibleProcessCheckError(entry: wildcardEntry)
+}
