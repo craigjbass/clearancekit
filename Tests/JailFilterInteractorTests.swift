@@ -15,6 +15,7 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     func remove(identity: ProcessIdentity) {}
     func contains(identity: ProcessIdentity) -> Bool { false }
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] { ancestorsResult }
+    func record(of identity: ProcessIdentity) -> ProcessRecord? { nil }
     func allRecords() -> [ProcessRecord] { [] }
 }
 
@@ -53,6 +54,7 @@ private func openFileEvent(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: identity(pid: 100),
+        responsibleIdentity: identity(pid: 100),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -82,6 +84,7 @@ private func openFileEventCapturingCache(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: identity(pid: 100),
+        responsibleIdentity: identity(pid: 100),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -231,6 +234,7 @@ struct JailFilterInteractorTests {
             secondaryPath: "/forbidden/dest",
             movedEntryKind: .noDirectory,
             processIdentity: identity(pid: 100),
+            responsibleIdentity: identity(pid: 100),
             processID: 100,
             parentPID: 1,
             parentPIDVersion: 0,

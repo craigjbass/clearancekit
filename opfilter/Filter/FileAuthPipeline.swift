@@ -32,7 +32,7 @@ final class FileAuthPipeline: @unchecked Sendable {
     private let ancestorAllowlistProvider: @Sendable () -> [AncestorAllowlistEntry]
     private let postRespondHandler: @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
     private let authorizationGate: AuthorizationGate
-    private let authorizationHandler: @Sendable (FileAuthEvent, TimeInterval, String, [AncestorInfo]) -> Void
+    private let authorizationHandler: @Sendable (FileAuthEvent, TimeInterval, String, AuthorizationSubject) -> Void
     private let hotPathQueue: DispatchQueue
     private let slowWorkerQueue: DispatchQueue
     private let slowWorkerSemaphore: DispatchSemaphore
@@ -48,7 +48,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         ancestorAllowlistProvider: @escaping @Sendable () -> [AncestorAllowlistEntry],
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void,
         authorizationGate: AuthorizationGate = AuthorizationGate(),
-        authorizationHandler: @escaping @Sendable (FileAuthEvent, TimeInterval, String, [AncestorInfo]) -> Void = { _, _, _, _ in },
+        authorizationHandler: @escaping @Sendable (FileAuthEvent, TimeInterval, String, AuthorizationSubject) -> Void = { _, _, _, _ in },
         eventBufferCapacity: Int = 1024,
         slowQueueCapacity: Int = 256,
         hotPathQueue: DispatchQueue = DispatchQueue(label: "uk.craigbass.clearancekit.pipeline.hot", qos: .userInteractive),
@@ -125,16 +125,15 @@ final class FileAuthPipeline: @unchecked Sendable {
 
         let allowlist = allowlistProvider()
         let ancestorAllowlist = ancestorAllowlistProvider()
+        let rules = rulesProvider()
 
         if isGloballyAllowed(allowlist: allowlist, processPath: event.processPath, signingID: event.signingID, teamID: event.teamID) {
-            event.respond(true, event.cachesAllowResponse)
+            event.respond(true, allowIsCacheable(for: event, rules: rules))
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .globallyAllowed, ancestors, 0)
             return
         }
-
-        let rules = rulesProvider()
 
         if let evaluator = bundleProtectionEvaluator,
            evaluator.isBundleWrite(path: event.path, accessKind: event.accessKind) {
@@ -163,20 +162,21 @@ final class FileAuthPipeline: @unchecked Sendable {
 
         switch classification {
         case .noRuleApplies:
-            event.respond(true, event.cachesAllowResponse)
+            event.respond(true, allowIsCacheable(for: event, rules: rules))
             metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
             let ancestors = processTree.ancestors(of: event.processIdentity)
             postRespondHandler(event, .noRuleApplies, ancestors, 0)
 
         case .processLevelOnly where ancestorAllowlist.isEmpty:
+            let responsibleRecord = responsibleRecord(of: event)
             let decision = evaluateAccess(
                 rules: rules, allowlist: allowlist, ancestorAllowlist: [],
                 path: event.path, secondaryPath: event.secondaryPath, reach: event.reach,
-                subject: policySubject(for: event, ancestors: []),
+                subject: policySubject(for: event, ancestors: [], responsibleRecord: responsibleRecord, responsibleAncestors: []),
                 accessKind: event.accessKind
             )
             let hotAncestors = processTree.ancestors(of: event.processIdentity)
-            if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, dwellNanoseconds: 0) {
+            if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, responsibleRecord: responsibleRecord, dwellNanoseconds: 0) {
                 metricsStorage.withLock { $0.hotPathRespondedCount += 1 }
                 return
             }
@@ -231,6 +231,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         let dwellNanoseconds = waitForProcess(event.processIdentity, deadline: event.deadline)
 
         let ancestors = processTree.ancestors(of: event.processIdentity)
+        let responsibleRecord = responsibleRecord(of: event)
 
         let faaDecision = evaluateAccess(
             rules: workItem.rules,
@@ -239,7 +240,12 @@ final class FileAuthPipeline: @unchecked Sendable {
             path: event.path,
             secondaryPath: event.secondaryPath,
             reach: event.reach,
-            subject: policySubject(for: event, ancestors: ancestors),
+            subject: policySubject(
+                for: event,
+                ancestors: ancestors,
+                responsibleRecord: responsibleRecord,
+                responsibleAncestors: responsibleAncestors(of: responsibleRecord)
+            ),
             accessKind: event.accessKind
         )
         let decision = combinedDecision(
@@ -248,22 +254,64 @@ final class FileAuthPipeline: @unchecked Sendable {
         )
 
         let logAncestors = processTree.ancestors(of: event.processIdentity)
-        if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, dwellNanoseconds: dwellNanoseconds) {
+        if handleDecisionWithAuthorization(decision, event: event, ancestors: logAncestors, responsibleRecord: responsibleRecord, dwellNanoseconds: dwellNanoseconds) {
             return
         }
         event.respond(decision.isAllowed, false)
         postRespondHandler(event, decision, logAncestors, dwellNanoseconds)
     }
 
-    // The responsible process is not read from the event yet, so a rule that
-    // checks the responsible process of a WebKit service denies the access.
-    private func policySubject(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicySubject {
+    // ES caches an allow per executable file and target file, and every
+    // WebKit Networking process shares one executable. A cached allow given to
+    // one service process would also skip the rule check for the next one,
+    // whose responsible process can be a different app.
+    private func allowIsCacheable(for event: FileAuthEvent, rules: [FAARule]) -> Bool {
+        guard event.cachesAllowResponse else { return false }
+        return !anyRuleChecksResponsibleProcess(of: event, rules: rules)
+    }
+
+    private func anyRuleChecksResponsibleProcess(of event: FileAuthEvent, rules: [FAARule]) -> Bool {
+        let process = processFacts(of: event)
+        return rules.contains { $0.checksResponsibleProcess(of: process) }
+    }
+
+    private func processFacts(of event: FileAuthEvent) -> ProcessFacts {
+        ProcessFacts(processPath: event.processPath, teamID: event.teamID, signingID: event.signingID)
+    }
+
+    private func responsibleRecord(of event: FileAuthEvent) -> ProcessRecord? {
+        guard event.responsibleIdentity != event.processIdentity else { return nil }
+        guard let record = processTree.record(of: event.responsibleIdentity) else { return nil }
+        guard record.identity != event.processIdentity else { return nil }
+        return record
+    }
+
+    private func responsibleAncestors(of responsibleRecord: ProcessRecord?) -> [AncestorInfo] {
+        guard let responsibleRecord else { return [] }
+        return processTree.ancestors(of: responsibleRecord.identity)
+    }
+
+    private func policySubject(
+        for event: FileAuthEvent,
+        ancestors: [AncestorInfo],
+        responsibleRecord: ProcessRecord?,
+        responsibleAncestors: [AncestorInfo]
+    ) -> PolicySubject {
         PolicySubject(
-            process: ProcessFacts(processPath: event.processPath, teamID: event.teamID, signingID: event.signingID),
+            process: processFacts(of: event),
             ancestors: ancestors,
-            responsibleProcess: .unknown,
-            responsibleAncestors: []
+            responsibleProcess: responsibleProcess(from: responsibleRecord),
+            responsibleAncestors: responsibleAncestors
         )
+    }
+
+    private func responsibleProcess(from responsibleRecord: ProcessRecord?) -> ResponsibleProcess {
+        guard let responsibleRecord else { return .unknown }
+        return .known(ProcessFacts(
+            processPath: responsibleRecord.path,
+            teamID: responsibleRecord.teamID,
+            signingID: responsibleRecord.signingID
+        ))
     }
 
     private func bundleProtectionDecision(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicyDecision? {
@@ -291,25 +339,34 @@ final class FileAuthPipeline: @unchecked Sendable {
         _ decision: PolicyDecision,
         event: FileAuthEvent,
         ancestors: [AncestorInfo],
+        responsibleRecord: ProcessRecord?,
         dwellNanoseconds: UInt64
     ) -> Bool {
         guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration, let checkedProcess) = decision else {
             return false
         }
-        if authorizationGate.hasActiveSession(
-            teamID: event.teamID,
-            signingID: event.signingID,
-            parentPID: event.parentPID,
-            parentPIDVersion: event.parentPIDVersion,
+        guard let subject = authorizationSubject(
+            for: checkedProcess,
+            event: event,
             ancestors: ancestors,
+            responsibleRecord: responsibleRecord
+        ) else {
+            return false
+        }
+        if authorizationGate.hasActiveSession(
+            teamID: subject.teamID,
+            signingID: subject.signingID,
+            parentPID: subject.parentIdentity.pid,
+            parentPIDVersion: subject.parentIdentity.pidVersion,
+            ancestors: subject.ancestors,
             prefix: ruleName
         ) {
             authorizationGate.touchSession(
-                teamID: event.teamID,
-                signingID: event.signingID,
-                parentPID: event.parentPID,
-                parentPIDVersion: event.parentPIDVersion,
-                ancestors: ancestors,
+                teamID: subject.teamID,
+                signingID: subject.signingID,
+                parentPID: subject.parentIdentity.pid,
+                parentPIDVersion: subject.parentIdentity.pidVersion,
+                ancestors: subject.ancestors,
                 prefix: ruleName
             )
             let sessionDecision = PolicyDecision.allowed(
@@ -323,8 +380,43 @@ final class FileAuthPipeline: @unchecked Sendable {
             postRespondHandler(event, sessionDecision, ancestors, dwellNanoseconds)
             return true
         }
-        authorizationHandler(event, duration, ruleName, ancestors)
+        authorizationHandler(event, duration, ruleName, subject)
         return true
+    }
+
+    // The domain denies an unknown responsible process before it asks for
+    // authorization, so `.unknownResponsible` returns nil and the caller denies.
+    private func authorizationSubject(
+        for checkedProcess: CheckedProcess,
+        event: FileAuthEvent,
+        ancestors: [AncestorInfo],
+        responsibleRecord: ProcessRecord?
+    ) -> AuthorizationSubject? {
+        switch checkedProcess {
+        case .itself:
+            return AuthorizationSubject(
+                checkedProcess: checkedProcess,
+                processPath: event.processPath,
+                teamID: event.teamID,
+                signingID: event.signingID,
+                processIdentity: event.processIdentity,
+                parentIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
+                ancestors: ancestors
+            )
+        case .responsible(let facts):
+            guard let responsibleRecord else { return nil }
+            return AuthorizationSubject(
+                checkedProcess: checkedProcess,
+                processPath: facts.processPath,
+                teamID: facts.teamID,
+                signingID: facts.signingID,
+                processIdentity: responsibleRecord.identity,
+                parentIdentity: responsibleRecord.parentIdentity,
+                ancestors: responsibleAncestors(of: responsibleRecord)
+            )
+        case .unknownResponsible:
+            return nil
+        }
     }
 
     private func waitForProcess(_ identity: ProcessIdentity, deadline: UInt64) -> UInt64 {

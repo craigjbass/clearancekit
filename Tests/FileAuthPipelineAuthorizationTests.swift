@@ -12,12 +12,14 @@ import os
 private final class FakeAuthPipelineProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     var containsResult = true
     var ancestorsResult: [AncestorInfo] = []
+    var recordsByIdentity: [ProcessIdentity: ProcessRecord] = [:]
 
     func insert(_ record: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
 
     func contains(identity: ProcessIdentity) -> Bool { containsResult }
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] { ancestorsResult }
+    func record(of identity: ProcessIdentity) -> ProcessRecord? { recordsByIdentity[identity] }
     func allRecords() -> [ProcessRecord] { [] }
 }
 
@@ -28,6 +30,8 @@ private func authorizationEvent(
     pidVersion: UInt32 = 3,
     path: String = "/Secrets/file.txt",
     teamID: String = "ABCDE12345",
+    signingID: String = "com.example.app",
+    responsibleIdentity: ProcessIdentity? = nil,
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
@@ -38,12 +42,13 @@ private func authorizationEvent(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: ProcessIdentity(pid: pid, pidVersion: pidVersion),
+        responsibleIdentity: responsibleIdentity ?? ProcessIdentity(pid: pid, pidVersion: pidVersion),
         processID: pid,
         parentPID: 1,
         parentPIDVersion: 0,
         processPath: "/Apps/Example",
         teamID: teamID,
-        signingID: "com.example.app",
+        signingID: signingID,
         uid: 501,
         gid: 20,
         ttyPath: nil,
@@ -133,4 +138,125 @@ struct FileAuthPipelineAuthorizationTests {
 
         #expect(capturedDuration.withLock { $0 } == 300)
     }
+
+    @Test("Networking event asks for authorization as its responsible process")
+    func networkingAuthorizationUsesResponsibleProcess() {
+        let processTree = FakeAuthPipelineProcessTree()
+        processTree.recordsByIdentity = [safariIdentity: safariRecord()]
+
+        let handlerCalled = DispatchSemaphore(value: 0)
+        let capturedSubject = OSAllocatedUnfairLock<AuthorizationSubject?>(initialState: nil)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [authorizationRule()] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in },
+            authorizationGate: AuthorizationGate(),
+            authorizationHandler: { _, _, _, subject in
+                capturedSubject.withLock { $0 = subject }
+                handlerCalled.signal()
+            }
+        )
+        pipeline.start()
+
+        pipeline.submit(networkingEvent { _, _ in })
+
+        handlerCalled.wait()
+
+        let subject = capturedSubject.withLock { $0 }
+        #expect(subject?.teamID == appleTeamID)
+        #expect(subject?.signingID == "com.apple.Safari")
+        #expect(subject?.processPath == "/Applications/Safari.app/Contents/MacOS/Safari")
+        #expect(subject?.processIdentity == safariIdentity)
+        #expect(subject?.parentIdentity == safariParentIdentity)
+        #expect(subject?.checkedProcess == .responsible(ProcessFacts(processPath: "/Applications/Safari.app/Contents/MacOS/Safari", teamID: appleTeamID, signingID: "com.apple.Safari")))
+    }
+
+    @Test("Networking event is allowed by an active session of its responsible process")
+    func networkingAllowedByResponsibleProcessSession() {
+        let processTree = FakeAuthPipelineProcessTree()
+        processTree.recordsByIdentity = [safariIdentity: safariRecord()]
+        let gate = AuthorizationGate()
+        gate.createSession(teamID: appleTeamID, signingID: "com.apple.Safari", parentPID: safariParentIdentity.pid, parentPIDVersion: safariParentIdentity.pidVersion, ancestors: [], prefix: "/Secrets", duration: 300)
+
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: false)
+        let handlerCalledLock = OSAllocatedUnfairLock(initialState: false)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [authorizationRule()] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() },
+            authorizationGate: gate,
+            authorizationHandler: { _, _, _, _ in
+                handlerCalledLock.withLock { $0 = true }
+            }
+        )
+        pipeline.start()
+
+        pipeline.submit(networkingEvent { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == true)
+        #expect(handlerCalledLock.withLock { $0 } == false)
+    }
+
+    @Test("Networking event is not allowed by an active session of the Networking process itself")
+    func networkingNotAllowedByOwnSession() {
+        let processTree = FakeAuthPipelineProcessTree()
+        processTree.recordsByIdentity = [safariIdentity: safariRecord()]
+        let gate = AuthorizationGate()
+        gate.createSession(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking", parentPID: 1, parentPIDVersion: 0, ancestors: [], prefix: "/Secrets", duration: 300)
+
+        let handlerCalled = DispatchSemaphore(value: 0)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [authorizationRule()] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in },
+            authorizationGate: gate,
+            authorizationHandler: { _, _, _, _ in handlerCalled.signal() }
+        )
+        pipeline.start()
+
+        pipeline.submit(networkingEvent { _, _ in })
+
+        #expect(handlerCalled.wait(timeout: .now() + .seconds(2)) == .success)
+    }
+}
+
+private let safariIdentity = ProcessIdentity(pid: 300, pidVersion: 4)
+private let safariParentIdentity = ProcessIdentity(pid: 1, pidVersion: 9)
+
+private func safariRecord() -> ProcessRecord {
+    ProcessRecord(
+        identity: safariIdentity,
+        parentIdentity: safariParentIdentity,
+        path: "/Applications/Safari.app/Contents/MacOS/Safari",
+        teamID: appleTeamID,
+        signingID: "com.apple.Safari",
+        uid: 501,
+        gid: 20
+    )
+}
+
+private func networkingEvent(respond: @escaping @Sendable (Bool, Bool) -> Void) -> FileAuthEvent {
+    authorizationEvent(
+        teamID: appleTeamID,
+        signingID: "com.apple.WebKit.Networking",
+        responsibleIdentity: safariIdentity,
+        respond: respond
+    )
 }

@@ -31,6 +31,7 @@ struct AuditLoggerTests {
             secondaryPath: nil,
             movedEntryKind: .noDirectory,
             processIdentity: ProcessIdentity(pid: processID, pidVersion: 1),
+            responsibleIdentity: ProcessIdentity(pid: processID, pidVersion: 1),
             processID: processID,
             parentPID: parentPID,
             parentPIDVersion: 0,

@@ -279,6 +279,10 @@ final class ESInboundAdapter {
             secondaryPath: secondaryPath,
             movedEntryKind: movedEntryKind(of: message),
             processIdentity: processIdentity,
+            responsibleIdentity: ProcessIdentity(
+                pid: pid_t(bitPattern: process.responsible_audit_token.val.5),
+                pidVersion: process.responsible_audit_token.val.7
+            ),
             processID: processIdentity.pid,
             parentPID: pid_t(bitPattern: process.parent_audit_token.val.5),
             parentPIDVersion: process.parent_audit_token.val.7,

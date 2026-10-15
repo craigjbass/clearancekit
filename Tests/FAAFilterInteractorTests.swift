@@ -30,6 +30,10 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
         ancestorsResult
     }
 
+    func record(of identity: ProcessIdentity) -> ProcessRecord? {
+        nil
+    }
+
     func allRecords() -> [ProcessRecord] { [] }
 }
 
@@ -97,6 +101,7 @@ private func openFileEvent(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: processIdentity ?? identity(pid: 100),
+        responsibleIdentity: processIdentity ?? identity(pid: 100),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -126,6 +131,7 @@ private func openFileEventCapturingCache(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: identity(pid: 100),
+        responsibleIdentity: identity(pid: 100),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,

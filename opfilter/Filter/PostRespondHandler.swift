@@ -31,6 +31,7 @@ final class PostRespondHandler: @unchecked Sendable {
                 ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
             }
 
+            let responsibleProcess = responsibleProcessFacts(of: decision)
             let folderOpenEvent = FolderOpenEvent(
                 operation: fileEvent.operation.rawValue,
                 path: fileEvent.path,
@@ -46,6 +47,9 @@ final class PostRespondHandler: @unchecked Sendable {
                 ancestors: ancestors,
                 matchedRuleID: decision.matchedRuleID,
                 jailedRuleID: decision.jailedRuleID,
+                responsibleProcessPath: responsibleProcess?.processPath,
+                responsibleSigningID: responsibleProcess?.signingID,
+                responsibleTeamID: responsibleProcess?.teamID,
                 notificationPolicy: resolveNotificationPolicy(for: fileEvent, decision: decision),
                 eventID: fileEvent.correlationID
             )
@@ -55,11 +59,28 @@ final class PostRespondHandler: @unchecked Sendable {
 
     private func resolveNotificationPolicy(for fileEvent: FileAuthEvent, decision: PolicyDecision) -> NotificationPolicy {
         guard !decision.isAllowed else { return .notify }
+        let notifiedProcess = notifiedProcessFacts(for: fileEvent, decision: decision)
         return notificationPolicy(
-            processPath: fileEvent.processPath,
-            signingID: fileEvent.signingID,
-            teamID: fileEvent.teamID,
+            processPath: notifiedProcess.processPath,
+            signingID: notifiedProcess.signingID,
+            teamID: notifiedProcess.teamID,
             quietList: quietListProvider()
         )
+    }
+
+    private func responsibleProcessFacts(of decision: PolicyDecision) -> ProcessFacts? {
+        switch decision.checkedProcess {
+        case .responsible(let facts): return facts
+        case .itself, .unknownResponsible: return nil
+        }
+    }
+
+    private func notifiedProcessFacts(for fileEvent: FileAuthEvent, decision: PolicyDecision) -> ProcessFacts {
+        switch decision.checkedProcess {
+        case .responsible(let facts):
+            return facts
+        case .itself, .unknownResponsible:
+            return ProcessFacts(processPath: fileEvent.processPath, teamID: fileEvent.teamID, signingID: fileEvent.signingID)
+        }
     }
 }

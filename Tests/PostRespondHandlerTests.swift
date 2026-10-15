@@ -23,6 +23,7 @@ private func makeFileEvent(signingID: String, teamID: String) -> FileAuthEvent {
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: ProcessIdentity(pid: 100, pidVersion: 1),
+        responsibleIdentity: ProcessIdentity(pid: 100, pidVersion: 1),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -37,9 +38,14 @@ private func makeFileEvent(signingID: String, teamID: String) -> FileAuthEvent {
     )
 }
 
-private func publishedEvent(signingID: String, teamID: String, decision: PolicyDecision) -> FolderOpenEvent? {
+private func publishedEvent(
+    signingID: String,
+    teamID: String,
+    decision: PolicyDecision,
+    quietList: [QuietListEntry] = baselineQuietList
+) -> FolderOpenEvent? {
     let queue = DispatchQueue(label: "test.post-respond")
-    let handler = PostRespondHandler(quietListProvider: { baselineQuietList }, postRespondQueue: queue)
+    let handler = PostRespondHandler(quietListProvider: { quietList }, postRespondQueue: queue)
     let capture = EventCapture()
     handler.onEvent = { capture.events.append($0) }
 
@@ -70,5 +76,53 @@ struct PostRespondHandlerTests {
         let event = publishedEvent(signingID: "com.apple.mdworker_shared", teamID: appleTeamID, decision: .noRuleApplies)
 
         #expect(event?.notificationPolicy == .notify)
+    }
+}
+
+private let safariFacts = ProcessFacts(
+    processPath: "/Applications/Safari.app/Contents/MacOS/Safari",
+    teamID: appleTeamID,
+    signingID: "com.apple.Safari"
+)
+
+@Suite("PostRespondHandler responsible process")
+struct PostRespondHandlerResponsibleProcessTests {
+    @Test("decision that checked the responsible process sets the responsible fields")
+    func responsibleDecisionSetsResponsibleFields() {
+        let decision = PolicyDecision.denied(ruleID: UUID(), ruleName: "/protected", ruleSource: .user, allowedCriteria: "", checkedProcess: .responsible(safariFacts))
+
+        let event = publishedEvent(signingID: "com.apple.WebKit.Networking", teamID: appleTeamID, decision: decision)
+
+        #expect(event?.responsibleProcessPath == "/Applications/Safari.app/Contents/MacOS/Safari")
+        #expect(event?.responsibleSigningID == "com.apple.Safari")
+        #expect(event?.responsibleTeamID == appleTeamID)
+    }
+
+    @Test("decision that checked the process itself leaves the responsible fields nil")
+    func itselfDecisionLeavesResponsibleFieldsNil() {
+        let event = publishedEvent(signingID: "com.example.shell", teamID: "TEAM123", decision: deniedDecision())
+
+        #expect(event?.responsibleProcessPath == nil)
+        #expect(event?.responsibleSigningID == nil)
+        #expect(event?.responsibleTeamID == nil)
+    }
+
+    @Test("decision with an unknown responsible process leaves the responsible fields nil")
+    func unknownResponsibleDecisionLeavesResponsibleFieldsNil() {
+        let decision = PolicyDecision.denied(ruleID: UUID(), ruleName: "/protected", ruleSource: .user, allowedCriteria: "", checkedProcess: .unknownResponsible)
+
+        let event = publishedEvent(signingID: "com.apple.WebKit.Networking", teamID: appleTeamID, decision: decision)
+
+        #expect(event?.responsibleProcessPath == nil)
+    }
+
+    @Test("denied event is quiet when the quiet list names the responsible process")
+    func deniedEventQuietForResponsibleProcess() {
+        let decision = PolicyDecision.denied(ruleID: UUID(), ruleName: "/protected", ruleSource: .user, allowedCriteria: "", checkedProcess: .responsible(safariFacts))
+        let quietSafari = QuietListEntry(id: UUID(), signingID: "com.apple.Safari", processPath: "", platformBinary: true, teamID: "")
+
+        let event = publishedEvent(signingID: "com.apple.WebKit.Networking", teamID: appleTeamID, decision: decision, quietList: [quietSafari])
+
+        #expect(event?.notificationPolicy == .quiet)
     }
 }

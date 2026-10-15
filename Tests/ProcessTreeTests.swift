@@ -96,3 +96,37 @@ struct ProcessTreeAncestorsTests {
         #expect(tree.ancestors(of: identity(pid: 200)).map(\.path) == ["/a"])
     }
 }
+
+@Suite("ProcessTree.record")
+struct ProcessTreeRecordTests {
+
+    private func record(pid: pid_t, version: UInt32, path: String) -> ProcessRecord {
+        ProcessRecord(
+            identity: ProcessIdentity(pid: pid, pidVersion: version),
+            parentIdentity: ProcessIdentity(pid: 1, pidVersion: 1),
+            path: path,
+            teamID: "apple",
+            signingID: "com.apple.Safari",
+            uid: 501,
+            gid: 20
+        )
+    }
+
+    @Test("returns the record of an inserted identity")
+    func returnsInsertedRecord() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300, version: 4, path: "/Applications/Safari.app/Contents/MacOS/Safari"))
+
+        let found = tree.record(of: ProcessIdentity(pid: 300, pidVersion: 4))
+
+        #expect(found?.path == "/Applications/Safari.app/Contents/MacOS/Safari")
+        #expect(found?.signingID == "com.apple.Safari")
+    }
+
+    @Test("returns nil when the identity is not in the tree")
+    func returnsNilForAbsentIdentity() {
+        let tree = ProcessTree()
+
+        #expect(tree.record(of: ProcessIdentity(pid: 300, pidVersion: 4)) == nil)
+    }
+}

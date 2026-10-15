@@ -27,6 +27,46 @@ struct FolderOpenEventCodingTests {
         #expect(decoded?.notificationPolicy == .quiet)
     }
 
+    @Test("responsible process fields survive a secure-coding round trip")
+    func responsibleProcessFieldsRoundTrip() throws {
+        let event = FolderOpenEvent(
+            path: "/protected/file",
+            timestamp: Date(timeIntervalSince1970: 1),
+            processID: 42,
+            processPath: "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+            responsibleProcessPath: "/Applications/Safari.app/Contents/MacOS/Safari",
+            responsibleSigningID: "com.apple.Safari",
+            responsibleTeamID: "apple",
+            notificationPolicy: .notify
+        )
+
+        let archive = try NSKeyedArchiver.archivedData(withRootObject: event, requiringSecureCoding: true)
+        let decoded = try NSKeyedUnarchiver.unarchivedObject(ofClasses: folderOpenEventClasses, from: archive) as? FolderOpenEvent
+
+        #expect(decoded?.responsibleProcessPath == "/Applications/Safari.app/Contents/MacOS/Safari")
+        #expect(decoded?.responsibleSigningID == "com.apple.Safari")
+        #expect(decoded?.responsibleTeamID == "apple")
+    }
+
+    @Test("event without responsible process fields decodes them as nil")
+    func missingResponsibleProcessFieldsDecodeAsNil() throws {
+        let event = FolderOpenEvent(
+            path: "/protected/file",
+            timestamp: Date(timeIntervalSince1970: 1),
+            processID: 42,
+            processPath: "/usr/libexec/indexer",
+            notificationPolicy: .notify
+        )
+
+        let archive = try NSKeyedArchiver.archivedData(withRootObject: event, requiringSecureCoding: true)
+        let decoded = try NSKeyedUnarchiver.unarchivedObject(ofClasses: folderOpenEventClasses, from: archive) as? FolderOpenEvent
+
+        #expect(decoded?.path == "/protected/file")
+        #expect(decoded?.responsibleProcessPath == nil)
+        #expect(decoded?.responsibleSigningID == nil)
+        #expect(decoded?.responsibleTeamID == nil)
+    }
+
     @Test("payload without a notification policy decodes as notify")
     func missingPolicyDecodesAsNotify() throws {
         let decoded = try decodeLegacyEvent(notificationPolicyValue: nil)

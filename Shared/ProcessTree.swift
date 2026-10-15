@@ -80,6 +80,10 @@ final class ProcessTree: @unchecked Sendable {
         }
     }
 
+    func record(of identity: ProcessIdentity) -> ProcessRecord? {
+        storage.withLock { Self.lookup(identity, state: $0) }
+    }
+
     func allRecords() -> [ProcessRecord] {
         storage.withLock { Array($0.records.values) }
     }

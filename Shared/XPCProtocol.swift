@@ -77,6 +77,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     @objc public let ancestors: [AncestorInfo]
     public let matchedRuleID: UUID?
     public let jailedRuleID: UUID?
+    @objc public let responsibleProcessPath: String?
+    @objc public let responsibleSigningID: String?
+    @objc public let responsibleTeamID: String?
     public let notificationPolicy: NotificationPolicy
 
     public var isQuietDeny: Bool {
@@ -98,6 +101,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         ancestors: [AncestorInfo] = [],
         matchedRuleID: UUID? = nil,
         jailedRuleID: UUID? = nil,
+        responsibleProcessPath: String? = nil,
+        responsibleSigningID: String? = nil,
+        responsibleTeamID: String? = nil,
         notificationPolicy: NotificationPolicy,
         eventID: UUID = UUID()
     ) {
@@ -116,6 +122,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = ancestors
         self.matchedRuleID = matchedRuleID
         self.jailedRuleID = jailedRuleID
+        self.responsibleProcessPath = responsibleProcessPath
+        self.responsibleSigningID = responsibleSigningID
+        self.responsibleTeamID = responsibleTeamID
         self.notificationPolicy = notificationPolicy
         super.init()
     }
@@ -142,6 +151,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         self.ancestors = decoded?.compactMap { $0 as? AncestorInfo } ?? []
         self.matchedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "matchedRuleID") as UUID?
         self.jailedRuleID = coder.decodeObject(of: NSUUID.self, forKey: "jailedRuleID") as UUID?
+        self.responsibleProcessPath = coder.decodeObject(of: NSString.self, forKey: "responsibleProcessPath") as String?
+        self.responsibleSigningID = coder.decodeObject(of: NSString.self, forKey: "responsibleSigningID") as String?
+        self.responsibleTeamID = coder.decodeObject(of: NSString.self, forKey: "responsibleTeamID") as String?
         // An older opfilter omits the key, and decodeInteger returns 0 (.notify).
         // An unknown value from a newer opfilter also notifies, so no deny is hidden.
         self.notificationPolicy = NotificationPolicy(rawValue: coder.decodeInteger(forKey: "notificationPolicy")) ?? .notify
@@ -164,6 +176,9 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
         coder.encode(ancestors as NSArray, forKey: "ancestors")
         if let matchedRuleID { coder.encode(matchedRuleID as NSUUID, forKey: "matchedRuleID") }
         if let jailedRuleID { coder.encode(jailedRuleID as NSUUID, forKey: "jailedRuleID") }
+        if let responsibleProcessPath { coder.encode(responsibleProcessPath as NSString, forKey: "responsibleProcessPath") }
+        if let responsibleSigningID { coder.encode(responsibleSigningID as NSString, forKey: "responsibleSigningID") }
+        if let responsibleTeamID { coder.encode(responsibleTeamID as NSString, forKey: "responsibleTeamID") }
         coder.encode(notificationPolicy.rawValue, forKey: "notificationPolicy")
     }
 

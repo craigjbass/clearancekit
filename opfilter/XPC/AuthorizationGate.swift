@@ -23,6 +23,18 @@ protocol AuthorizationBroadcasting: AnyObject, Sendable {
     )
 }
 
+// MARK: - AuthorizationSubject
+
+struct AuthorizationSubject {
+    let checkedProcess: CheckedProcess
+    let processPath: String
+    let teamID: String
+    let signingID: String
+    let processIdentity: ProcessIdentity
+    let parentIdentity: ProcessIdentity
+    let ancestors: [AncestorInfo]
+}
+
 // MARK: -
 
 struct AuthSessionKey: Hashable {
@@ -129,7 +141,7 @@ extension AuthorizationGate {
     func requestAuthorization(
         event: FileAuthEvent,
         rulePrefix: String,
-        ancestors: [AncestorInfo],
+        subject: AuthorizationSubject,
         sessionDuration: TimeInterval,
         broadcaster: AuthorizationBroadcasting,
         postRespond: @escaping @Sendable (FileAuthEvent, PolicyDecision, [AncestorInfo], UInt64) -> Void
@@ -149,11 +161,11 @@ extension AuthorizationGate {
             guard !skip else { return }
             if allowed {
                 gate.createSession(
-                    teamID: event.teamID,
-                    signingID: event.signingID,
-                    parentPID: event.parentPID,
-                    parentPIDVersion: event.parentPIDVersion,
-                    ancestors: ancestors,
+                    teamID: subject.teamID,
+                    signingID: subject.signingID,
+                    parentPID: subject.parentIdentity.pid,
+                    parentPIDVersion: subject.parentIdentity.pidVersion,
+                    ancestors: subject.ancestors,
                     prefix: rulePrefix,
                     duration: sessionDuration
                 )
@@ -165,14 +177,14 @@ extension AuthorizationGate {
                     ruleName: event.path,
                     ruleSource: .user,
                     matchedCriterion: "Touch ID authorized",
-                    checkedProcess: .itself
+                    checkedProcess: subject.checkedProcess
                 )
                 : .denied(
                     ruleID: UUID(),
                     ruleName: event.path,
                     ruleSource: .user,
                     allowedCriteria: "Touch ID required",
-                    checkedProcess: .itself
+                    checkedProcess: subject.checkedProcess
                 )
             postRespond(event, decision, [], 0)
         }
@@ -186,15 +198,15 @@ extension AuthorizationGate {
         timer.resume()
 
         broadcaster.requestAuthorizationFromFirstClient(
-            processName: event.processPath,
-            signingID: event.signingID,
-            teamID: event.teamID,
-            pid: Int(event.processID),
-            pidVersion: event.processIdentity.pidVersion,
+            processName: subject.processPath,
+            signingID: subject.signingID,
+            teamID: subject.teamID,
+            pid: Int(subject.processIdentity.pid),
+            pidVersion: subject.processIdentity.pidVersion,
             path: event.path,
             isWrite: event.accessKind == .write,
             remainingSeconds: remainingSeconds,
-            ancestors: ancestors
+            ancestors: subject.ancestors
         ) { allowed in
             timer.cancel()
             respondOnce(allowed)

@@ -12,6 +12,7 @@ import os
 private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     var containsResult = false
     var ancestorsResult: [AncestorInfo] = []
+    var recordsByIdentity: [ProcessIdentity: ProcessRecord] = [:]
 
     func insert(_ record: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
@@ -22,6 +23,10 @@ private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreePro
 
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] {
         ancestorsResult
+    }
+
+    func record(of identity: ProcessIdentity) -> ProcessRecord? {
+        recordsByIdentity[identity]
     }
 
     func allRecords() -> [ProcessRecord] { [] }
@@ -39,6 +44,7 @@ private func fileAuthEvent(
     teamID: String = "",
     signingID: String = "",
     accessKind: AccessKind = .write,
+    responsibleIdentity: ProcessIdentity = identity(),
     respond: @escaping @Sendable (Bool, Bool) -> Void
 ) -> FileAuthEvent {
     FileAuthEvent(
@@ -49,6 +55,7 @@ private func fileAuthEvent(
         secondaryPath: nil,
         movedEntryKind: .noDirectory,
         processIdentity: identity(),
+        responsibleIdentity: responsibleIdentity,
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -81,6 +88,7 @@ private func directoryOperationEvent(
         secondaryPath: secondaryPath,
         movedEntryKind: movedEntryKind,
         processIdentity: identity(),
+        responsibleIdentity: identity(),
         processID: 100,
         parentPID: 1,
         parentPIDVersion: 0,
@@ -457,6 +465,7 @@ struct FileAuthPipelineTests {
             secondaryPath: "/protected/dest",
             movedEntryKind: .noDirectory,
             processIdentity: identity(),
+            responsibleIdentity: identity(),
             processID: 100,
             parentPID: 1,
             parentPIDVersion: 0,
@@ -920,6 +929,180 @@ struct FileAuthPipelineTests {
 
         #expect(result.withLock { $0.allowed } == true)
         #expect(result.withLock { $0.cache } == true)
+    }
+}
+
+// MARK: - Responsible process
+
+private let networkingProcessPath = "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking"
+private let networkingSigningID = "com.apple.WebKit.Networking"
+private let webKitResponsibleIdentity = ProcessIdentity(pid: 300, pidVersion: 4)
+
+private func responsibleRecord(signingID: String, teamID: String, identity: ProcessIdentity = webKitResponsibleIdentity) -> ProcessRecord {
+    ProcessRecord(
+        identity: identity,
+        parentIdentity: ProcessIdentity(pid: 1, pidVersion: 1),
+        path: "/Applications/Example.app/Contents/MacOS/Example",
+        teamID: teamID,
+        signingID: signingID,
+        uid: 501,
+        gid: 20
+    )
+}
+
+private func safariOnlyRule() -> FAARule {
+    FAARule(
+        protectedPathPrefix: "/protected",
+        allowedSignatures: [ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Safari")]
+    )
+}
+
+private struct PipelineOutcome {
+    let allowed: Bool
+    let cache: Bool
+    let decision: PolicyDecision
+}
+
+private func runPipeline(
+    processTree: FakePipelineProcessTree,
+    rules: [FAARule],
+    allowlist: [AllowlistEntry] = [],
+    event makeEvent: (@escaping @Sendable (Bool, Bool) -> Void) -> FileAuthEvent
+) -> PipelineOutcome {
+    let responded = DispatchSemaphore(value: 0)
+    let postRespondCalled = DispatchSemaphore(value: 0)
+    let response = OSAllocatedUnfairLock(initialState: (allowed: false, cache: false))
+    let capturedDecision = OSAllocatedUnfairLock<PolicyDecision?>(initialState: nil)
+
+    let pipeline = FileAuthPipeline(
+        processTree: processTree,
+        rulesProvider: { rules },
+        allowlistProvider: { allowlist },
+        ancestorAllowlistProvider: { [] },
+        postRespond: { _, decision, _, _ in
+            capturedDecision.withLock { $0 = decision }
+            postRespondCalled.signal()
+        }
+    )
+    pipeline.start()
+
+    pipeline.submit(makeEvent { allowed, cache in
+        response.withLock { $0 = (allowed, cache) }
+        responded.signal()
+    })
+
+    responded.wait()
+    postRespondCalled.wait()
+
+    let finalResponse = response.withLock { $0 }
+    guard let decision = capturedDecision.withLock({ $0 }) else {
+        preconditionFailure("postRespond ran without a decision")
+    }
+    return PipelineOutcome(allowed: finalResponse.allowed, cache: finalResponse.cache, decision: decision)
+}
+
+private func networkingEvent(
+    path: String,
+    responsibleIdentity eventResponsibleIdentity: ProcessIdentity = webKitResponsibleIdentity,
+    respond: @escaping @Sendable (Bool, Bool) -> Void
+) -> FileAuthEvent {
+    fileAuthEvent(
+        path: path,
+        processPath: networkingProcessPath,
+        teamID: appleTeamID,
+        signingID: networkingSigningID,
+        accessKind: .read,
+        responsibleIdentity: eventResponsibleIdentity,
+        respond: respond
+    )
+}
+
+@Suite("FileAuthPipeline responsible process", .serialized)
+struct FileAuthPipelineResponsibleProcessTests {
+
+    @Test("Networking event is denied when its responsible process is not allowed on the protected path")
+    func networkingDeniedForDisallowedResponsibleProcess() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        processTree.recordsByIdentity = [webKitResponsibleIdentity: responsibleRecord(signingID: "com.example.tool", teamID: "TEAM123")]
+
+        let outcome = runPipeline(processTree: processTree, rules: [safariOnlyRule()]) { networkingEvent(path: "/protected/file", respond: $0) }
+
+        #expect(outcome.allowed == false)
+    }
+
+    @Test("Networking event is allowed when its responsible process is allowed on the protected path")
+    func networkingAllowedForAllowedResponsibleProcess() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let safari = responsibleRecord(signingID: "com.apple.Safari", teamID: appleTeamID)
+        processTree.recordsByIdentity = [webKitResponsibleIdentity: safari]
+
+        let outcome = runPipeline(processTree: processTree, rules: [safariOnlyRule()]) { networkingEvent(path: "/protected/file", respond: $0) }
+
+        #expect(outcome.allowed == true)
+        #expect(outcome.decision.checkedProcess == .responsible(ProcessFacts(processPath: safari.path, teamID: appleTeamID, signingID: "com.apple.Safari")))
+    }
+
+    @Test("Networking event is denied when the responsible process has no record")
+    func networkingDeniedForMissingResponsibleRecord() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+
+        let outcome = runPipeline(processTree: processTree, rules: [safariOnlyRule()]) { networkingEvent(path: "/protected/file", respond: $0) }
+
+        #expect(outcome.allowed == false)
+        #expect(outcome.decision.checkedProcess == .unknownResponsible)
+    }
+
+    @Test("Networking event is denied when the responsible identity is the process itself")
+    func networkingDeniedWhenResponsibleIsItself() {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        processTree.recordsByIdentity = [identity(): responsibleRecord(signingID: "com.apple.Safari", teamID: appleTeamID, identity: identity())]
+
+        let outcome = runPipeline(processTree: processTree, rules: [safariOnlyRule()]) {
+            networkingEvent(path: "/protected/file", responsibleIdentity: identity(), respond: $0)
+        }
+
+        #expect(outcome.allowed == false)
+        #expect(outcome.decision.checkedProcess == .unknownResponsible)
+    }
+
+    @Test("Networking event that no rule covers is allowed without cache")
+    func networkingNoRuleAppliesIsNotCached() {
+        let outcome = runPipeline(processTree: FakePipelineProcessTree(), rules: [safariOnlyRule()]) { networkingEvent(path: "/unprotected/file", respond: $0) }
+
+        #expect(outcome.allowed == true)
+        #expect(outcome.cache == false)
+    }
+
+    @Test("globally allowed Networking event is allowed without cache")
+    func networkingGloballyAllowedIsNotCached() {
+        let allowlist = [AllowlistEntry(signingID: networkingSigningID, platformBinary: true)]
+
+        let outcome = runPipeline(processTree: FakePipelineProcessTree(), rules: [safariOnlyRule()], allowlist: allowlist) { networkingEvent(path: "/protected/file", respond: $0) }
+
+        #expect(outcome.allowed == true)
+        #expect(outcome.cache == false)
+    }
+
+    @Test("ordinary process event that no rule covers is allowed with cache")
+    func ordinaryNoRuleAppliesIsCached() {
+        let outcome = runPipeline(processTree: FakePipelineProcessTree(), rules: [safariOnlyRule()]) { fileAuthEvent(path: "/unprotected/file", respond: $0) }
+
+        #expect(outcome.allowed == true)
+        #expect(outcome.cache == true)
+    }
+
+    @Test("globally allowed ordinary process event is allowed with cache")
+    func ordinaryGloballyAllowedIsCached() {
+        let allowlist = [AllowlistEntry(processPath: "/usr/bin/test")]
+
+        let outcome = runPipeline(processTree: FakePipelineProcessTree(), rules: [safariOnlyRule()], allowlist: allowlist) { fileAuthEvent(path: "/protected/file", respond: $0) }
+
+        #expect(outcome.allowed == true)
+        #expect(outcome.cache == true)
     }
 }
 

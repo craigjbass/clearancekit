@@ -8,5 +8,6 @@ protocol ProcessTreeProtocol: AnyObject {
     func remove(identity: ProcessIdentity)
     func contains(identity: ProcessIdentity) -> Bool
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo]
+    func record(of identity: ProcessIdentity) -> ProcessRecord?
     func allRecords() -> [ProcessRecord]
 }

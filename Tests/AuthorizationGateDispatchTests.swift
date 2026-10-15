@@ -27,7 +27,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
-            ancestors: [],
+            subject: itselfSubject(of: event),
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -63,7 +63,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
-            ancestors: [],
+            subject: itselfSubject(of: event),
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -99,7 +99,7 @@ struct AuthorizationGateDispatchTests {
         gate.requestAuthorization(
             event: event,
             rulePrefix: "/Secrets",
-            ancestors: [],
+            subject: itselfSubject(of: event),
             sessionDuration: 300,
             broadcaster: broadcaster,
             postRespond: { _, _, _, _ in }
@@ -109,7 +109,77 @@ struct AuthorizationGateDispatchTests {
         #expect(respondedAllowed.withLock { $0 } == false)
     }
 
+    @Test("responsible process subject is shown in the prompt and opens its own session")
+    func responsibleSubjectPromptsAndOpensSession() async {
+        let gate = AuthorizationGate()
+        let broadcaster = FakeBroadcaster(answer: true)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let capturedDecision = OSAllocatedUnfairLock<CheckedProcess?>(initialState: nil)
+        let safariFacts = ProcessFacts(processPath: "/Applications/Safari.app/Contents/MacOS/Safari", teamID: appleTeamID, signingID: "com.apple.Safari")
+        let safariAncestors = [AncestorInfo(path: "/sbin/launchd", teamID: appleTeamID, signingID: "com.apple.xpc.launchd")]
+        let subject = AuthorizationSubject(
+            checkedProcess: .responsible(safariFacts),
+            processPath: safariFacts.processPath,
+            teamID: safariFacts.teamID,
+            signingID: safariFacts.signingID,
+            processIdentity: ProcessIdentity(pid: 300, pidVersion: 4),
+            parentIdentity: ProcessIdentity(pid: 1, pidVersion: 9),
+            ancestors: safariAncestors
+        )
+
+        let event = makeEvent(deadlineMsFromNow: 5000, respond: { _, _ in })
+
+        gate.requestAuthorization(
+            event: event,
+            rulePrefix: "/Secrets",
+            subject: subject,
+            sessionDuration: 300,
+            broadcaster: broadcaster,
+            postRespond: { _, decision, _, _ in
+                capturedDecision.withLock { $0 = decision.checkedProcess }
+                postRespondCalled.signal()
+            }
+        )
+
+        _ = postRespondCalled.wait(timeout: .now() + .seconds(2))
+        let prompt = broadcaster.lastPrompt.withLock { $0 }
+        #expect(prompt?.processName == "/Applications/Safari.app/Contents/MacOS/Safari")
+        #expect(prompt?.signingID == "com.apple.Safari")
+        #expect(prompt?.teamID == appleTeamID)
+        #expect(prompt?.pid == 300)
+        #expect(prompt?.pidVersion == 4)
+        #expect(capturedDecision.withLock { $0 } == .responsible(safariFacts))
+        #expect(gate.hasActiveSession(
+            teamID: appleTeamID,
+            signingID: "com.apple.Safari",
+            parentPID: 1,
+            parentPIDVersion: 9,
+            ancestors: safariAncestors,
+            prefix: "/Secrets"
+        ) == true)
+        #expect(gate.hasActiveSession(
+            teamID: event.teamID,
+            signingID: event.signingID,
+            parentPID: event.parentPID,
+            parentPIDVersion: event.parentPIDVersion,
+            ancestors: [],
+            prefix: "/Secrets"
+        ) == false)
+    }
+
     // MARK: helpers
+
+    private func itselfSubject(of event: FileAuthEvent) -> AuthorizationSubject {
+        AuthorizationSubject(
+            checkedProcess: .itself,
+            processPath: event.processPath,
+            teamID: event.teamID,
+            signingID: event.signingID,
+            processIdentity: event.processIdentity,
+            parentIdentity: ProcessIdentity(pid: event.parentPID, pidVersion: event.parentPIDVersion),
+            ancestors: []
+        )
+    }
 
     private func makeEvent(
         deadlineMsFromNow: UInt64,
@@ -125,6 +195,7 @@ struct AuthorizationGateDispatchTests {
             correlationID: UUID(), operation: .open, accessKind: .write,
             path: "/Secrets", secondaryPath: nil, movedEntryKind: .noDirectory,
             processIdentity: ProcessIdentity(pid: 1234, pidVersion: 7),
+            responsibleIdentity: ProcessIdentity(pid: 1234, pidVersion: 7),
             processID: 1234, parentPID: 1, parentPIDVersion: 0, processPath: "/Apps/Example",
             teamID: "ABCDE12345", signingID: "com.example.app",
             uid: 501, gid: 20, ttyPath: nil, deadline: deadline, respond: respond
@@ -132,8 +203,17 @@ struct AuthorizationGateDispatchTests {
     }
 }
 
+private struct AuthorizationPrompt: Sendable {
+    let processName: String
+    let signingID: String
+    let teamID: String
+    let pid: Int
+    let pidVersion: UInt32
+}
+
 private final class FakeBroadcaster: AuthorizationBroadcasting, @unchecked Sendable {
     let answer: Bool?
+    let lastPrompt = OSAllocatedUnfairLock<AuthorizationPrompt?>(initialState: nil)
     init(answer: Bool?) { self.answer = answer }
 
     func requestAuthorizationFromFirstClient(
@@ -141,6 +221,7 @@ private final class FakeBroadcaster: AuthorizationBroadcasting, @unchecked Senda
         path: String, isWrite: Bool, remainingSeconds: Double, ancestors: [AncestorInfo],
         reply: @escaping (Bool) -> Void
     ) {
+        lastPrompt.withLock { $0 = AuthorizationPrompt(processName: processName, signingID: signingID, teamID: teamID, pid: pid, pidVersion: pidVersion) }
         guard let answer else { reply(false); return }
         DispatchQueue.global().async { reply(answer) }
     }

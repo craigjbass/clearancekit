@@ -45,6 +45,7 @@ struct FileAuthEvent: Sendable {
     let secondaryPath: String?
     let movedEntryKind: MovedEntryKind
     let processIdentity: ProcessIdentity
+    let responsibleIdentity: ProcessIdentity
     let processID: pid_t
     let parentPID: pid_t
     let parentPIDVersion: UInt32

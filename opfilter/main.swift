@@ -110,11 +110,11 @@ let pipeline = FileAuthPipeline(
         }
     },
     authorizationGate: authorizationGate,
-    authorizationHandler: { event, duration, rulePrefix, ancestors in
+    authorizationHandler: { event, duration, rulePrefix, subject in
         authorizationGate.requestAuthorization(
             event: event,
             rulePrefix: rulePrefix,
-            ancestors: ancestors,
+            subject: subject,
             sessionDuration: duration,
             broadcaster: broadcaster,
             postRespond: { evt, decision, ancestors, dwell in
