@@ -11,7 +11,7 @@ private final class EventCapture: @unchecked Sendable {
 }
 
 private func deniedDecision() -> PolicyDecision {
-    .denied(ruleID: UUID(), ruleName: "/protected", ruleSource: .user, allowedCriteria: "")
+    .denied(ruleID: UUID(), ruleName: "/protected", ruleSource: .user, allowedCriteria: "", checkedProcess: .itself)
 }
 
 private func makeFileEvent(signingID: String, teamID: String) -> FileAuthEvent {

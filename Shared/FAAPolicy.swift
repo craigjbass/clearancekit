@@ -26,6 +26,50 @@ public enum RuleSource: String, Codable, Equatable {
     case mdm
 }
 
+// MARK: - Evaluated processes
+
+public struct ProcessFacts: Equatable, Sendable {
+    public let processPath: String
+    public let teamID: String
+    public let signingID: String
+
+    public init(processPath: String, teamID: String, signingID: String) {
+        self.processPath = processPath
+        self.teamID = teamID
+        self.signingID = signingID
+    }
+}
+
+public enum ResponsibleProcess: Equatable, Sendable {
+    case known(ProcessFacts)
+    case unknown
+}
+
+public enum CheckedProcess: Equatable, Sendable {
+    case itself
+    case responsible(ProcessFacts)
+    case unknownResponsible
+}
+
+public struct PolicySubject: Sendable {
+    public let process: ProcessFacts
+    public let ancestors: [AncestorInfo]
+    public let responsibleProcess: ResponsibleProcess
+    public let responsibleAncestors: [AncestorInfo]
+
+    public init(
+        process: ProcessFacts,
+        ancestors: [AncestorInfo],
+        responsibleProcess: ResponsibleProcess,
+        responsibleAncestors: [AncestorInfo]
+    ) {
+        self.process = process
+        self.ancestors = ancestors
+        self.responsibleProcess = responsibleProcess
+        self.responsibleAncestors = responsibleAncestors
+    }
+}
+
 // MARK: - PolicyDecision
 
 public enum PolicyDecision {
@@ -34,9 +78,9 @@ public enum PolicyDecision {
     /// Path not covered by any rule — default allow.
     case noRuleApplies
     /// Covered by a rule and a specific criterion matched.
-    case allowed(ruleID: UUID, ruleName: String, ruleSource: RuleSource, matchedCriterion: String)
+    case allowed(ruleID: UUID, ruleName: String, ruleSource: RuleSource, matchedCriterion: String, checkedProcess: CheckedProcess)
     /// Covered by a rule but no criterion matched — denied.
-    case denied(ruleID: UUID, ruleName: String, ruleSource: RuleSource, allowedCriteria: String)
+    case denied(ruleID: UUID, ruleName: String, ruleSource: RuleSource, allowedCriteria: String, checkedProcess: CheckedProcess)
     /// Jailed process accessed a path within its allowed prefixes.
     case jailAllowed(ruleID: UUID, ruleName: String, matchedPrefix: String)
     /// Jailed process accessed a path outside its allowed prefixes — denied.
@@ -48,7 +92,8 @@ public enum PolicyDecision {
         ruleName: String,
         ruleSource: RuleSource,
         criterion: String,
-        sessionDuration: TimeInterval
+        sessionDuration: TimeInterval,
+        checkedProcess: CheckedProcess
     )
 
     public var isAllowed: Bool {
@@ -60,11 +105,11 @@ public enum PolicyDecision {
 
     public var matchedRuleID: UUID? {
         switch self {
-        case .allowed(let ruleID, _, _, _): return ruleID
-        case .denied(let ruleID, _, _, _): return ruleID
+        case .allowed(let ruleID, _, _, _, _): return ruleID
+        case .denied(let ruleID, _, _, _, _): return ruleID
         case .jailAllowed(let ruleID, _, _): return ruleID
         case .jailDenied(let ruleID, _, _): return ruleID
-        case .requiresAuthorization(let ruleID, _, _, _, _): return ruleID
+        case .requiresAuthorization(let ruleID, _, _, _, _, _): return ruleID
         default: return nil
         }
     }
@@ -79,21 +124,30 @@ public enum PolicyDecision {
 
     public var policyName: String {
         switch self {
-        case .allowed(_, let name, _, _): return name
-        case .denied(_, let name, _, _): return name
+        case .allowed(_, let name, _, _, _): return name
+        case .denied(_, let name, _, _, _): return name
         case .jailAllowed(_, let name, _): return name
         case .jailDenied(_, let name, _): return name
-        case .requiresAuthorization(_, let name, _, _, _): return name
+        case .requiresAuthorization(_, let name, _, _, _, _): return name
         default: return ""
         }
     }
 
     public var policySource: RuleSource? {
         switch self {
-        case .allowed(_, _, let source, _): return source
-        case .denied(_, _, let source, _): return source
-        case .requiresAuthorization(_, _, let source, _, _): return source
+        case .allowed(_, _, let source, _, _): return source
+        case .denied(_, _, let source, _, _): return source
+        case .requiresAuthorization(_, _, let source, _, _, _): return source
         default: return nil
+        }
+    }
+
+    public var checkedProcess: CheckedProcess {
+        switch self {
+        case .allowed(_, _, _, _, let checkedProcess): return checkedProcess
+        case .denied(_, _, _, _, let checkedProcess): return checkedProcess
+        case .requiresAuthorization(_, _, _, _, _, let checkedProcess): return checkedProcess
+        case .globallyAllowed, .noRuleApplies, .jailAllowed, .jailDenied: return .itself
         }
     }
 
@@ -103,15 +157,15 @@ public enum PolicyDecision {
             return "Globally allowed"
         case .noRuleApplies:
             return "No rule applies — default allow"
-        case .allowed(_, _, _, let criterion):
+        case .allowed(_, _, _, let criterion, _):
             return "Allowed: matched \(criterion)"
-        case .denied(_, let ruleName, _, let criteria):
+        case .denied(_, let ruleName, _, let criteria, _):
             return "Denied by rule \"\(ruleName)\" — allowed: \(criteria)"
         case .jailAllowed(_, let ruleName, let prefix):
             return "Jail \"\(ruleName)\" — allowed: matched prefix \(prefix)"
         case .jailDenied(_, let ruleName, let prefixes):
             return "Denied by jail \"\(ruleName)\" — allowed prefixes: \(prefixes.joined(separator: ", "))"
-        case .requiresAuthorization(_, let ruleName, _, let criterion, _):
+        case .requiresAuthorization(_, let ruleName, _, let criterion, _, _):
             return "Requires Touch ID for rule \"\(ruleName)\" — matched \(criterion)"
         }
     }
@@ -313,6 +367,10 @@ public struct FAARule: Identifiable, Codable, Equatable {
 }
 
 extension FAARule {
+    public func checksResponsibleProcess(of process: ProcessFacts) -> Bool {
+        responsibleProcessChecks.contains { $0.matches(resolvedTeamID: process.teamID, signingID: process.signingID) }
+    }
+
     public var usesDoubleStarCompatibilityMode: Bool {
         guard patternContainsDoubleStarComponent(protectedPathPrefix) else { return false }
         switch doubleStarParentMatching {
@@ -448,20 +506,33 @@ public enum OperationReach {
 
 // MARK: - Policy evaluation
 
-/// Evaluates FAA policy rules against a file-access request.
-///
-/// Ancestry data is fetched lazily via `ancestryProvider` — the closure is called at most once,
-/// only when the first matching rule actually requires an ancestry check. Rules that can be
-/// resolved by process path or code signature alone will never trigger the provider, so the
-/// potentially expensive wait for the process tree is deferred until it is truly necessary.
+private struct RuleSubject {
+    let process: ProcessFacts
+    let ancestors: [AncestorInfo]
+    let checkedProcess: CheckedProcess
+}
+
+private let unknownProcessFacts = ProcessFacts(processPath: "", teamID: "", signingID: "")
+
+private extension PolicySubject {
+    func ruleSubject(for rule: FAARule) -> RuleSubject {
+        guard rule.checksResponsibleProcess(of: process) else {
+            return RuleSubject(process: process, ancestors: ancestors, checkedProcess: .itself)
+        }
+        switch responsibleProcess {
+        case .known(let responsibleFacts):
+            return RuleSubject(process: responsibleFacts, ancestors: responsibleAncestors, checkedProcess: .responsible(responsibleFacts))
+        case .unknown:
+            return RuleSubject(process: unknownProcessFacts, ancestors: [], checkedProcess: .unknownResponsible)
+        }
+    }
+}
+
 public func checkFAAPolicy(
     rules: [FAARule],
     path: String,
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    accessKind: AccessKind,
-    ancestors: [AncestorInfo]
+    subject: PolicySubject,
+    accessKind: AccessKind
 ) -> PolicyDecision {
     let matching = rules.enumerated().compactMap { index, rule -> (index: Int, rule: FAARule)? in
         guard pathIsProtected(path, by: rule.protectedPathPrefix) else { return nil }
@@ -476,7 +547,7 @@ public func checkFAAPolicy(
     }
 
     for (_, rule) in sorted {
-        if let ruleDecision = decision(for: rule, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors) {
+        if let ruleDecision = decision(for: rule, subject: subject.ruleSubject(for: rule), accessKind: accessKind) {
             return ruleDecision
         }
     }
@@ -485,30 +556,33 @@ public func checkFAAPolicy(
 
 private func decision(
     for rule: FAARule,
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    accessKind: AccessKind,
-    ancestors: [AncestorInfo]
+    subject: RuleSubject,
+    accessKind: AccessKind
 ) -> PolicyDecision? {
     if rule.enforceOnWriteOnly && accessKind == .read { return nil }
+
+    let processPath = subject.process.processPath
+    let teamID = subject.process.teamID
+    let signingID = subject.process.signingID
+    let checkedProcess = subject.checkedProcess
 
     if rule.requireValidSigning && teamID.isEmpty {
         return .denied(
             ruleID: rule.id,
             ruleName: rule.protectedPathPrefix,
             ruleSource: rule.source,
-            allowedCriteria: "valid code signature required"
+            allowedCriteria: "valid code signature required",
+            checkedProcess: checkedProcess
         )
     }
 
     if !rule.allowedProcessPaths.isEmpty && rule.allowedProcessPaths.contains(processPath) {
-        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)")
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "process path \(processPath)", checkedProcess: checkedProcess)
     }
 
     if !rule.allowedSignatures.isEmpty,
        let match = rule.allowedSignatures.first(where: { $0.matches(resolvedTeamID: teamID, signingID: signingID) }) {
-        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)")
+        return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "identity \(match)", checkedProcess: checkedProcess)
     }
 
     if !rule.authorizedSignatures.isEmpty,
@@ -518,7 +592,8 @@ private func decision(
             ruleName: rule.protectedPathPrefix,
             ruleSource: rule.source,
             criterion: "authorizedSignature",
-            sessionDuration: rule.authorizationSessionDuration
+            sessionDuration: rule.authorizationSessionDuration,
+            checkedProcess: checkedProcess
         )
     }
 
@@ -528,20 +603,21 @@ private func decision(
             ruleName: rule.protectedPathPrefix,
             ruleSource: rule.source,
             criterion: "requiresAuthorization",
-            sessionDuration: rule.authorizationSessionDuration
+            sessionDuration: rule.authorizationSessionDuration,
+            checkedProcess: checkedProcess
         )
     }
 
     if !rule.allowedAncestorProcessPaths.isEmpty {
-        if let match = ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
-            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)")
+        if let match = subject.ancestors.first(where: { rule.allowedAncestorProcessPaths.contains($0.path) }) {
+            return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor process path \(match.path)", checkedProcess: checkedProcess)
         }
     }
 
     if !rule.allowedAncestorSignatures.isEmpty {
-        for ancestor in ancestors {
+        for ancestor in subject.ancestors {
             if let match = rule.allowedAncestorSignatures.first(where: { $0.matches(resolvedTeamID: ancestor.teamID, signingID: ancestor.signingID) }) {
-                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))")
+                return .allowed(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, matchedCriterion: "ancestor identity \(match) (\(ancestor.path))", checkedProcess: checkedProcess)
             }
         }
     }
@@ -559,21 +635,45 @@ private func decision(
     if !rule.allowedAncestorSignatures.isEmpty {
         criteria.append("ancestor signatures: \(rule.allowedAncestorSignatures.map(\.description).joined(separator: ", "))")
     }
-    return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "))
+    return .denied(ruleID: rule.id, ruleName: rule.protectedPathPrefix, ruleSource: rule.source, allowedCriteria: criteria.joined(separator: "; "), checkedProcess: checkedProcess)
 }
 
+private enum AncestryNeed {
+    case processAncestors
+    case responsibleAncestors
+}
+
+private func ancestryNeeds(rules: [FAARule], path: String, process: ProcessFacts) -> Set<AncestryNeed> {
+    let protectingRulesThatNeedAncestry = rules.filter { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
+    return Set(protectingRulesThatNeedAncestry.map { rule in
+        rule.checksResponsibleProcess(of: process) ? .responsibleAncestors : .processAncestors
+    })
+}
+
+/// Evaluates FAA policy rules against a file-access request.
+///
+/// Ancestry data is fetched lazily. Each provider is called at most once, and only when a
+/// protecting rule needs ancestry for the process that provider describes. Rules that can be
+/// resolved by process path or code signature alone never trigger a provider.
 public func checkFAAPolicy(
     rules: [FAARule],
     path: String,
-    processPath: String,
-    teamID: String,
-    signingID: String,
+    process: ProcessFacts,
+    responsibleProcess: ResponsibleProcess,
     accessKind: AccessKind,
-    ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
+    ancestryProvider: @Sendable () async -> [AncestorInfo],
+    responsibleAncestryProvider: @Sendable () async -> [AncestorInfo]
 ) async -> PolicyDecision {
-    let needsAncestry = rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
-    let ancestors = needsAncestry ? await ancestryProvider() : []
-    return checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let needs = ancestryNeeds(rules: rules, path: path, process: process)
+    let ancestors = needs.contains(.processAncestors) ? await ancestryProvider() : []
+    let responsibleAncestors = needs.contains(.responsibleAncestors) ? await responsibleAncestryProvider() : []
+    let subject = PolicySubject(
+        process: process,
+        ancestors: ancestors,
+        responsibleProcess: responsibleProcess,
+        responsibleAncestors: responsibleAncestors
+    )
+    return checkFAAPolicy(rules: rules, path: path, subject: subject, accessKind: accessKind)
 }
 
 public func checkFAAPolicy(
@@ -581,15 +681,12 @@ public func checkFAAPolicy(
     path: String,
     secondaryPath: String?,
     reach: OperationReach,
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    accessKind: AccessKind,
-    ancestors: [AncestorInfo]
+    subject: PolicySubject,
+    accessKind: AccessKind
 ) -> PolicyDecision {
-    let primaryDecision = checkFAAPolicy(rules: rules, path: path, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let primaryDecision = checkFAAPolicy(rules: rules, path: path, reach: reach, subject: subject, accessKind: accessKind)
     guard let secondaryPath else { return primaryDecision }
-    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let secondaryDecision = checkFAAPolicy(rules: rules, path: secondaryPath, reach: reach, subject: subject, accessKind: accessKind)
     return moreRestrictiveDecision(primaryDecision, secondaryDecision)
 }
 
@@ -597,18 +694,15 @@ private func checkFAAPolicy(
     rules: [FAARule],
     path: String,
     reach: OperationReach,
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    accessKind: AccessKind,
-    ancestors: [AncestorInfo]
+    subject: PolicySubject,
+    accessKind: AccessKind
 ) -> PolicyDecision {
-    let pathDecision = checkFAAPolicy(rules: rules, path: path, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    let pathDecision = checkFAAPolicy(rules: rules, path: path, subject: subject, accessKind: accessKind)
     switch reach {
     case .singlePath:
         return pathDecision
     case .subtree:
-        let rulesBeneathDecision = checkRulesBeneath(path, rules: rules, processPath: processPath, teamID: teamID, signingID: signingID, ancestors: ancestors)
+        let rulesBeneathDecision = checkRulesBeneath(path, rules: rules, subject: subject)
         return moreRestrictiveDecision(pathDecision, rulesBeneathDecision)
     }
 }
@@ -618,14 +712,11 @@ private func checkFAAPolicy(
 private func checkRulesBeneath(
     _ path: String,
     rules: [FAARule],
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    ancestors: [AncestorInfo]
+    subject: PolicySubject
 ) -> PolicyDecision {
     let decisions = rules
         .filter { pathContainsProtectedPaths(path, by: $0.protectedPathPrefix, matching: $0.doubleStarParentMatching) }
-        .compactMap { decision(for: $0, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: .write, ancestors: ancestors) }
+        .compactMap { decision(for: $0, subject: subject.ruleSubject(for: $0), accessKind: .write) }
     guard let firstDecision = decisions.first else { return .noRuleApplies }
     return decisions.dropFirst().reduce(firstDecision, moreRestrictiveDecision)
 }
@@ -713,23 +804,21 @@ public func evaluateAccess(
     path: String,
     secondaryPath: String? = nil,
     reach: OperationReach,
-    processPath: String,
-    teamID: String,
-    signingID: String,
-    accessKind: AccessKind,
-    ancestors: [AncestorInfo]
+    subject: PolicySubject,
+    accessKind: AccessKind
 ) -> PolicyDecision {
-    if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
+    let process = subject.process
+    if isGloballyAllowed(allowlist: allowlist, processPath: process.processPath, signingID: process.signingID, teamID: process.teamID) {
         return .globallyAllowed
     }
 
     if !ancestorAllowlist.isEmpty {
-        if isGloballyAllowedByAncestry(ancestorAllowlist: ancestorAllowlist, ancestors: ancestors) {
+        if isGloballyAllowedByAncestry(ancestorAllowlist: ancestorAllowlist, ancestors: subject.ancestors) {
             return .globallyAllowed
         }
     }
 
-    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, reach: reach, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return checkFAAPolicy(rules: rules, path: path, secondaryPath: secondaryPath, reach: reach, subject: subject, accessKind: accessKind)
 }
 
 public func evaluateAccess(
@@ -737,19 +826,26 @@ public func evaluateAccess(
     allowlist: [AllowlistEntry],
     ancestorAllowlist: [AncestorAllowlistEntry] = [],
     path: String,
-    processPath: String,
-    teamID: String,
-    signingID: String,
+    process: ProcessFacts,
+    responsibleProcess: ResponsibleProcess,
     accessKind: AccessKind,
-    ancestryProvider: @Sendable () async -> [AncestorInfo] = { [] }
+    ancestryProvider: @Sendable () async -> [AncestorInfo],
+    responsibleAncestryProvider: @Sendable () async -> [AncestorInfo]
 ) async -> PolicyDecision {
-    if isGloballyAllowed(allowlist: allowlist, processPath: processPath, signingID: signingID, teamID: teamID) {
+    if isGloballyAllowed(allowlist: allowlist, processPath: process.processPath, signingID: process.signingID, teamID: process.teamID) {
         return .globallyAllowed
     }
 
-    let needsAncestors = !ancestorAllowlist.isEmpty ||
-        rules.contains { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
-    let ancestors = needsAncestors ? await ancestryProvider() : []
+    let needs = ancestryNeeds(rules: rules, path: path, process: process)
+    let needsProcessAncestors = !ancestorAllowlist.isEmpty || needs.contains(.processAncestors)
+    let ancestors = needsProcessAncestors ? await ancestryProvider() : []
+    let responsibleAncestors = needs.contains(.responsibleAncestors) ? await responsibleAncestryProvider() : []
+    let subject = PolicySubject(
+        process: process,
+        ancestors: ancestors,
+        responsibleProcess: responsibleProcess,
+        responsibleAncestors: responsibleAncestors
+    )
 
-    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, reach: .singlePath, processPath: processPath, teamID: teamID, signingID: signingID, accessKind: accessKind, ancestors: ancestors)
+    return evaluateAccess(rules: rules, allowlist: allowlist, ancestorAllowlist: ancestorAllowlist, path: path, reach: .singlePath, subject: subject, accessKind: accessKind)
 }

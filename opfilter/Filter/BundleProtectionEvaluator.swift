@@ -51,7 +51,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: "external updater"
+                matchedCriterion: "external updater",
+                checkedProcess: .itself
             )
         }
 
@@ -63,7 +64,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: "ancestor updater"
+                matchedCriterion: "ancestor updater",
+                checkedProcess: .itself
             )
         }
 
@@ -74,7 +76,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: allow.criterion
+                matchedCriterion: allow.criterion,
+                checkedProcess: .itself
             )
         }
 
@@ -83,7 +86,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: "bundle self-signer"
+                matchedCriterion: "bundle self-signer",
+                checkedProcess: .itself
             )
         }
 
@@ -92,7 +96,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
                 ruleID: BundleProtectionEvaluator.sentinelRuleID,
                 ruleName: bundlePath,
                 ruleSource: .builtin,
-                matchedCriterion: "ancestor self-signer"
+                matchedCriterion: "ancestor self-signer",
+                checkedProcess: .itself
             )
         }
 
@@ -100,7 +105,8 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
             ruleID: BundleProtectionEvaluator.sentinelRuleID,
             ruleName: bundlePath,
             ruleSource: .builtin,
-            allowedCriteria: "bundle signing identity \(bundleSignatures.teamID)"
+            allowedCriteria: "bundle signing identity \(bundleSignatures.teamID)",
+            checkedProcess: .itself
         )
     }
 }

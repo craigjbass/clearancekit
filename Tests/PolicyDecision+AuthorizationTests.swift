@@ -16,11 +16,13 @@ struct PolicyDecisionAuthorizationTests {
             authorizationSessionDuration: 600
         )
         let decision = checkFAAPolicy(
-            rules: [rule], path: "/Secrets/file.txt", processPath: "/Apps/Example",
-            teamID: "ABCDE12345", signingID: "com.example.app",
-            accessKind: .write, ancestors: []
+            rules: [rule], path: "/Secrets/file.txt", subject: PolicySubject(
+                process: ProcessFacts(processPath: "/Apps/Example", teamID: "ABCDE12345", signingID: "com.example.app"),
+                ancestors: [], responsibleProcess: .unknown, responsibleAncestors: []
+            ),
+            accessKind: .write
         )
-        guard case .requiresAuthorization(_, _, _, let criterion, let duration) = decision else {
+        guard case .requiresAuthorization(_, _, _, let criterion, let duration, _) = decision else {
             Issue.record("expected requiresAuthorization, got \(decision)"); return
         }
         #expect(criterion == "authorizedSignature")
@@ -35,11 +37,13 @@ struct PolicyDecisionAuthorizationTests {
             requiresAuthorization: true
         )
         let decision = checkFAAPolicy(
-            rules: [rule], path: "/Secrets/file.txt", processPath: "/Apps/Example",
-            teamID: "ABCDE12345", signingID: "com.example.app",
-            accessKind: .write, ancestors: []
+            rules: [rule], path: "/Secrets/file.txt", subject: PolicySubject(
+                process: ProcessFacts(processPath: "/Apps/Example", teamID: "ABCDE12345", signingID: "com.example.app"),
+                ancestors: [], responsibleProcess: .unknown, responsibleAncestors: []
+            ),
+            accessKind: .write
         )
-        guard case .requiresAuthorization(_, _, _, let criterion, _) = decision else {
+        guard case .requiresAuthorization(_, _, _, let criterion, _, _) = decision else {
             Issue.record("expected requiresAuthorization, got \(decision)"); return
         }
         #expect(criterion == "requiresAuthorization")
@@ -52,9 +56,11 @@ struct PolicyDecisionAuthorizationTests {
             requiresAuthorization: true
         )
         let decision = checkFAAPolicy(
-            rules: [rule], path: "/Secrets/file.txt", processPath: "/Apps/Example",
-            teamID: "", signingID: "",
-            accessKind: .write, ancestors: []
+            rules: [rule], path: "/Secrets/file.txt", subject: PolicySubject(
+                process: ProcessFacts(processPath: "/Apps/Example", teamID: "", signingID: ""),
+                ancestors: [], responsibleProcess: .unknown, responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         if case .requiresAuthorization = decision {
             Issue.record("unsigned process must not get a Touch ID prompt")
@@ -72,9 +78,11 @@ struct PolicyDecisionAuthorizationTests {
             requiresAuthorization: true
         )
         let decision = checkFAAPolicy(
-            rules: [rule], path: "/Secrets/file.txt", processPath: "/Apps/Example",
-            teamID: "ABCDE12345", signingID: "com.example.app",
-            accessKind: .write, ancestors: []
+            rules: [rule], path: "/Secrets/file.txt", subject: PolicySubject(
+                process: ProcessFacts(processPath: "/Apps/Example", teamID: "ABCDE12345", signingID: "com.example.app"),
+                ancestors: [], responsibleProcess: .unknown, responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         guard case .allowed = decision else {
             Issue.record("expected .allowed, got \(decision)"); return
@@ -89,9 +97,11 @@ struct PolicyDecisionAuthorizationTests {
             requiresAuthorization: true
         )
         let decision = checkFAAPolicy(
-            rules: [rule], path: "/Secrets/file.txt", processPath: "/Apps/Example",
-            teamID: "ABCDE12345", signingID: "com.example.app",
-            accessKind: .read, ancestors: []
+            rules: [rule], path: "/Secrets/file.txt", subject: PolicySubject(
+                process: ProcessFacts(processPath: "/Apps/Example", teamID: "ABCDE12345", signingID: "com.example.app"),
+                ancestors: [], responsibleProcess: .unknown, responsibleAncestors: []
+            ),
+            accessKind: .read
         )
         guard case .noRuleApplies = decision else {
             Issue.record("expected .noRuleApplies, got \(decision)"); return

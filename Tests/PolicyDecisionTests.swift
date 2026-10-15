@@ -5,6 +5,7 @@
 
 import Testing
 import Foundation
+import os
 
 // MARK: - Path matching
 
@@ -428,11 +429,11 @@ struct AccessEvaluationTests {
             rules: rules,
             allowlist: allowlist,
             path: path,
-            processPath: processPath,
-            teamID: teamID,
-            signingID: signingID,
+            process: ProcessFacts(processPath: processPath, teamID: teamID, signingID: signingID),
+            responsibleProcess: .unknown,
             accessKind: accessKind,
-            ancestryProvider: { ancestors }
+            ancestryProvider: { ancestors },
+            responsibleAncestryProvider: { [] }
         )
     }
 
@@ -1001,11 +1002,11 @@ struct AccessEvaluationTests {
             allowlist: allowlist,
             ancestorAllowlist: ancestorAllowlist,
             path: path,
-            processPath: processPath,
-            teamID: teamID,
-            signingID: signingID,
+            process: ProcessFacts(processPath: processPath, teamID: teamID, signingID: signingID),
+            responsibleProcess: .unknown,
             accessKind: accessKind,
-            ancestryProvider: { ancestors }
+            ancestryProvider: { ancestors },
+            responsibleAncestryProvider: { [] }
         )
     }
 
@@ -1295,11 +1296,13 @@ struct CheckFAAPolicyDualPathTests {
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
             reach: .singlePath,
-            processPath: "/unauthorized",
-            teamID: "",
-            signingID: "",
-            accessKind: .write,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: "/unauthorized", teamID: "", signingID: ""),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         #expect(!decision.isAllowed)
     }
@@ -1312,11 +1315,13 @@ struct CheckFAAPolicyDualPathTests {
             path: "/unprotected/source",
             secondaryPath: "/protected/dest",
             reach: .singlePath,
-            processPath: "/allowed",
-            teamID: "",
-            signingID: "",
-            accessKind: .write,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: "/allowed", teamID: "", signingID: ""),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         #expect(decision.isAllowed)
     }
@@ -1332,11 +1337,13 @@ struct CheckFAAPolicyDualPathTests {
             path: "/src/file",
             secondaryPath: "/dst/file",
             reach: .singlePath,
-            processPath: "/unauthorized",
-            teamID: "",
-            signingID: "",
-            accessKind: .write,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: "/unauthorized", teamID: "", signingID: ""),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         #expect(!decision.isAllowed)
     }
@@ -1349,11 +1356,13 @@ struct CheckFAAPolicyDualPathTests {
             path: "/unprotected/file",
             secondaryPath: nil,
             reach: .singlePath,
-            processPath: "/unauthorized",
-            teamID: "",
-            signingID: "",
-            accessKind: .write,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: "/unauthorized", teamID: "", signingID: ""),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         guard case .noRuleApplies = decision else {
             Issue.record("Expected .noRuleApplies")
@@ -1387,11 +1396,11 @@ struct RequireValidSigningTests {
             rules: rules,
             allowlist: [],
             path: "/protected/file",
-            processPath: "/bin/test",
-            teamID: teamID,
-            signingID: "",
+            process: ProcessFacts(processPath: "/bin/test", teamID: teamID, signingID: ""),
+            responsibleProcess: .unknown,
             accessKind: accessKind,
-            ancestryProvider: { [] }
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: { [] }
         )
     }
 
@@ -1481,11 +1490,13 @@ struct SubtreeOperationTests {
             path: path,
             secondaryPath: secondaryPath,
             reach: reach,
-            processPath: processPath,
-            teamID: teamID,
-            signingID: signingID,
-            accessKind: accessKind,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: processPath, teamID: teamID, signingID: signingID),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: accessKind
         )
     }
 
@@ -1643,10 +1654,11 @@ struct BaselineAllowlistSpotlightTests {
             rules: rules,
             allowlist: baselineAllowlist,
             path: "/Users/develop/goal/gold",
-            processPath: "/System/indexer",
-            teamID: "apple",
-            signingID: signingID,
-            accessKind: .read
+            process: ProcessFacts(processPath: "/System/indexer", teamID: "apple", signingID: signingID),
+            responsibleProcess: .unknown,
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: { [] }
         )
 
         guard case .denied = decision else {
@@ -1663,10 +1675,11 @@ struct BaselineAllowlistSpotlightTests {
             rules: rules,
             allowlist: baselineAllowlist,
             path: "/Users/develop/Documents/notes.txt",
-            processPath: "/System/indexer",
-            teamID: "apple",
-            signingID: "com.apple.mdworker_shared",
-            accessKind: .read
+            process: ProcessFacts(processPath: "/System/indexer", teamID: "apple", signingID: "com.apple.mdworker_shared"),
+            responsibleProcess: .unknown,
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: { [] }
         )
 
         guard case .noRuleApplies = decision else {
@@ -1686,15 +1699,237 @@ struct BaselineAllowlistSpotlightTests {
             rules: rules,
             allowlist: baselineAllowlist,
             path: "/Users/develop/goal/gold",
-            processPath: "/System/indexer",
-            teamID: "apple",
-            signingID: "com.apple.mdworker_shared",
-            accessKind: .read
+            process: ProcessFacts(processPath: "/System/indexer", teamID: "apple", signingID: "com.apple.mdworker_shared"),
+            responsibleProcess: .unknown,
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: { [] }
         )
 
         guard case .allowed = decision else {
             Issue.record("Expected .allowed, got \(decision)")
             return
         }
+    }
+}
+
+// MARK: - Responsible process checks
+
+@Suite("Responsible process checks")
+struct ResponsibleProcessCheckTests {
+    private let goldPath = "/Users/develop/goal/gold"
+    private let networkingFacts = ProcessFacts(
+        processPath: "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+        teamID: appleTeamID,
+        signingID: "com.apple.WebKit.Networking"
+    )
+    private let safariFacts = ProcessFacts(
+        processPath: "/Applications/Safari.app/Contents/MacOS/Safari",
+        teamID: appleTeamID,
+        signingID: "com.apple.Safari"
+    )
+    private let adHocToolFacts = ProcessFacts(
+        processPath: "/tmp/ck-poc",
+        teamID: "",
+        signingID: "ck-poc"
+    )
+    private let safariSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Safari")
+    private let networkingSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking")
+
+    private var safariOnlyRule: FAARule {
+        FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedSignatures: [safariSignature])
+    }
+
+    private func subject(
+        process: ProcessFacts,
+        responsibleProcess: ResponsibleProcess,
+        ancestors: [AncestorInfo] = [],
+        responsibleAncestors: [AncestorInfo] = []
+    ) -> PolicySubject {
+        PolicySubject(
+            process: process,
+            ancestors: ancestors,
+            responsibleProcess: responsibleProcess,
+            responsibleAncestors: responsibleAncestors
+        )
+    }
+
+    @Test("Networking process with a Safari responsible process is checked as Safari and allowed")
+    func networkingWithSafariResponsibleIsAllowed() {
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .known(safariFacts)),
+            accessKind: .read
+        )
+
+        guard case .allowed(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .allowed, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .responsible(safariFacts))
+    }
+
+    @Test("Networking process with an ad-hoc tool as responsible process is denied")
+    func networkingWithAdHocResponsibleIsDenied() {
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .known(adHocToolFacts)),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .responsible(adHocToolFacts))
+    }
+
+    @Test("Networking process with an unknown responsible process is denied")
+    func networkingWithUnknownResponsibleIsDenied() {
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .unknown),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .unknownResponsible)
+    }
+
+    @Test("rule with an empty responsibleProcessChecks list checks the Networking process itself")
+    func emptyResponsibleProcessChecksChecksItself() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/develop/goal/*",
+            allowedSignatures: [networkingSignature],
+            responsibleProcessChecks: []
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .known(adHocToolFacts)),
+            accessKind: .read
+        )
+
+        guard case .allowed(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .allowed, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .itself)
+    }
+
+    @Test("non-Apple process with a WebKit signing ID is checked as itself")
+    func nonAppleProcessWithWebKitSigningIDIsCheckedAsItself() {
+        let impostorFacts = ProcessFacts(
+            processPath: "/tmp/com.apple.WebKit.Networking",
+            teamID: "ABCDE12345",
+            signingID: "com.apple.WebKit.Networking"
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: impostorFacts, responsibleProcess: .known(safariFacts)),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .itself)
+    }
+
+    @Test("ancestor criteria use the ancestors of the responsible process")
+    func ancestorCriteriaUseResponsibleAncestors() {
+        let terminalSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Terminal")
+        let rule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorSignatures: [terminalSignature])
+        let terminal = AncestorInfo(path: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", teamID: appleTeamID, signingID: "com.apple.Terminal", uid: 501, gid: 20)
+        let launchd = AncestorInfo(path: "/sbin/launchd", teamID: appleTeamID, signingID: "com.apple.xpc.launchd", uid: 0, gid: 0)
+
+        let decision = checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            subject: subject(
+                process: networkingFacts,
+                responsibleProcess: .known(safariFacts),
+                ancestors: [launchd],
+                responsibleAncestors: [terminal, launchd]
+            ),
+            accessKind: .read
+        )
+
+        guard case .allowed(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .allowed, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .responsible(safariFacts))
+    }
+
+    @Test("async overload gives responsible ancestors to an ancestor rule")
+    func asyncOverloadUsesResponsibleAncestryProvider() async {
+        let terminalSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Terminal")
+        let rule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorSignatures: [terminalSignature])
+        let terminal = AncestorInfo(path: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", teamID: appleTeamID, signingID: "com.apple.Terminal", uid: 501, gid: 20)
+
+        let decision = await checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            process: networkingFacts,
+            responsibleProcess: .known(safariFacts),
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: { [terminal] }
+        )
+
+        #expect(decision.isAllowed)
+        #expect(decision.checkedProcess == .responsible(safariFacts))
+    }
+
+    @Test("async overload does not call the responsible ancestry provider when the rule checks the process itself")
+    func asyncOverloadSkipsResponsibleAncestryForItself() async {
+        let terminalSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Terminal")
+        let rule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorSignatures: [terminalSignature])
+        let responsibleProviderCalls = OSAllocatedUnfairLock(initialState: 0)
+
+        _ = await checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            process: adHocToolFacts,
+            responsibleProcess: .known(safariFacts),
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: {
+                responsibleProviderCalls.withLock { $0 += 1 }
+                return []
+            }
+        )
+
+        #expect(responsibleProviderCalls.withLock { $0 } == 0)
+    }
+
+    @Test("directory rename by the Networking process keeps the responsible process on the decision")
+    func subtreeReachKeepsResponsibleCheckedProcess() {
+        let decision = evaluateAccess(
+            rules: [safariOnlyRule],
+            allowlist: [],
+            path: "/Users/develop/goal",
+            secondaryPath: "/private/tmp/ck_clone_out",
+            reach: .subtree,
+            subject: subject(process: networkingFacts, responsibleProcess: .known(adHocToolFacts)),
+            accessKind: .write
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .responsible(adHocToolFacts))
     }
 }

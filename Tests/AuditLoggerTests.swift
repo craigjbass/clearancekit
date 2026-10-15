@@ -63,7 +63,8 @@ struct AuditLoggerTests {
             ruleID: UUID(),
             ruleName: "test-rule",
             ruleSource: .user,
-            allowedCriteria: ""
+            allowedCriteria: "",
+            checkedProcess: .itself
         )
         let entry = auditLogger.formatEntry(decision, for: makeFileEvent(), ancestors: [], dwellNanoseconds: 0)
         #expect(entry.contains("|decision=DENIED|"))
@@ -132,7 +133,8 @@ struct AuditLoggerTests {
             ruleID: UUID(),
             ruleName: "builtin-rule",
             ruleSource: .builtin,
-            matchedCriterion: "process-path"
+            matchedCriterion: "process-path",
+            checkedProcess: .itself
         )
         let entry = auditLogger.formatEntry(decision, for: makeFileEvent(), ancestors: [], dwellNanoseconds: 0)
         #expect(entry.contains("|policy_version=\(BuildInfo.gitHash)|"))
@@ -144,7 +146,8 @@ struct AuditLoggerTests {
             ruleID: UUID(),
             ruleName: "user-rule",
             ruleSource: .user,
-            matchedCriterion: "process-path"
+            matchedCriterion: "process-path",
+            checkedProcess: .itself
         )
         let entry = auditLogger.formatEntry(decision, for: makeFileEvent(), ancestors: [], dwellNanoseconds: 0)
         #expect(entry.contains("|policy_version=user|"))
@@ -156,7 +159,8 @@ struct AuditLoggerTests {
             ruleID: UUID(),
             ruleName: "mdm-rule",
             ruleSource: .mdm,
-            matchedCriterion: "process-path"
+            matchedCriterion: "process-path",
+            checkedProcess: .itself
         )
         let entry = auditLogger.formatEntry(decision, for: makeFileEvent(), ancestors: [], dwellNanoseconds: 0)
         #expect(entry.contains("|policy_version=mdm|"))
@@ -198,7 +202,8 @@ struct AuditLoggerTests {
             ruleID: UUID(),
             ruleName: "my-policy-rule",
             ruleSource: .user,
-            allowedCriteria: ""
+            allowedCriteria: "",
+            checkedProcess: .itself
         )
         let entry = auditLogger.formatEntry(decision, for: makeFileEvent(), ancestors: [], dwellNanoseconds: 0)
         #expect(entry.contains("|policy_name=my-policy-rule|"))

@@ -538,7 +538,7 @@ struct FileAuthPipelineTests {
         postRespondCalled.wait()
 
         #expect(allowedResult == true)
-        if case .allowed(_, _, _, let criterion) = postRespondDecision {
+        if case .allowed(_, _, _, let criterion, _) = postRespondDecision {
             #expect(criterion == "external updater")
         } else {
             Issue.record("Expected .allowed from evaluator, got \(String(describing: postRespondDecision))")

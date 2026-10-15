@@ -171,10 +171,9 @@ final class FileAuthPipeline: @unchecked Sendable {
         case .processLevelOnly where ancestorAllowlist.isEmpty:
             let decision = evaluateAccess(
                 rules: rules, allowlist: allowlist, ancestorAllowlist: [],
-                path: event.path, secondaryPath: event.secondaryPath, reach: event.reach, processPath: event.processPath,
-                teamID: event.teamID, signingID: event.signingID,
-                accessKind: event.accessKind,
-                ancestors: []
+                path: event.path, secondaryPath: event.secondaryPath, reach: event.reach,
+                subject: policySubject(for: event, ancestors: []),
+                accessKind: event.accessKind
             )
             let hotAncestors = processTree.ancestors(of: event.processIdentity)
             if handleDecisionWithAuthorization(decision, event: event, ancestors: hotAncestors, dwellNanoseconds: 0) {
@@ -240,11 +239,8 @@ final class FileAuthPipeline: @unchecked Sendable {
             path: event.path,
             secondaryPath: event.secondaryPath,
             reach: event.reach,
-            processPath: event.processPath,
-            teamID: event.teamID,
-            signingID: event.signingID,
-            accessKind: event.accessKind,
-            ancestors: ancestors
+            subject: policySubject(for: event, ancestors: ancestors),
+            accessKind: event.accessKind
         )
         let decision = combinedDecision(
             bundleDecision: bundleProtectionDecision(for: event, ancestors: ancestors),
@@ -257,6 +253,17 @@ final class FileAuthPipeline: @unchecked Sendable {
         }
         event.respond(decision.isAllowed, false)
         postRespondHandler(event, decision, logAncestors, dwellNanoseconds)
+    }
+
+    // The responsible process is not read from the event yet, so a rule that
+    // checks the responsible process of a WebKit service denies the access.
+    private func policySubject(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicySubject {
+        PolicySubject(
+            process: ProcessFacts(processPath: event.processPath, teamID: event.teamID, signingID: event.signingID),
+            ancestors: ancestors,
+            responsibleProcess: .unknown,
+            responsibleAncestors: []
+        )
     }
 
     private func bundleProtectionDecision(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicyDecision? {
@@ -286,7 +293,7 @@ final class FileAuthPipeline: @unchecked Sendable {
         ancestors: [AncestorInfo],
         dwellNanoseconds: UInt64
     ) -> Bool {
-        guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration) = decision else {
+        guard case .requiresAuthorization(let ruleID, let ruleName, let ruleSource, _, let duration, let checkedProcess) = decision else {
             return false
         }
         if authorizationGate.hasActiveSession(
@@ -309,7 +316,8 @@ final class FileAuthPipeline: @unchecked Sendable {
                 ruleID: ruleID,
                 ruleName: ruleName,
                 ruleSource: ruleSource,
-                matchedCriterion: "authorized session"
+                matchedCriterion: "authorized session",
+                checkedProcess: checkedProcess
             )
             event.respond(true, false)
             postRespondHandler(event, sessionDecision, ancestors, dwellNanoseconds)

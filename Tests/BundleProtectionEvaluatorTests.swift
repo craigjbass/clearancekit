@@ -138,7 +138,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "bundle self-signer")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -155,7 +155,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "external updater")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -186,7 +186,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 0, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "system file helper")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -228,7 +228,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "app store installer")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -278,7 +278,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 0, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "system installer daemon")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -321,7 +321,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: []
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "external updater")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -340,7 +340,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: [ancestor(teamID: "SPARKLE", signingID: "org.sparkle-project.Sparkle")]
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "ancestor updater")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -357,7 +357,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: [ancestor(teamID: "SPARKLE", signingID: "org.sparkle-project.Installer")]
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "ancestor updater")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -388,7 +388,7 @@ struct BundleProtectionEvaluatorTests {
             processUID: 501, accessKind: .write,
             ancestors: [ancestor(teamID: "TEAM123", signingID: "com.example.app")]
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "ancestor self-signer")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")
@@ -420,7 +420,7 @@ struct BundleProtectionEvaluatorTests {
                 ancestor(teamID: "SYSTEM", signingID: "com.apple.launchd")
             ]
         )
-        if case .allowed(_, _, _, let criterion) = decision {
+        if case .allowed(_, _, _, let criterion, _) = decision {
             #expect(criterion == "ancestor self-signer")
         } else {
             Issue.record("Expected .allowed, got \(String(describing: decision))")

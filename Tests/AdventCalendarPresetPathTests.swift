@@ -179,11 +179,13 @@ struct AdventCalendarPresetPathTests {
             path: "/private/var/folders/zz/zyxvpxvq6csfxvn_n00000sm00006d/T/TemporaryItems/build",
             secondaryPath: "/private/var/folders/zz/zyxvpxvq6csfxvn_n00000sm00006d/T/TemporaryItems/build2",
             reach: .subtree,
-            processPath: "/usr/bin/ditto",
-            teamID: "apple",
-            signingID: "com.apple.ditto",
-            accessKind: .write,
-            ancestors: []
+            subject: PolicySubject(
+                process: ProcessFacts(processPath: "/usr/bin/ditto", teamID: "apple", signingID: "com.apple.ditto"),
+                ancestors: [],
+                responsibleProcess: .unknown,
+                responsibleAncestors: []
+            ),
+            accessKind: .write
         )
         guard case .noRuleApplies = decision else {
             Issue.record("Expected .noRuleApplies, got \(decision)")

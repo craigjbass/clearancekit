@@ -164,13 +164,15 @@ extension AuthorizationGate {
                     ruleID: UUID(),
                     ruleName: event.path,
                     ruleSource: .user,
-                    matchedCriterion: "Touch ID authorized"
+                    matchedCriterion: "Touch ID authorized",
+                    checkedProcess: .itself
                 )
                 : .denied(
                     ruleID: UUID(),
                     ruleName: event.path,
                     ruleSource: .user,
-                    allowedCriteria: "Touch ID required"
+                    allowedCriteria: "Touch ID required",
+                    checkedProcess: .itself
                 )
             postRespond(event, decision, [], 0)
         }
