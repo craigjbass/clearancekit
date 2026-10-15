@@ -40,8 +40,9 @@
 //                                                       process that matches an
 //                                                       entry is checked as its
 //                                                       responsible process.
-//                                                       Omit to use the three
-//                                                       Apple WebKit services.
+//                                                       Omit to use the Apple
+//                                                       WebKit services and the
+//                                                       WebContent variants.
 //                                                       An empty array turns the
 //                                                       checks off for the rule
 //

@@ -245,6 +245,9 @@ public let defaultResponsibleProcessChecks: [ProcessSignature] = [
     ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking"),
     ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent"),
     ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU"),
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.CaptivePortal"),
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.Development"),
+    ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.EnhancedSecurity"),
 ]
 
 // MARK: - FAARule

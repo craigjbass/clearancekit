@@ -1824,6 +1824,32 @@ struct ResponsibleProcessCheckTests {
         #expect(checkedProcess == .itself)
     }
 
+    @Test("Apple WebContent variant is checked as its responsible process under a default rule", arguments: [
+        "com.apple.WebKit.WebContent.CaptivePortal",
+        "com.apple.WebKit.WebContent.Development",
+        "com.apple.WebKit.WebContent.EnhancedSecurity",
+    ])
+    func webContentVariantIsCheckedAsResponsibleProcess(signingID: String) {
+        let variantFacts = ProcessFacts(
+            processPath: "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/\(signingID).xpc/Contents/MacOS/\(signingID)",
+            teamID: appleTeamID,
+            signingID: signingID
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: variantFacts, responsibleProcess: .known(adHocToolFacts)),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .responsible(adHocToolFacts))
+    }
+
     @Test("non-Apple process with a WebKit signing ID is checked as itself")
     func nonAppleProcessWithWebKitSigningIDIsCheckedAsItself() {
         let impostorFacts = ProcessFacts(

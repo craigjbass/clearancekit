@@ -143,6 +143,19 @@ struct AllowRiskTests {
         #expect(allowRisk(for: AncestorAllowlistEntry(signingID: signingID, platformBinary: true)) == .webKitService)
     }
 
+    @Test("allowlist entries for an Apple WebContent variant are a WebKit service risk", arguments: [
+        "com.apple.WebKit.WebContent.CaptivePortal",
+        "com.apple.WebKit.WebContent.Development",
+        "com.apple.WebKit.WebContent.EnhancedSecurity",
+    ])
+    func webContentVariantAllowlistEntryIsRisk(signingID: String) {
+        let path = "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/\(signingID).xpc/Contents/MacOS/\(signingID)"
+
+        #expect(allowRisk(for: AllowlistEntry(signingID: signingID, platformBinary: true)) == .webKitService)
+        #expect(allowRisk(for: AllowlistEntry(processPath: path)) == .webKitService)
+        #expect(allowRisk(for: ProcessSignature(teamID: appleTeamID, signingID: signingID)) == .webKitService)
+    }
+
     @Test("signing-ID entry for a WebKit service is a risk, wildcard stays an indexer risk")
     func webKitWildcardEntryIsRisk() {
         #expect(allowRisk(for: AllowlistEntry(signingID: "*", platformBinary: true)) == .spotlightIndexer)

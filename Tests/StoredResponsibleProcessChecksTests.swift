@@ -21,6 +21,13 @@ struct StoredResponsibleProcessChecksTests {
         #expect(storedResponsibleProcessChecks(nil) == defaultResponsibleProcessChecks)
     }
 
+    @Test("NULL column gives the WebContent variants")
+    func nullColumnGivesWebContentVariants() throws {
+        let checks = try #require(storedResponsibleProcessChecks(nil))
+
+        #expect(checks.contains(ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.EnhancedSecurity")))
+    }
+
     @Test("default list is written as NULL")
     func defaultListIsWrittenAsNull() {
         #expect(columnTextForResponsibleProcessChecks(defaultResponsibleProcessChecks) == nil)

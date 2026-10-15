@@ -179,6 +179,13 @@ struct ManagedPolicyRuleParserTests {
         #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == defaultResponsibleProcessChecks)
     }
 
+    @Test("absent ResponsibleProcessChecks gives the WebContent variants")
+    func responsibleProcessChecksAbsentGivesWebContentVariants() throws {
+        let rule = try #require(parseManagedPolicyRule(["ProtectedPathPrefix": "/a/secret"]))
+
+        #expect(rule.responsibleProcessChecks.contains(ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.CaptivePortal")))
+    }
+
     @Test("ResponsibleProcessChecks entries are parsed")
     func responsibleProcessChecksPresent() {
         let dict: [String: Any] = [

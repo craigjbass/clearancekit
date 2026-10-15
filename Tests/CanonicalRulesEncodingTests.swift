@@ -309,12 +309,15 @@ struct CanonicalRulesEncodingTests {
         #expect(decoded.responsibleProcessChecks == defaultResponsibleProcessChecks)
     }
 
-    @Test("default responsibleProcessChecks lists the three Apple WebKit services")
+    @Test("default responsibleProcessChecks lists the Apple WebKit services and WebContent variants")
     func defaultResponsibleProcessChecksListsWebKitServices() {
         #expect(defaultResponsibleProcessChecks == [
             ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.Networking"),
             ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent"),
             ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.GPU"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.CaptivePortal"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.Development"),
+            ProcessSignature(teamID: appleTeamID, signingID: "com.apple.WebKit.WebContent.EnhancedSecurity"),
         ])
     }
 
