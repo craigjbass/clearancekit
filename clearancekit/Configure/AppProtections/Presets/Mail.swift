@@ -29,7 +29,7 @@ private let mailCategorizationSignatures: [ProcessSignature] = [
     apple("com.apple.campo"),
 ]
 
-// secinitd, containermanagerd, and WebKit.Networking are covered by the global allowlist.
+// secinitd and containermanagerd are covered by the global allowlist. WebKit services are checked as Mail.
 private let mailSandboxSignatures: [ProcessSignature] = [
     apple("com.apple.syncdefaultsd"),
 ]

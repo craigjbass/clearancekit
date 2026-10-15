@@ -87,6 +87,17 @@ struct RuleEditView: View {
                     pickerSectionHeader("Allowed Signatures", target: .signature)
                 }
                 Section {
+                    StringListEditor(values: $draft.responsibleProcessChecks, placeholder: "teamID:signingID")
+                    Button("Reset to default") {
+                        draft.responsibleProcessChecks = defaultResponsibleProcessChecks.map(\.description)
+                    }
+                    .buttonStyle(.borderless)
+                } header: {
+                    Text("Check responsible process for")
+                } footer: {
+                    responsibleProcessWarning
+                }
+                Section {
                     StringListEditor(values: $draft.allowedAncestorProcessPaths)
                 } header: {
                     pickerSectionHeader("Allowed Ancestor Process Paths", target: .ancestor)
@@ -187,6 +198,17 @@ struct RuleEditView: View {
     }
 
     @ViewBuilder
+    private var responsibleProcessWarning: some View {
+        switch allowRisk(for: draft.toRule(preservingID: existingID)) {
+        case .webKitService:
+            AllowRiskBadge(risk: .webKitService)
+        case .spotlightIndexer, .noKnownRisk:
+            Text("When a listed WebKit service opens a protected file, this rule checks the app that started the service instead.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
     private var ancestryWarning: some View {
         if hasAncestorCriteria {
             Label("Ancestry rules require process tree lookups which are more CPU intensive. Use a narrow protected path to minimise performance impact.", systemImage: "exclamationmark.triangle.fill")
@@ -228,6 +250,7 @@ private struct DraftRule {
     var enforceOnWriteOnly: Bool = false
     var requireValidSigning: Bool = false
     var authorizedSignatures: [String] = []
+    var responsibleProcessChecks: [String] = defaultResponsibleProcessChecks.map(\.description)
     var requiresAuthorization: Bool = false
     var authorizationSessionDuration: TimeInterval = 300
     var doubleStarParentMatching: DoubleStarParentMatching = .allNestedDirectories
@@ -243,6 +266,7 @@ private struct DraftRule {
         self.enforceOnWriteOnly = rule.enforceOnWriteOnly
         self.requireValidSigning = rule.requireValidSigning
         self.authorizedSignatures = rule.authorizedSignatures.map(\.description)
+        self.responsibleProcessChecks = rule.responsibleProcessChecks.map(\.description)
         self.requiresAuthorization = rule.requiresAuthorization
         self.authorizationSessionDuration = rule.authorizationSessionDuration
         self.doubleStarParentMatching = rule.doubleStarParentMatching
@@ -270,7 +294,8 @@ private struct DraftRule {
             authorizedSignatures: nonEmpty(authorizedSignatures).compactMap(parseSignature),
             requiresAuthorization: requiresAuthorization,
             authorizationSessionDuration: authorizationSessionDuration,
-            doubleStarParentMatching: doubleStarParentMatching
+            doubleStarParentMatching: doubleStarParentMatching,
+            responsibleProcessChecks: nonEmpty(responsibleProcessChecks).compactMap(parseSignature)
         )
     }
 }

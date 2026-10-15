@@ -166,14 +166,17 @@ struct EventRow: View {
         return event.notificationPolicy == .notify
     }
 
+    private var processTarget: EventProcessTarget { EventProcessTarget(event: event) }
+
     private func signatureAllowRisk(teamID: String, signingID: String) -> AllowRisk {
         allowRisk(for: ProcessSignature(teamID: teamID.isEmpty ? appleTeamID : teamID, signingID: signingID))
     }
 
     private var suggestBaselineIssueURL: URL? {
-        guard !event.accessAllowed, event.teamID.isEmpty, !event.signingID.isEmpty else { return nil }
-        let title = "Add `\(event.signingID)` to baseline allowlist"
-        let body = "**Signing ID**: `\(event.signingID)`\n**Process path**: `\(event.processPath)`\n\nThis Apple platform binary is triggering deny events and should be added to the baseline global allowlist."
+        let target = processTarget
+        guard !event.accessAllowed, target.teamID.isEmpty, !target.signingID.isEmpty else { return nil }
+        let title = "Add `\(target.signingID)` to baseline allowlist"
+        let body = "**Signing ID**: `\(target.signingID)`\n**Process path**: `\(target.processPath)`\n\nThis Apple platform binary is triggering deny events and should be added to the baseline global allowlist."
         var components = URLComponents(string: "https://github.com/craigjbass/clearancekit/issues/new")
         components?.queryItems = [
             URLQueryItem(name: "title", value: title),
@@ -390,37 +393,43 @@ struct EventRow: View {
             Text("UID: \(event.uid)")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            if !event.processPath.isEmpty {
-                Text(event.processPath)
+            if !processTarget.processPath.isEmpty {
+                Text(processTarget.processPath)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
         }
-        let hasNoSignature = event.teamID.isEmpty && event.signingID.isEmpty
+        let target = processTarget
+        if let viaSigningID = target.viaSigningID {
+            Text("via \(viaSigningID)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        let hasNoSignature = target.teamID.isEmpty && target.signingID.isEmpty
         HStack {
-            Text("Team: \(hasNoSignature ? invalidSignature : event.teamID)")
+            Text("Team: \(hasNoSignature ? invalidSignature : target.teamID)")
                 .font(.caption)
                 .foregroundColor(.secondary)
             if hasNoSignature {
                 Text("Signing: \(invalidSignature)")
                     .font(.caption)
                     .foregroundColor(.secondary)
-            } else if !event.signingID.isEmpty {
+            } else if !target.signingID.isEmpty {
                 if canAllowDeny, let ruleID = event.matchedRuleID, event.jailedRuleID == nil {
                     allowButton(
-                        label: "Signing: \(event.signingID)",
+                        label: "Signing: \(target.signingID)",
                         itemKey: "process",
-                        risk: signatureAllowRisk(teamID: event.teamID, signingID: event.signingID)
+                        risk: signatureAllowRisk(teamID: target.teamID, signingID: target.signingID)
                     ) {
                         try await PolicyStore.shared.allowProcess(
-                            teamID: event.teamID,
-                            signingID: event.signingID,
+                            teamID: target.teamID,
+                            signingID: target.signingID,
                             inRule: ruleID
                         )
                     }
                 } else {
-                    Text("Signing: \(event.signingID)")
+                    Text("Signing: \(target.signingID)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -436,7 +445,7 @@ struct EventRow: View {
         if canQuietNotifications {
             allowButton(label: "Don't notify for this process", itemKey: "quiet", risk: .noKnownRisk) {
                 try await QuietListStore.shared.add(
-                    .quieting(processPath: event.processPath, signingID: event.signingID, teamID: event.teamID)
+                    .quieting(processPath: target.processPath, signingID: target.signingID, teamID: target.teamID)
                 )
             }
             .font(.caption)

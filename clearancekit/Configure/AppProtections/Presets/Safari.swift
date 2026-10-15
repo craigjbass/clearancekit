@@ -7,13 +7,11 @@ import Foundation
 
 private let safariSignatures: [ProcessSignature] = [
     apple("com.apple.Safari"),
-    apple("com.apple.WebKit.WebContent"),
     apple("com.apple.Safari.History"),
     apple("com.apple.Safari.SandboxBroker"),
     apple("com.apple.SafariBookmarksSyncAgent"),
     apple("com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"),
     apple("com.apple.SafariPlatformSupport.Helper"),
-    apple("com.apple.WebKit.GPU"),
     apple("com.apple.Safari.PasswordBreachAgent"),
     apple("com.apple.Safari.CacheDeleteExtension"),
     apple("com.apple.AuthenticationServices.Helper"),
