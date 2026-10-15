@@ -7,29 +7,21 @@
 
 import SwiftUI
 
-enum EventFilter: String, CaseIterable {
-    case all = "All"
-    case allow = "Allow"
-    case deny = "Deny"
-}
-
 struct EventsWindowView: View {
     @StateObject private var xpcClient = XPCClient.shared
     @ObservedObject private var nav = NavigationState.shared
     @State private var filter: EventFilter = .deny
-    @State private var showDefaultAllows = false
+    @State private var defaultAllowVisibility: DefaultAllowVisibility = .hidden
 
     private static let maxDisplayedEvents = 1250
 
     private var filteredEvents: [FolderOpenEvent] {
-        let base: [FolderOpenEvent]
-        switch filter {
-        case .all:   base = xpcClient.events
-        case .allow: base = xpcClient.events.filter { $0.accessAllowed }
-        case .deny:  base = xpcClient.events.filter { !$0.accessAllowed }
-        }
-        let visible = showDefaultAllows ? base : base.filter { !$0.accessAllowed || $0.matchedRuleID != nil || $0.jailedRuleID != nil }
-        return Array(visible.prefix(Self.maxDisplayedEvents))
+        let listFilter = EventListFilter(
+            decision: filter,
+            defaultAllows: defaultAllowVisibility,
+            quietList: nav.quietListVisibility
+        )
+        return Array(listFilter.apply(to: xpcClient.events).prefix(Self.maxDisplayedEvents))
     }
 
     var body: some View {
@@ -40,9 +32,15 @@ struct EventsWindowView: View {
         }
         .onAppear {
             xpcClient.beginAllowEventStream()
+            if nav.quietListVisibility == .shown {
+                xpcClient.beginQuietEventStream()
+            }
         }
         .onDisappear {
             xpcClient.endAllowEventStream()
+            if nav.quietListVisibility == .shown {
+                xpcClient.endQuietEventStream()
+            }
         }
     }
 
@@ -56,7 +54,10 @@ struct EventsWindowView: View {
             .pickerStyle(.segmented)
             .fixedSize()
 
-            Toggle("Show default allows", isOn: $showDefaultAllows)
+            Toggle("Show default allows", isOn: defaultAllowsToggle)
+                .toggleStyle(.checkbox)
+
+            Toggle("Show quiet list processes", isOn: quietListToggle)
                 .toggleStyle(.checkbox)
 
             Spacer()
@@ -71,6 +72,27 @@ struct EventsWindowView: View {
         }
         .padding()
         .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private var defaultAllowsToggle: Binding<Bool> {
+        Binding(
+            get: { defaultAllowVisibility == .shown },
+            set: { defaultAllowVisibility = $0 ? .shown : .hidden }
+        )
+    }
+
+    private var quietListToggle: Binding<Bool> {
+        Binding(
+            get: { nav.quietListVisibility == .shown },
+            set: { isOn in
+                nav.quietListVisibility = isOn ? .shown : .hidden
+                if isOn {
+                    xpcClient.beginQuietEventStream()
+                    return
+                }
+                xpcClient.endQuietEventStream()
+            }
+        )
     }
 
     private var eventList: some View {

@@ -42,6 +42,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var advancedModeEnabled = false
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
+    var shouldResumeQuietEventStream: @MainActor () -> Bool = { false }
     var shouldResumeMetricsStream: @MainActor () -> Bool = { false }
 
     private var connection: NSXPCConnection?
@@ -198,6 +199,9 @@ final class XPCClient: NSObject, ObservableObject {
                     self?.fetchPendingSignatureIssueAfterConnect()
                     if self?.shouldResumeAllowEventStream() == true {
                         self?.beginAllowEventStream()
+                    }
+                    if self?.shouldResumeQuietEventStream() == true {
+                        self?.beginQuietEventStream()
                     }
                     if self?.shouldResumeMetricsStream() == true {
                         // Reset the ref-count so the resume issues a fresh server-side
@@ -540,6 +544,26 @@ final class XPCClient: NSObject, ObservableObject {
         }) as? ServiceProtocol else { return }
         service.endAllowEventStream { success in
             if !success { logger.error("XPCClient: endAllowEventStream rejected by service") }
+        }
+    }
+
+    // MARK: - Quiet event stream
+
+    func beginQuietEventStream() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: beginQuietEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.beginQuietEventStream { success in
+            if !success { logger.error("XPCClient: beginQuietEventStream rejected by service") }
+        }
+    }
+
+    func endQuietEventStream() {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: endQuietEventStream error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.endQuietEventStream { success in
+            if !success { logger.error("XPCClient: endQuietEventStream rejected by service") }
         }
     }
 

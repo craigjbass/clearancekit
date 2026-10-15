@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         XPCClient.shared.shouldResumeAllowEventStream = { NavigationState.shared.isEventsScreenActive }
+        XPCClient.shared.shouldResumeQuietEventStream = { NavigationState.shared.isQuietEventStreamWanted }
         XPCClient.shared.shouldResumeMetricsStream = { NavigationState.shared.isMetricsScreenActive }
 
         mcpEnabledCancellable = XPCClient.shared.$mcpEnabled
@@ -157,6 +158,7 @@ struct clearancekitApp: App {
     private func hideWindow() {
         NavigationState.shared.windowVisible = false
         XPCClient.shared.endAllowEventStream()
+        XPCClient.shared.endQuietEventStream()
         XPCClient.shared.endMetricsEventStream()
         NSApp.keyWindow?.orderOut(nil)
         DispatchQueue.main.async {

@@ -13,6 +13,7 @@ final class NavigationState: ObservableObject {
     @Published var selection: SidebarItem = .events
     @Published var highlightedEventID: UUID? = nil
     @Published var windowVisible = false
+    @Published var quietListVisibility: QuietListVisibility = .hidden
 
     private init() {}
 
@@ -23,6 +24,10 @@ final class NavigationState: ObservableObject {
 
     var isEventsScreenActive: Bool {
         windowVisible && selection == .events
+    }
+
+    var isQuietEventStreamWanted: Bool {
+        isEventsScreenActive && quietListVisibility == .shown
     }
 
     var isMetricsScreenActive: Bool {
