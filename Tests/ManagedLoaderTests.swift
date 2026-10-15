@@ -172,6 +172,33 @@ struct ManagedPolicyRuleParserTests {
         #expect(parseManagedPolicyRule(dict)?.enforceOnWriteOnly == false)
     }
 
+    @Test("absent ResponsibleProcessChecks gives the default list")
+    func responsibleProcessChecksAbsent() {
+        let dict: [String: Any] = ["ProtectedPathPrefix": "/a/secret"]
+
+        #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == defaultResponsibleProcessChecks)
+    }
+
+    @Test("ResponsibleProcessChecks entries are parsed")
+    func responsibleProcessChecksPresent() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/secret",
+            "ResponsibleProcessChecks": ["TEAM1:com.example.helper"],
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == [ProcessSignature(teamID: "TEAM1", signingID: "com.example.helper")])
+    }
+
+    @Test("empty ResponsibleProcessChecks turns the checks off")
+    func responsibleProcessChecksEmpty() {
+        let dict: [String: Any] = [
+            "ProtectedPathPrefix": "/a/secret",
+            "ResponsibleProcessChecks": [String](),
+        ]
+
+        #expect(parseManagedPolicyRule(dict)?.responsibleProcessChecks == [])
+    }
+
     @Test("DoubleStarParentMatching stop_at_double_star is parsed")
     func doubleStarParentMatchingStopAtDoubleStar() {
         let dict: [String: Any] = [

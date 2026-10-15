@@ -310,13 +310,14 @@ enum MCPDispatcher {
         let id = args["id"]?.stringValue.flatMap { UUID(uuidString: $0) } ?? UUID()
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? false
         let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? .allNestedDirectories
-        let rule = FAARule(
+        let responsibleProcessChecks = try parseOptionalSignatures(from: args["responsible_process_checks"])
+        let rule = ruleForMCPAdd(
             id: id,
             protectedPathPrefix: pathPrefix,
-            source: .user,
             allowedSignatures: signatures,
             enforceOnWriteOnly: enforceOnWriteOnly,
-            doubleStarParentMatching: doubleStarParentMatching
+            doubleStarParentMatching: doubleStarParentMatching,
+            responsibleProcessChecks: responsibleProcessChecks
         )
         try requireSpotlightRiskAcknowledgement(for: rule, acknowledgement: spotlightRiskAcknowledgement(from: args))
         try await PolicyStore.shared.add(rule)
@@ -324,6 +325,7 @@ enum MCPDispatcher {
         if !signatures.isEmpty { lines.append("  Signatures: \(signatures.map(\.description).joined(separator: ", "))") }
         if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
         lines.append(contentsOf: doubleStarParentMatchingLines(for: rule))
+        lines.append(contentsOf: responsibleProcessChecksLines(for: rule))
         return text(lines.joined(separator: "\n"))
     }
 
@@ -341,16 +343,13 @@ enum MCPDispatcher {
         let signatures = try parseSignatures(from: args["allowed_signatures"])
         let enforceOnWriteOnly = args["enforce_on_write_only"]?.boolValue ?? existing.enforceOnWriteOnly
         let doubleStarParentMatching = try parseDoubleStarParentMatching(from: args["double_star_parent_matching"]) ?? existing.doubleStarParentMatching
-        let updated = FAARule(
-            id: existing.id,
-            protectedPathPrefix: existing.protectedPathPrefix,
-            source: existing.source,
-            allowedProcessPaths: existing.allowedProcessPaths,
+        let responsibleProcessChecks = try parseOptionalSignatures(from: args["responsible_process_checks"])
+        let updated = ruleForMCPUpdate(
+            existing: existing,
             allowedSignatures: signatures,
-            allowedAncestorProcessPaths: existing.allowedAncestorProcessPaths,
-            allowedAncestorSignatures: existing.allowedAncestorSignatures,
             enforceOnWriteOnly: enforceOnWriteOnly,
-            doubleStarParentMatching: doubleStarParentMatching
+            doubleStarParentMatching: doubleStarParentMatching,
+            responsibleProcessChecks: responsibleProcessChecks
         )
         try requireSpotlightRiskAcknowledgement(for: updated, acknowledgement: spotlightRiskAcknowledgement(from: args))
         try await store.update(updated)
@@ -362,6 +361,7 @@ enum MCPDispatcher {
         ]
         if enforceOnWriteOnly { lines.append("  Enforcement: writes only") }
         lines.append(contentsOf: doubleStarParentMatchingLines(for: updated))
+        lines.append(contentsOf: responsibleProcessChecksLines(for: updated))
         return text(lines.joined(separator: "\n"))
     }
 
@@ -427,12 +427,27 @@ enum MCPDispatcher {
         ]
     }
 
+    private static func responsibleProcessChecksLines(for rule: FAARule) -> [String] {
+        guard rule.responsibleProcessChecks != defaultResponsibleProcessChecks else { return [] }
+        guard !rule.responsibleProcessChecks.isEmpty else { return ["  Responsible process checks: none"] }
+        return ["  Responsible process checks: \(rule.responsibleProcessChecks.map(\.description).joined(separator: ", "))"]
+    }
+
+    private static func parseOptionalSignatures(from value: JSONValue?) throws -> [ProcessSignature]? {
+        guard let value else { return nil }
+        return try parseSignatures(from: value)
+    }
+
     private static func doubleStarCompatibilityTag(for rule: FAARule) -> String {
         rule.usesDoubleStarCompatibilityMode ? " [** compatibility]" : ""
     }
 
     private static func spotlightRiskAcknowledgement(from args: [String: JSONValue]) -> SpotlightRiskAcknowledgement {
         args["acknowledge_spotlight_risk"]?.boolValue == true ? .acknowledged : .notAcknowledged
+    }
+
+    private static func responsibleProcessChecksParameterDescription(omittedMeans: String) -> String {
+        "Signatures as [\"teamID:signingID\"]. A process that matches an entry is checked against this rule as its responsible process, not as itself. Pass [] to check every process as itself. Omit for \(omittedMeans)."
     }
 
     private static let spotlightRiskParameterDescription = "Set to true only when the user accepts that this rule allows a Spotlight indexer (com.apple.mdworker, com.apple.mdworker_shared, com.apple.mds, com.apple.mdsync, or a wildcard that covers them). An allowed indexer lets any account read the protected files with mdimport. Without this flag such a rule is refused and not saved."
@@ -485,6 +500,7 @@ enum MCPDispatcher {
         if !rule.allowedSignatures.isEmpty {
             lines.append("    Signatures: \(rule.allowedSignatures.map(\.description).joined(separator: ", "))")
         }
+        lines.append(contentsOf: responsibleProcessChecksLines(for: rule).map { "  " + $0 })
         return lines.joined(separator: "\n")
     }
 
@@ -528,18 +544,20 @@ enum MCPDispatcher {
                 "allowed_signatures":     (type: "array",   description: "Allowed signing IDs as [\"teamID:signingID\"]. Apple binaries: \"apple:com.apple.Foo\".", required: false),
                 "enforce_on_write_only":  (type: "boolean", description: "When true, the rule only enforces on writes (rename/unlink/link/create/truncate/copyfile/exchangedata/clone, plus opens with FWRITE/O_APPEND/O_TRUNC). Reads from any process pass through. Defaults to false.", required: false),
                 "double_star_parent_matching": (type: "string", description: "Only for patterns with a ** component. \"all_nested_directories\" (default): a rename, clone or copy of any directory that can hold a protected path needs this rule's permission. \"stop_at_double_star\": compatibility mode. Directories below ** can be moved or copied without this rule's permission, so protected files can be moved out of the protected location.", required: false),
+                "responsible_process_checks": (type: "array", description: responsibleProcessChecksParameterDescription(omittedMeans: "the default list: com.apple.WebKit.Networking, com.apple.WebKit.WebContent and com.apple.WebKit.GPU"), required: false),
                 "id":                     (type: "string",  description: "Optional deterministic UUID (from APP_PROTECTIONS_PLAN.md allocation)", required: false),
                 "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
             ]
         ),
         toolDef(
             name: "update_rule",
-            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID. enforce_on_write_only and double_star_parent_matching are preserved from the existing rule when omitted.",
+            description: "Replace the allowed_signatures list on an existing user rule. Requires Touch ID. enforce_on_write_only, double_star_parent_matching and responsible_process_checks are preserved from the existing rule when omitted.",
             params: [
                 "id":                     (type: "string",  description: "UUID of the user rule to update", required: true),
                 "allowed_signatures":     (type: "array",   description: "Complete new list of signatures as [\"teamID:signingID\"]", required: true),
                 "enforce_on_write_only":  (type: "boolean", description: "Optional override of the rule's write-only enforcement flag. Omit to preserve the current value.", required: false),
                 "double_star_parent_matching": (type: "string", description: "Optional: \"all_nested_directories\" or \"stop_at_double_star\" (compatibility mode, directories below ** can be moved or copied without this rule's permission). Omit to preserve the current value.", required: false),
+                "responsible_process_checks": (type: "array", description: responsibleProcessChecksParameterDescription(omittedMeans: "the current value of the rule"), required: false),
                 "acknowledge_spotlight_risk": (type: "boolean", description: spotlightRiskParameterDescription, required: false)
             ]
         ),

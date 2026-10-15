@@ -166,7 +166,8 @@ final class Database {
                    allowed_ancestor_process_paths, allowed_ancestor_signatures,
                    enforce_on_write_only, require_valid_signing,
                    authorized_signatures, requires_authorization,
-                   authorization_session_duration, double_star_parent_matching
+                   authorization_session_duration, double_star_parent_matching,
+                   responsible_process_checks
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) {
@@ -201,8 +202,9 @@ final class Database {
                  allowed_ancestor_process_paths, allowed_ancestor_signatures,
                  enforce_on_write_only, require_valid_signing,
                  authorized_signatures, requires_authorization,
-                 authorization_session_duration, double_star_parent_matching)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 authorization_session_duration, double_star_parent_matching,
+                 responsible_process_checks)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bindings: [
             .text(rule.id.uuidString),
             .text(rule.protectedPathPrefix),
@@ -216,6 +218,7 @@ final class Database {
             .int(rule.requiresAuthorization ? 1 : 0),
             .int(Int(rule.authorizationSessionDuration)),
             .text(rule.doubleStarParentMatching.rawValue),
+            columnTextForResponsibleProcessChecks(rule.responsibleProcessChecks).map { .text($0) } ?? .null,
         ])
     }
 
@@ -230,6 +233,10 @@ final class Database {
             NSLog("Database: Skipping rule row %@ with unknown double_star_parent_matching '%@'", uuidString, columnText(stmt, 11))
             return nil
         }
+        guard let responsibleProcessChecks = storedResponsibleProcessChecks(optionalColumnText(stmt, 12)) else {
+            NSLog("Database: Skipping rule row %@ with corrupt responsible_process_checks '%@'", uuidString, columnText(stmt, 12))
+            return nil
+        }
         return FAARule(
             id: id,
             protectedPathPrefix: protectedPathPrefix,
@@ -242,7 +249,8 @@ final class Database {
             authorizedSignatures: decodeSignatureArray(columnText(stmt, 8)),
             requiresAuthorization: sqlite3_column_int(stmt, 9) != 0,
             authorizationSessionDuration: TimeInterval(sqlite3_column_int64(stmt, 10)),
-            doubleStarParentMatching: doubleStarParentMatching
+            doubleStarParentMatching: doubleStarParentMatching,
+            responsibleProcessChecks: responsibleProcessChecks
         )
     }
 
@@ -697,7 +705,8 @@ final class Database {
                    allowed_ancestor_process_paths, allowed_ancestor_signatures,
                    enforce_on_write_only, require_valid_signing,
                    authorized_signatures, requires_authorization,
-                   authorization_session_duration, double_star_parent_matching
+                   authorization_session_duration, double_star_parent_matching,
+                   responsible_process_checks
             FROM user_rules ORDER BY rowid
         """) { stmt in
             if let rule = ruleFromRow(stmt) { rules.append(rule) }

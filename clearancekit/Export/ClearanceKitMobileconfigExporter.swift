@@ -94,6 +94,9 @@ enum ClearanceKitMobileconfigExporter {
         if rule.doubleStarParentMatching != .implied(by: rule.protectedPathPrefix) {
             dict["DoubleStarParentMatching"] = rule.doubleStarParentMatching.rawValue
         }
+        if rule.responsibleProcessChecks != defaultResponsibleProcessChecks {
+            dict["ResponsibleProcessChecks"] = rule.responsibleProcessChecks.map { "\($0.teamID):\($0.signingID)" }
+        }
         return dict
     }
 

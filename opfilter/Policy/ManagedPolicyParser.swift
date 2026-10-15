@@ -33,8 +33,18 @@ func parseManagedPolicyRule(_ dict: [String: Any]) -> FAARule? {
         allowedAncestorProcessPaths: dict["AllowedAncestorProcessPaths"] as? [String] ?? [],
         allowedAncestorSignatures:   parseSignatures(dict["AllowedAncestorSignatures"] as? [String] ?? []),
         enforceOnWriteOnly:          dict["EnforceOnWriteOnly"] as? Bool ?? false,
-        doubleStarParentMatching:    parseDoubleStarParentMatching(dict["DoubleStarParentMatching"], pattern: path)
+        doubleStarParentMatching:    parseDoubleStarParentMatching(dict["DoubleStarParentMatching"], pattern: path),
+        responsibleProcessChecks:    parseResponsibleProcessChecks(dict["ResponsibleProcessChecks"], pattern: path)
     )
+}
+
+private func parseResponsibleProcessChecks(_ value: Any?, pattern: String) -> [ProcessSignature] {
+    guard let value else { return defaultResponsibleProcessChecks }
+    guard let entries = value as? [String] else {
+        NSLog("ManagedPolicyLoader: ResponsibleProcessChecks for %@ is not an array of strings — using the default list", pattern)
+        return defaultResponsibleProcessChecks
+    }
+    return parseSignatures(entries)
 }
 
 // An unknown value gives the stricter matching, so a typo in a profile

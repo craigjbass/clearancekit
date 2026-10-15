@@ -31,6 +31,7 @@ let allMigrations: [Migration] = [
     Migration(version: 11, name: "Add epoch column to data_signatures for replay protection", up: migration011AddEpochColumn),
     Migration(version: 12, name: "Add double_star_parent_matching column to user_rules", up: migration012AddDoubleStarParentMatchingColumn),
     Migration(version: 13, name: "Create user quiet list table", up: migration013CreateQuietList),
+    Migration(version: 14, name: "Add responsible_process_checks column to user_rules", up: migration014AddResponsibleProcessChecksColumn),
 ]
 
 // MARK: - Migration 001: Create tables and import existing JSON data
@@ -393,4 +394,27 @@ private func migration013CreateQuietList(_ db: Database) {
         )
     """)
     NSLog("Migration 013: Created user_quiet_list table")
+}
+
+// MARK: - Migration 014: Add responsible_process_checks column to user_rules
+//
+// The column is nullable with no default. Existing rows read back as NULL,
+// which storedResponsibleProcessChecks maps to the default list, so
+// FAARule.encode(to:) omits the field and the existing user_rules
+// signature still verifies on first launch after upgrade.
+
+private func migration014AddResponsibleProcessChecksColumn(_ db: Database) {
+    var columnAlreadyExists = false
+    db.query("PRAGMA table_info(user_rules)") { stmt in
+        guard let namePointer = sqlite3_column_text(stmt, 1) else { return }
+        if String(cString: namePointer) == "responsible_process_checks" {
+            columnAlreadyExists = true
+        }
+    }
+    guard !columnAlreadyExists else {
+        NSLog("Migration 014: responsible_process_checks column already present on user_rules, skipping ALTER")
+        return
+    }
+    db.execute("ALTER TABLE user_rules ADD COLUMN responsible_process_checks TEXT")
+    NSLog("Migration 014: Added responsible_process_checks column to user_rules")
 }

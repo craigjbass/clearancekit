@@ -35,6 +35,15 @@
 //                                                       component and
 //                                                       all_nested_directories
 //                                                       for other patterns
+//    ResponsibleProcessChecks    (array of strings, optional) — same format as
+//                                                       AllowedSignatures. A
+//                                                       process that matches an
+//                                                       entry is checked as its
+//                                                       responsible process.
+//                                                       Omit to use the three
+//                                                       Apple WebKit services.
+//                                                       An empty array turns the
+//                                                       checks off for the rule
 //
 
 import Foundation
