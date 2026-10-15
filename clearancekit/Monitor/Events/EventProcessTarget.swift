@@ -24,4 +24,14 @@ struct EventProcessTarget: Equatable {
         teamID = event.responsibleTeamID ?? ""
         viaSigningID = event.signingID
     }
+
+    var allowRisk: AllowRisk {
+        let signatureRisk = eventSignatureAllowRisk(teamID: teamID, signingID: signingID)
+        guard signatureRisk == .noKnownRisk, viaSigningID != nil else { return signatureRisk }
+        return .responsibleProcessAllow
+    }
+}
+
+func eventSignatureAllowRisk(teamID: String, signingID: String) -> AllowRisk {
+    allowRisk(for: ProcessSignature(teamID: teamID.isEmpty ? appleTeamID : teamID, signingID: signingID))
 }

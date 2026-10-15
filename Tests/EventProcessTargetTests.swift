@@ -61,4 +61,38 @@ struct EventProcessTargetTests {
         #expect(target.signingID == "")
         #expect(target.teamID == "")
     }
+
+    @Test("allowing a responsible process needs the responsible process risk confirmation")
+    func responsibleProcessAllowIsRisk() {
+        let target = EventProcessTarget(event: makeEvent(
+            responsibleProcessPath: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+            responsibleSigningID: "com.apple.Terminal",
+            responsibleTeamID: ""
+        ))
+
+        #expect(target.allowRisk == .responsibleProcessAllow)
+    }
+
+    @Test("allowing the process itself has the risk of its signature")
+    func processItselfHasSignatureRisk() {
+        let target = EventProcessTarget(event: makeEvent())
+
+        #expect(target.allowRisk == .webKitService)
+    }
+
+    @Test("allowing an ordinary process itself has no known risk")
+    func ordinaryProcessHasNoKnownRisk() {
+        let event = FolderOpenEvent(
+            path: "/test",
+            timestamp: Date(),
+            processID: 1,
+            processPath: "/Applications/Example.app/Contents/MacOS/Example",
+            teamID: "TEAM123",
+            signingID: "com.example.app",
+            accessAllowed: false,
+            notificationPolicy: .notify
+        )
+
+        #expect(EventProcessTarget(event: event).allowRisk == .noKnownRisk)
+    }
 }

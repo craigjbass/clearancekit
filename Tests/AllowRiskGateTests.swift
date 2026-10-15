@@ -74,6 +74,12 @@ struct AllowRiskGateTests {
         #expect(AllowRiskCopy.body(for: .webKitService) == "Any app that shows web content can use WebKit services to read files this entry allows.")
     }
 
+    @Test("the sheet copy for a responsible process allow names the processes the app starts")
+    func responsibleProcessAllowCopy() {
+        #expect(AllowRiskCopy.title(for: .responsibleProcessAllow) == "Allow an app and the processes it starts?")
+        #expect(AllowRiskCopy.body(for: .responsibleProcessAllow) == "A WebKit service opened this file for this app. If you allow this app, the rule also allows web content loaded by any process the app starts.")
+    }
+
     @Test("allow anyway applies the pending change once and clears it")
     func allowAnywayAppliesOnce() {
         let gate = AllowRiskGate()

@@ -168,10 +168,6 @@ struct EventRow: View {
 
     private var processTarget: EventProcessTarget { EventProcessTarget(event: event) }
 
-    private func signatureAllowRisk(teamID: String, signingID: String) -> AllowRisk {
-        allowRisk(for: ProcessSignature(teamID: teamID.isEmpty ? appleTeamID : teamID, signingID: signingID))
-    }
-
     private var suggestBaselineIssueURL: URL? {
         let target = processTarget
         guard !event.accessAllowed, target.teamID.isEmpty, !target.signingID.isEmpty else { return nil }
@@ -420,7 +416,7 @@ struct EventRow: View {
                     allowButton(
                         label: "Signing: \(target.signingID)",
                         itemKey: "process",
-                        risk: signatureAllowRisk(teamID: target.teamID, signingID: target.signingID)
+                        risk: target.allowRisk
                     ) {
                         try await PolicyStore.shared.allowProcess(
                             teamID: target.teamID,
@@ -479,7 +475,7 @@ struct EventRow: View {
                                     allowButton(
                                         label: "Signing: \(ancestor.signingID)",
                                         itemKey: "ancestor-\(index)",
-                                        risk: signatureAllowRisk(teamID: ancestor.teamID, signingID: ancestor.signingID)
+                                        risk: eventSignatureAllowRisk(teamID: ancestor.teamID, signingID: ancestor.signingID)
                                     ) {
                                         try await PolicyStore.shared.allowAncestor(
                                             teamID: ancestor.teamID,

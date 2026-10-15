@@ -9,6 +9,7 @@ public enum AllowRisk: Hashable {
     case noKnownRisk
     case spotlightIndexer
     case webKitService
+    case responsibleProcessAllow
 }
 
 public extension AllowRisk {
@@ -17,6 +18,7 @@ public extension AllowRisk {
         case .noKnownRisk: return "no known risk"
         case .spotlightIndexer: return "a Spotlight indexer"
         case .webKitService: return "a WebKit service"
+        case .responsibleProcessAllow: return "an app that is the responsible process for WebKit services"
         }
     }
 }

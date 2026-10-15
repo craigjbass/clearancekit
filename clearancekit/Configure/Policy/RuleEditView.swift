@@ -202,10 +202,12 @@ struct RuleEditView: View {
         switch allowRisk(for: draft.toRule(preservingID: existingID)) {
         case .webKitService:
             AllowRiskBadge(risk: .webKitService)
-        case .spotlightIndexer, .noKnownRisk:
+        case .spotlightIndexer, .responsibleProcessAllow, .noKnownRisk:
             Text("When a listed WebKit service opens a protected file, this rule checks the app that started the service instead.")
                 .foregroundStyle(.secondary)
         }
+        Text("Allowing an app also allows WebKit content loaded by processes that app starts.")
+            .foregroundStyle(.secondary)
     }
 
     @ViewBuilder

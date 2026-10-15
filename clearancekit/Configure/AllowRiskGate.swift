@@ -15,6 +15,7 @@ enum AllowRiskCopy {
         case .noKnownRisk: return ""
         case .spotlightIndexer: return "Allow a Spotlight indexer?"
         case .webKitService: return "Allow a WebKit service?"
+        case .responsibleProcessAllow: return "Allow an app and the processes it starts?"
         }
     }
 
@@ -23,6 +24,7 @@ enum AllowRiskCopy {
         case .noKnownRisk: return ""
         case .spotlightIndexer: return "Spotlight indexers read files for any user on this Mac. If you allow an indexer, any account can read protected files with `mdimport` and search their contents with `mdfind`."
         case .webKitService: return "Any app that shows web content can use WebKit services to read files this entry allows."
+        case .responsibleProcessAllow: return "A WebKit service opened this file for this app. If you allow this app, the rule also allows web content loaded by any process the app starts."
         }
     }
 }
