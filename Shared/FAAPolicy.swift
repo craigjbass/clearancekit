@@ -561,6 +561,16 @@ private func decision(
 ) -> PolicyDecision? {
     if rule.enforceOnWriteOnly && accessKind == .read { return nil }
 
+    if case .unknownResponsible = subject.checkedProcess {
+        return .denied(
+            ruleID: rule.id,
+            ruleName: rule.protectedPathPrefix,
+            ruleSource: rule.source,
+            allowedCriteria: "known responsible process required",
+            checkedProcess: .unknownResponsible
+        )
+    }
+
     let processPath = subject.process.processPath
     let teamID = subject.process.teamID
     let signingID = subject.process.signingID
@@ -643,11 +653,19 @@ private enum AncestryNeed {
     case responsibleAncestors
 }
 
-private func ancestryNeeds(rules: [FAARule], path: String, process: ProcessFacts) -> Set<AncestryNeed> {
+private func ancestryNeeds(rules: [FAARule], path: String, process: ProcessFacts, responsibleProcess: ResponsibleProcess) -> Set<AncestryNeed> {
     let protectingRulesThatNeedAncestry = rules.filter { pathIsProtected(path, by: $0.protectedPathPrefix) && $0.requiresAncestry }
-    return Set(protectingRulesThatNeedAncestry.map { rule in
-        rule.checksResponsibleProcess(of: process) ? .responsibleAncestors : .processAncestors
+    return Set(protectingRulesThatNeedAncestry.compactMap { rule in
+        guard rule.checksResponsibleProcess(of: process) else { return .processAncestors }
+        return responsibleAncestryNeed(for: responsibleProcess)
     })
+}
+
+private func responsibleAncestryNeed(for responsibleProcess: ResponsibleProcess) -> AncestryNeed? {
+    switch responsibleProcess {
+    case .known: return .responsibleAncestors
+    case .unknown: return nil
+    }
 }
 
 /// Evaluates FAA policy rules against a file-access request.
@@ -664,7 +682,7 @@ public func checkFAAPolicy(
     ancestryProvider: @Sendable () async -> [AncestorInfo],
     responsibleAncestryProvider: @Sendable () async -> [AncestorInfo]
 ) async -> PolicyDecision {
-    let needs = ancestryNeeds(rules: rules, path: path, process: process)
+    let needs = ancestryNeeds(rules: rules, path: path, process: process, responsibleProcess: responsibleProcess)
     let ancestors = needs.contains(.processAncestors) ? await ancestryProvider() : []
     let responsibleAncestors = needs.contains(.responsibleAncestors) ? await responsibleAncestryProvider() : []
     let subject = PolicySubject(
@@ -836,7 +854,7 @@ public func evaluateAccess(
         return .globallyAllowed
     }
 
-    let needs = ancestryNeeds(rules: rules, path: path, process: process)
+    let needs = ancestryNeeds(rules: rules, path: path, process: process, responsibleProcess: responsibleProcess)
     let needsProcessAncestors = !ancestorAllowlist.isEmpty || needs.contains(.processAncestors)
     let ancestors = needsProcessAncestors ? await ancestryProvider() : []
     let responsibleAncestors = needs.contains(.responsibleAncestors) ? await responsibleAncestryProvider() : []

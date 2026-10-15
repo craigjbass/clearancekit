@@ -1932,4 +1932,134 @@ struct ResponsibleProcessCheckTests {
         }
         #expect(checkedProcess == .responsible(adHocToolFacts))
     }
+
+    @Test("unknown responsible process is denied by a rule that allows *:*")
+    func unknownResponsibleIsDeniedByWildcardAllowedSignature() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/develop/goal/*",
+            allowedSignatures: [ProcessSignature(teamID: "*", signingID: "*")]
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .unknown),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .unknownResponsible)
+    }
+
+    @Test("unknown responsible process is denied without a Touch ID prompt by a rule that authorizes *:*")
+    func unknownResponsibleIsDeniedByWildcardAuthorizedSignature() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/develop/goal/*",
+            authorizedSignatures: [ProcessSignature(teamID: "*", signingID: "*")]
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .unknown),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .unknownResponsible)
+    }
+
+    @Test("unknown responsible process is denied by a rule that requires valid signing")
+    func unknownResponsibleIsDeniedByRequireValidSigning() {
+        let rule = FAARule(
+            protectedPathPrefix: "/Users/develop/goal/*",
+            allowedSignatures: [safariSignature],
+            requireValidSigning: true
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            subject: subject(process: networkingFacts, responsibleProcess: .unknown),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .unknownResponsible)
+    }
+
+    @Test("ad-hoc process with a WebKit signing ID is checked as itself")
+    func adHocProcessWithWebKitSigningIDIsCheckedAsItself() {
+        let adHocImpostorFacts = ProcessFacts(
+            processPath: "/tmp/com.apple.WebKit.Networking",
+            teamID: "",
+            signingID: "com.apple.WebKit.Networking"
+        )
+
+        let decision = checkFAAPolicy(
+            rules: [safariOnlyRule],
+            path: goldPath,
+            subject: subject(process: adHocImpostorFacts, responsibleProcess: .known(safariFacts)),
+            accessKind: .read
+        )
+
+        guard case .denied(_, _, _, _, let checkedProcess) = decision else {
+            Issue.record("Expected .denied, got \(decision)")
+            return
+        }
+        #expect(checkedProcess == .itself)
+    }
+
+    @Test("async overload does not call the process ancestry provider when only responsible ancestors are needed")
+    func asyncOverloadSkipsProcessAncestryForResponsibleCheck() async {
+        let terminalSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Terminal")
+        let rule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorSignatures: [terminalSignature])
+        let processProviderCalls = OSAllocatedUnfairLock(initialState: 0)
+
+        _ = await checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            process: networkingFacts,
+            responsibleProcess: .known(safariFacts),
+            accessKind: .read,
+            ancestryProvider: {
+                processProviderCalls.withLock { $0 += 1 }
+                return []
+            },
+            responsibleAncestryProvider: { [] }
+        )
+
+        #expect(processProviderCalls.withLock { $0 } == 0)
+    }
+
+    @Test("async overload does not call the responsible ancestry provider when the responsible process is unknown")
+    func asyncOverloadSkipsResponsibleAncestryForUnknownResponsible() async {
+        let terminalSignature = ProcessSignature(teamID: appleTeamID, signingID: "com.apple.Terminal")
+        let rule = FAARule(protectedPathPrefix: "/Users/develop/goal/*", allowedAncestorSignatures: [terminalSignature])
+        let responsibleProviderCalls = OSAllocatedUnfairLock(initialState: 0)
+
+        _ = await checkFAAPolicy(
+            rules: [rule],
+            path: goldPath,
+            process: networkingFacts,
+            responsibleProcess: .unknown,
+            accessKind: .read,
+            ancestryProvider: { [] },
+            responsibleAncestryProvider: {
+                responsibleProviderCalls.withLock { $0 += 1 }
+                return []
+            }
+        )
+
+        #expect(responsibleProviderCalls.withLock { $0 } == 0)
+    }
 }
