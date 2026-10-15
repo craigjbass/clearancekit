@@ -222,7 +222,6 @@ private final class FakeBroadcaster: AuthorizationBroadcasting, @unchecked Senda
         reply: @escaping (Bool) -> Void
     ) {
         lastPrompt.withLock { $0 = AuthorizationPrompt(processName: processName, signingID: signingID, teamID: teamID, pid: pid, pidVersion: pidVersion) }
-        guard let answer else { reply(false); return }
-        DispatchQueue.global().async { reply(answer) }
+        reply(answer ?? false)
     }
 }
