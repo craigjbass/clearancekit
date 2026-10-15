@@ -222,6 +222,14 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.endAllowStream(for: connection)
     }
 
+    fileprivate func beginQuietStream(for connection: NSXPCConnection) -> [FolderOpenEvent] {
+        broadcaster.beginQuietStream(for: connection)
+    }
+
+    fileprivate func endQuietStream(for connection: NSXPCConnection) {
+        broadcaster.endQuietStream(for: connection)
+    }
+
     fileprivate func beginMetricsStream(for connection: NSXPCConnection) {
         metricsBroadcaster.beginStream(for: connection)
     }
@@ -230,8 +238,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
         metricsBroadcaster.endStream(for: connection)
     }
 
-    fileprivate func recentEvents() -> [FolderOpenEvent] {
-        broadcaster.recentEvents()
+    fileprivate func recentEvents(for connection: NSXPCConnection) -> [FolderOpenEvent] {
+        broadcaster.recentEvents(for: connection)
     }
 
     fileprivate func recentTamperEvents() -> [TamperAttemptEvent] {
@@ -560,9 +568,9 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
     }
 
     func fetchRecentEvents(withReply reply: @escaping ([FolderOpenEvent]) -> Void) {
-        guard let server else { reply([]); return }
+        guard let conn = connection, let server else { reply([]); return }
         server.serverQueue.async {
-            reply(server.recentEvents())
+            reply(server.recentEvents(for: conn))
         }
     }
 
@@ -745,6 +753,33 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let conn = connection, let server else { reply(false); return }
         server.serverQueue.async {
             server.endAllowStream(for: conn)
+            reply(true)
+        }
+    }
+
+    func beginQuietEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            let backfill = server.beginQuietStream(for: conn)
+            guard let proxy = conn.remoteObjectProxy as? ClientProtocol else {
+                reply(true)
+                return
+            }
+            let batchSize = 50
+            for batchStart in stride(from: 0, to: backfill.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, backfill.count)
+                for event in backfill[batchStart..<batchEnd] {
+                    proxy.folderOpened(event)
+                }
+            }
+            reply(true)
+        }
+    }
+
+    func endQuietEventStream(withReply reply: @escaping (Bool) -> Void) {
+        guard let conn = connection, let server else { reply(false); return }
+        server.serverQueue.async {
+            server.endQuietStream(for: conn)
             reply(true)
         }
     }

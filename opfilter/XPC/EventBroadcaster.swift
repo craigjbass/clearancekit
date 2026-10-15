@@ -18,16 +18,24 @@ final class EventBroadcaster: @unchecked Sendable {
     private struct State {
         var guiClients: [ObjectIdentifier: NSXPCConnection] = [:]
         var allowStreamClients: Set<ObjectIdentifier> = []
+        var quietStreamClients: Set<ObjectIdentifier> = []
         var recentEvents: [FolderOpenEvent] = []
         var recentTamperEvents: [TamperAttemptEvent] = []
     }
 
     private let storage: OSAllocatedUnfairLock<State>
     private let maxHistoryCount: Int
+    private let deliverFolderOpened: @Sendable (NSXPCConnection, FolderOpenEvent) -> Void
 
-    init(maxHistoryCount: Int = 1000) {
+    init(
+        maxHistoryCount: Int = 1000,
+        deliverFolderOpened: @escaping @Sendable (NSXPCConnection, FolderOpenEvent) -> Void = { connection, event in
+            (connection.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
+        }
+    ) {
         self.storage = OSAllocatedUnfairLock(initialState: State())
         self.maxHistoryCount = maxHistoryCount
+        self.deliverFolderOpened = deliverFolderOpened
     }
 
     // MARK: - Client management
@@ -48,6 +56,7 @@ final class EventBroadcaster: @unchecked Sendable {
             let id = ObjectIdentifier(connection)
             state.guiClients.removeValue(forKey: id)
             state.allowStreamClients.remove(id)
+            state.quietStreamClients.remove(id)
             return state.guiClients.count
         }
     }
@@ -72,33 +81,54 @@ final class EventBroadcaster: @unchecked Sendable {
         storage.withLock { $0.allowStreamClients.count }
     }
 
+    // MARK: - Quiet-deny stream subscription
+
+    @discardableResult
+    func beginQuietStream(for connection: NSXPCConnection) -> [FolderOpenEvent] {
+        storage.withLock { state in
+            state.quietStreamClients.insert(ObjectIdentifier(connection))
+            return state.recentEvents.filter(\.isQuietDeny).reversed()
+        }
+    }
+
+    func endQuietStream(for connection: NSXPCConnection) {
+        storage.withLock { state in
+            state.quietStreamClients.remove(ObjectIdentifier(connection))
+        }
+    }
+
     // MARK: - Event broadcasting
 
     /// Appends the event to the history ring buffer and delivers it to registered clients.
-    /// Deny events are delivered to all clients; allow events are delivered only to clients that have subscribed via beginAllowStream.
+    /// Allow events go only to clients that called beginAllowStream, and quiet denies only to clients that called beginQuietStream.
+    /// Every other deny goes to all clients.
     func broadcast(_ event: FolderOpenEvent) {
-        let (denyClients, allowClients) = storage.withLock { state -> ([NSXPCConnection], [NSXPCConnection]) in
+        let recipients = storage.withLock { state -> [NSXPCConnection] in
             state.recentEvents.append(event)
             if state.recentEvents.count > maxHistoryCount {
                 state.recentEvents.removeFirst(state.recentEvents.count - maxHistoryCount)
             }
             let allClients = Array(state.guiClients.values)
-            guard event.accessAllowed else {
-                return (allClients, [])
+            if event.accessAllowed {
+                return allClients.filter { state.allowStreamClients.contains(ObjectIdentifier($0)) }
             }
-            let subscribed = allClients.filter { state.allowStreamClients.contains(ObjectIdentifier($0)) }
-            return ([], subscribed)
+            if event.isQuietDeny {
+                return allClients.filter { state.quietStreamClients.contains(ObjectIdentifier($0)) }
+            }
+            return allClients
         }
-        for conn in denyClients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
-        }
-        for conn in allowClients {
-            (conn.remoteObjectProxy as? ClientProtocol)?.folderOpened(event)
+        for connection in recipients {
+            deliverFolderOpened(connection, event)
         }
     }
 
-    func recentEvents() -> [FolderOpenEvent] {
-        storage.withLock { $0.recentEvents }
+    func recentEvents(for connection: NSXPCConnection) -> [FolderOpenEvent] {
+        storage.withLock { state in
+            guard state.quietStreamClients.contains(ObjectIdentifier(connection)) else {
+                return state.recentEvents.filter { !$0.isQuietDeny }
+            }
+            return state.recentEvents
+        }
     }
 
     func broadcast(_ event: TamperAttemptEvent) {

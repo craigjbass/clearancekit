@@ -79,6 +79,10 @@ public class FolderOpenEvent: NSObject, NSSecureCoding {
     public let jailedRuleID: UUID?
     public let notificationPolicy: NotificationPolicy
 
+    public var isQuietDeny: Bool {
+        !accessAllowed && notificationPolicy == .quiet
+    }
+
     public init(
         operation: String = "open",
         path: String,
@@ -370,6 +374,11 @@ public protocol ServiceProtocol {
     // visible and unsubscribes when the screen leaves view or the window hides.
     func beginAllowEventStream(withReply reply: @escaping (Bool) -> Void)
     func endAllowEventStream(withReply reply: @escaping (Bool) -> Void)
+
+    // Quiet-deny stream: denies from quiet-list processes reach the GUI only
+    // while it is subscribed. The GUI subscribes when the user shows them.
+    func beginQuietEventStream(withReply reply: @escaping (Bool) -> Void)
+    func endQuietEventStream(withReply reply: @escaping (Bool) -> Void)
 
     // Metrics-event stream: the GUI subscribes when the metrics screen is
     // visible and unsubscribes when it leaves view or the window hides.
