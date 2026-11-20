@@ -4,3 +4,4 @@ tla/*_TTrace_*
 build/
 .superpowers/
 threatmodel/
+Config.local.xcconfig

@@ -5,7 +5,7 @@
 	<key>NSSystemExtensionUsageDescription</key>
 	<string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
 	<key>NSEndpointSecurityMachServiceName</key>
-	<string>uk.craigbass.clearancekit.opfilter</string>
+	<string>$(PRODUCT_BUNDLE_PREFIX).opfilter</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
@@ -13,7 +13,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>NSEndpointSecurityMachServiceName</key>
-			<string>uk.craigbass.clearancekit.opfilter</string>
+			<string>$(PRODUCT_BUNDLE_PREFIX).opfilter</string>
 		</dict>
 	</dict>
 </dict>
