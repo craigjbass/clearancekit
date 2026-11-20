@@ -34,7 +34,7 @@ final class SystemExtensionManager: NSObject, ObservableObject {
         case deactivating
     }
 
-    private static let extensionBundleIdentifier = "uk.craigbass.clearancekit.opfilter"
+    private static let extensionBundleIdentifier = XPCConstants.serviceName
 
     private var pendingAction: PendingAction?
     private var isReplacing = false

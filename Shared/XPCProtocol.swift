@@ -10,10 +10,10 @@ import Foundation
 // MARK: - Constants
 
 public enum XPCConstants {
-    public static let serviceName = "uk.craigbass.clearancekit.opfilter"
+    public static let serviceName = "\(SigningIdentity.bundlePrefix).opfilter"
     public static let protocolVersion = "2.0"
-    public static let teamID = "37KMK6XFTT"
-    public static let bundleIDPrefix = "uk.craigbass.clearancekit"
+    public static let teamID = SigningIdentity.teamID
+    public static let bundleIDPrefix = SigningIdentity.bundlePrefix
 }
 
 // MARK: - AncestorInfo
