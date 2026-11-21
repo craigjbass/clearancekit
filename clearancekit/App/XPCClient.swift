@@ -40,6 +40,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var mcpEnabled = false
     @Published private(set) var bundleProtectionEnabled = true
     @Published private(set) var advancedModeEnabled = false
+    @Published private(set) var mcpConnectionAuthentication = MCPConnectionAuthentication.required
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
     var shouldResumeQuietEventStream: @MainActor () -> Bool = { false }
@@ -454,6 +455,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setMCPConnectionAuthentication(_ authentication: MCPConnectionAuthentication) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setMCPConnectionAuthenticationRequired error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setMCPConnectionAuthenticationRequired(authentication.isRequired) { success in
+            if !success { logger.error("XPCClient: setMCPConnectionAuthenticationRequired rejected by service") }
+        }
+    }
+
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
         guard let data = try? JSONEncoder().encode(signatures) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
@@ -865,6 +875,12 @@ extension XPCClient: ClientProtocol {
     nonisolated func advancedModeEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             self.advancedModeEnabled = enabled
+        }
+    }
+
+    nonisolated func mcpConnectionAuthenticationRequiredUpdated(_ required: Bool) {
+        Task { @MainActor in
+            self.mcpConnectionAuthentication = MCPConnectionAuthentication(isRequired: required)
         }
     }
 

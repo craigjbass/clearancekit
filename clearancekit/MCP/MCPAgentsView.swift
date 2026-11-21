@@ -74,6 +74,31 @@ private struct MCPSecurityWarningView: View {
             }
             .toggleStyle(.switch)
 
+            Toggle(isOn: Binding(
+                get: { xpcClient.mcpConnectionAuthentication.isRequired },
+                set: { newValue in
+                    if newValue {
+                        xpcClient.setMCPConnectionAuthentication(.required)
+                    } else {
+                        Task { @MainActor in
+                            do {
+                                try await BiometricAuth.authenticate(reason: "Allow MCP agents to connect without authentication")
+                                xpcClient.setMCPConnectionAuthentication(.skipped)
+                            } catch {}
+                        }
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Authenticate Each Connection")
+                    Text("Ask for Touch ID or your password each time an MCP agent connects.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .disabled(!xpcClient.mcpEnabled)
+
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)

@@ -517,4 +517,55 @@ struct PolicyRepositoryTests {
 
         #expect(decoded.contains { $0.id == managed.id })
     }
+
+    // MARK: - MCP connection authentication flag
+
+    @Test("MCP connection authentication is required when the flag row is missing")
+    func mcpConnectionAuthenticationRequiredWhenFlagRowMissing() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .ok([])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("loads MCP connection authentication flag from database on init")
+    func loadsMCPConnectionAuthenticationFlagFromDatabase() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .ok([makeMCPConnectionAuthenticationFlag(enabled: false)])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(!repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("suspect feature flags require MCP connection authentication")
+    func suspectFeatureFlagsRequireMCPConnectionAuthentication() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .suspect([makeMCPConnectionAuthenticationFlag(enabled: false)])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("setMCPConnectionAuthenticationRequired updates state and persists the flag")
+    func setMCPConnectionAuthenticationRequiredPersists() {
+        let db = FakeDatabase()
+        let repo = PolicyRepository(database: db)
+
+        repo.setMCPConnectionAuthenticationRequired(false)
+
+        #expect(!repo.mcpConnectionAuthenticationRequired)
+        #expect(db.savedFeatureFlags.contains(makeMCPConnectionAuthenticationFlag(enabled: false)))
+    }
+}
+
+private func makeMCPConnectionAuthenticationFlag(enabled: Bool) -> FeatureFlag {
+    FeatureFlag(
+        id: FeatureFlagID.mcpConnectionAuthenticationRequired,
+        name: "mcp_connection_authentication_required",
+        enabled: enabled
+    )
 }

@@ -438,6 +438,12 @@ public protocol ServiceProtocol {
     // the GUI hides power-user sidebar entries. Defaults to disabled.
     func setAdvancedModeEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
 
+    // MCP per-connection authentication toggle. Persisted in the feature_flags
+    // table with tamper-resistant signature. When off, the GUI accepts MCP
+    // connections without a Touch ID prompt. On signature failure or a missing
+    // row the flag defaults to required so the check fails closed.
+    func setMCPConnectionAuthenticationRequired(_ required: Bool, withReply reply: @escaping (Bool) -> Void)
+
     // Returns a snapshot of recent tamper attempt events.
     func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void)
 
@@ -475,6 +481,10 @@ public protocol ClientProtocol {
     // Opfilter pushes the current advanced-mode feature flag on connect and
     // whenever it changes. The GUI uses this to show/hide power-user sidebar items.
     func advancedModeEnabledUpdated(_ enabled: Bool)
+    // Opfilter pushes the current MCP connection-authentication feature flag on
+    // connect and whenever it changes. The GUI MCP server reads it on each
+    // initialize to decide whether to prompt for authentication.
+    func mcpConnectionAuthenticationRequiredUpdated(_ required: Bool)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)
