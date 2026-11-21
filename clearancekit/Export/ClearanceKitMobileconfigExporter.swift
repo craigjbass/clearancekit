@@ -46,7 +46,7 @@ enum ClearanceKitMobileconfigExporter {
             "PayloadUUID": UUID().uuidString,
             "PayloadVersion": 1,
             "PayloadContent": [
-                "uk.craigbass.clearancekit": [
+                XPCConstants.managedPreferencesDomain: [
                     "Forced": [
                         ["mcx_preference_settings": settings]
                     ]

@@ -13,7 +13,7 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "managed-config")
 
 enum ManagedQuietListLoader {
-    private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
+    private static let preferencesDomain: CFString = XPCConstants.managedPreferencesDomain as CFString
     private static let quietListKey: CFString = "GlobalQuietList" as CFString
 
     static func load() -> ManagedQuietListPreference {

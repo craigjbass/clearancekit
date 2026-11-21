@@ -14,6 +14,9 @@ public enum XPCConstants {
     public static let protocolVersion = "2.0"
     public static let teamID = SigningIdentity.teamID
     public static let bundleIDPrefix = SigningIdentity.bundlePrefix
+    // Note: Not based on bundle ID, so that profiles are transferable
+    // between forks and upstream builds of clearancekit.
+    public static let managedPreferencesDomain = "uk.craigbass.clearancekit"
 }
 
 // MARK: - AncestorInfo
