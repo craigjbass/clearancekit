@@ -30,6 +30,7 @@ struct EventsWindowView: View {
             Divider()
             eventList
         }
+        .navigationTitle("Events")
         .onAppear {
             xpcClient.beginAllowEventStream()
             if nav.quietListVisibility == .shown {

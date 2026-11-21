@@ -22,6 +22,7 @@ struct AllowlistView: View {
             Divider()
             entryList
         }
+        .navigationTitle("Allowlist")
         .sheet(isPresented: $isAddingEntry) {
             AllowlistEntryEditView { entry in
                 riskGate.submit([riskReviewItem(for: entry)]) {
