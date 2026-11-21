@@ -43,6 +43,7 @@ let safariPreset = AppPreset(
                 apple("com.apple.SafariServices"),
                 apple("com.apple.syncdefaultsd"),
                 apple("com.apple.screencaptureui"),
+                apple("com.apple.Safari.SafariLinkExtension"),
             ]
         ),
         FAARule(
