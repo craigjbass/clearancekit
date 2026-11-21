@@ -28,7 +28,7 @@ final class PostRespondHandler: @unchecked Sendable {
             auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: fileEvent.correlationID)
 
             if !allowed {
-                ttyNotifier.writeDenial(path: fileEvent.path, reason: decision.reason, ttyPath: fileEvent.ttyPath)
+                ttyNotifier.writeDenial(path: fileEvent.path, ttyPath: fileEvent.ttyPath)
             }
 
             let responsibleProcess = responsibleProcessFacts(of: decision)
