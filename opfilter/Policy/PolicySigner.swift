@@ -31,7 +31,7 @@ private let legacyAclMarkers: [URL] = [
 ]
 
 enum PolicySigner {
-    private static let keyTag    = Data("uk.craigbass.clearancekit.policy-signing-key".utf8)
+    private static let keyTag    = Data("\(XPCConstants.bundleIDPrefix).policy-signing-key".utf8)
     private static let keyLabel  = "clearancekit policy signing key"
     private static let algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA256
 
@@ -40,7 +40,7 @@ enum PolicySigner {
     /// boots: once written with a proper ACL it can only be modified by
     /// opfilter, so an attacker cannot force re-migration by deleting the
     /// marker file alone.
-    private static let aclVersionService = "uk.craigbass.clearancekit.acl-version"
+    private static let aclVersionService = "\(XPCConstants.bundleIDPrefix).acl-version"
     private static let aclVersionAccount = "policy-signing-key"
     /// Bumped to 4 because the v3 migration used a two-step
     /// `SecKeyCreateRandomKey` + `SecItemAdd(kSecAttrAccess:)` flow, and
