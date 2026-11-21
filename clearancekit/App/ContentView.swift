@@ -155,7 +155,6 @@ struct ContentView: View {
         }
         .frame(minWidth: 720, minHeight: 480)
         .onAppear {
-            xpcClient.connect()
             ensureSelectionVisible()
         }
         .onChange(of: advancedMode) { _, _ in
