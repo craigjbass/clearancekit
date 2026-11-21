@@ -130,3 +130,73 @@ struct ProcessTreeRecordTests {
         #expect(tree.record(of: ProcessIdentity(pid: 300, pidVersion: 4)) == nil)
     }
 }
+
+@Suite("ProcessTree.lifecycle")
+struct ProcessTreeLifecycleTests {
+
+    private func record(pid: pid_t, version: UInt32 = 1) -> ProcessRecord {
+        ProcessRecord(
+            identity: ProcessIdentity(pid: pid, pidVersion: version),
+            parentIdentity: ProcessIdentity(pid: 1, pidVersion: 1),
+            path: "/bin/sleep",
+            teamID: "apple",
+            signingID: "com.apple.sleep",
+            uid: 501,
+            gid: 20
+        )
+    }
+
+    private func lifecycle(of identity: ProcessIdentity, in tree: ProcessTree) -> ProcessLifecycle? {
+        tree.allRecords().first { $0.identity == identity }?.lifecycle
+    }
+
+    @Test("an inserted record reports running")
+    func insertedRecordIsRunning() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300))
+
+        #expect(lifecycle(of: ProcessIdentity(pid: 300, pidVersion: 1), in: tree) == .running)
+    }
+
+    @Test("remove marks the record exited and allRecords still reports it during retention")
+    func removeMarksRecordExited() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300))
+
+        tree.remove(identity: ProcessIdentity(pid: 300, pidVersion: 1))
+
+        #expect(lifecycle(of: ProcessIdentity(pid: 300, pidVersion: 1), in: tree) == .exited)
+    }
+
+    @Test("remove keeps the exited record available for lookup during retention")
+    func exitedRecordStaysAvailableForLookup() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300))
+
+        tree.remove(identity: ProcessIdentity(pid: 300, pidVersion: 1))
+
+        #expect(tree.record(of: ProcessIdentity(pid: 300, pidVersion: 1))?.lifecycle == .exited)
+    }
+
+    @Test("remove does not change other records")
+    func removeLeavesOtherRecordsRunning() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300))
+        tree.insert(record(pid: 400))
+
+        tree.remove(identity: ProcessIdentity(pid: 300, pidVersion: 1))
+
+        #expect(lifecycle(of: ProcessIdentity(pid: 400, pidVersion: 1), in: tree) == .running)
+    }
+
+    @Test("a new process that reuses the PID of an exited process reports running")
+    func reusedPIDReportsRunning() {
+        let tree = ProcessTree()
+        tree.insert(record(pid: 300, version: 1))
+        tree.remove(identity: ProcessIdentity(pid: 300, pidVersion: 1))
+
+        tree.insert(record(pid: 300, version: 2))
+
+        #expect(lifecycle(of: ProcessIdentity(pid: 300, pidVersion: 2), in: tree) == .running)
+    }
+}

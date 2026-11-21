@@ -9,6 +9,24 @@ extension RunningProcessInfo: @retroactive Identifiable {
     public var id: String { "\(pid).\(pidVersion)" }
 }
 
+private extension View {
+    func dimmedWhenExited(_ process: RunningProcessInfo) -> some View {
+        opacity(ProcessTreeRowOpacity.forLifecycle(process.lifecycle))
+    }
+}
+
+private enum ProcessTreeRowOpacity {
+    static let running = 1.0
+    static let exited = 0.4
+
+    static func forLifecycle(_ lifecycle: ProcessLifecycle) -> Double {
+        switch lifecycle {
+        case .running: running
+        case .exited: exited
+        }
+    }
+}
+
 struct ProcessTreeView: View {
     private static let monoBody    = Font.system(.body,    design: .monospaced)
     private static let monoCaption = Font.system(.caption, design: .monospaced)
@@ -39,48 +57,48 @@ struct ProcessTreeView: View {
 
     @TableColumnBuilder<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>>
     private var processColumns: some TableColumnContent<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>> {
-        TableColumn("PID", value: \.pid) { r -> Text in
-            Text(String(r.pid)).font(Self.monoBody)
+        TableColumn("PID", value: \.pid) { r in
+            Text(String(r.pid)).font(Self.monoBody).dimmedWhenExited(r)
         }
         .width(60)
-        TableColumn("PID Version", value: \.pidVersion) { r -> Text in
-            Text(String(r.pidVersion)).font(Self.monoCaption).foregroundStyle(.secondary)
+        TableColumn("PID Version", value: \.pidVersion) { r in
+            Text(String(r.pidVersion)).font(Self.monoCaption).foregroundStyle(.secondary).dimmedWhenExited(r)
         }
         .width(40)
-        TableColumn("PPID", value: \.parentPID) { r -> Text in
-            Text(String(r.parentPID)).font(Self.monoBody)
+        TableColumn("PPID", value: \.parentPID) { r in
+            Text(String(r.parentPID)).font(Self.monoBody).dimmedWhenExited(r)
         }
         .width(60)
-        TableColumn("PPID Version", value: \.parentPIDVersion) { r -> Text in
-            Text(String(r.parentPIDVersion)).font(Self.monoCaption).foregroundStyle(.secondary)
+        TableColumn("PPID Version", value: \.parentPIDVersion) { r in
+            Text(String(r.parentPIDVersion)).font(Self.monoCaption).foregroundStyle(.secondary).dimmedWhenExited(r)
         }
         .width(40)
-        TableColumn("Name") { r -> Text in
-            Text(URL(fileURLWithPath: r.path).lastPathComponent)
+        TableColumn("Name") { r in
+            Text(URL(fileURLWithPath: r.path).lastPathComponent).dimmedWhenExited(r)
         }
         .width(min: 100, ideal: 160)
     }
 
     @TableColumnBuilder<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>>
     private var identifierColumns: some TableColumnContent<RunningProcessInfo, KeyPathComparator<RunningProcessInfo>> {
-        TableColumn("Path", value: \.path) { r -> Text in
-            Text(r.path).font(Self.monoCaption).foregroundStyle(.secondary)
+        TableColumn("Path", value: \.path) { r in
+            Text(r.path).font(Self.monoCaption).foregroundStyle(.secondary).dimmedWhenExited(r)
         }
         .width(min: 180, ideal: 300)
-        TableColumn("Signing ID", value: \.signingID) { r -> Text in
-            Text(r.signingID.isEmpty ? "—" : r.signingID).font(Self.monoCaption)
+        TableColumn("Signing ID", value: \.signingID) { r in
+            Text(r.signingID.isEmpty ? "—" : r.signingID).font(Self.monoCaption).dimmedWhenExited(r)
         }
         .width(min: 120, ideal: 200)
-        TableColumn("Team ID", value: \.teamID) { r -> Text in
-            Text(r.teamID.isEmpty ? "—" : r.teamID).font(Self.monoCaption)
+        TableColumn("Team ID", value: \.teamID) { r in
+            Text(r.teamID.isEmpty ? "—" : r.teamID).font(Self.monoCaption).dimmedWhenExited(r)
         }
         .width(90)
-        TableColumn("UID", value: \.uid) { r -> Text in
-            Text(String(r.uid)).font(Self.monoCaption)
+        TableColumn("UID", value: \.uid) { r in
+            Text(String(r.uid)).font(Self.monoCaption).dimmedWhenExited(r)
         }
         .width(40)
-        TableColumn("GID", value: \.gid) { r -> Text in
-            Text(String(r.gid)).font(Self.monoCaption)
+        TableColumn("GID", value: \.gid) { r in
+            Text(String(r.gid)).font(Self.monoCaption).dimmedWhenExited(r)
         }
         .width(40)
     }

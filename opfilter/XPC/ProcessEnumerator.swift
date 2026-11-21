@@ -30,7 +30,8 @@ enum ProcessEnumerator {
                 teamID: teamID,
                 signingID: signingID,
                 uid: bsdInfo.pbi_uid,
-                gid: bsdInfo.pbi_gid
+                gid: bsdInfo.pbi_gid,
+                lifecycle: .running
             ))
         }
         return result
@@ -69,7 +70,8 @@ enum ProcessEnumerator {
                 teamID: teamID,
                 signingID: signingID,
                 uid: bsdInfo.pbi_uid,
-                gid: bsdInfo.pbi_gid
+                gid: bsdInfo.pbi_gid,
+                lifecycle: .running
             ))
         }
 
