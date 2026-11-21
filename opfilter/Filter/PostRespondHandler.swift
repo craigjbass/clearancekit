@@ -6,12 +6,15 @@
 import Foundation
 
 final class PostRespondHandler: @unchecked Sendable {
+    private static let ttyDenialDebounceInterval: TimeInterval = 2
+
     var onEvent: ((FolderOpenEvent) -> Void)?
 
     private let postRespondQueue: DispatchQueue
     private let quietListProvider: @Sendable () -> [QuietListEntry]
     private let auditLogger = AuditLogger()
     private let ttyNotifier = TTYNotifier()
+    private var ttyDenialThrottle = TTYDenialThrottle(debounceInterval: PostRespondHandler.ttyDenialDebounceInterval)
 
     init(
         quietListProvider: @escaping @Sendable () -> [QuietListEntry],
@@ -28,7 +31,7 @@ final class PostRespondHandler: @unchecked Sendable {
             auditLogger.log(decision, for: fileEvent, ancestors: ancestors, dwellNanoseconds: dwellNanoseconds, operationID: fileEvent.correlationID)
 
             if !allowed {
-                ttyNotifier.writeDenial(path: fileEvent.path, ttyPath: fileEvent.ttyPath)
+                writeTTYDenial(for: fileEvent)
             }
 
             let responsibleProcess = responsibleProcessFacts(of: decision)
@@ -54,6 +57,15 @@ final class PostRespondHandler: @unchecked Sendable {
                 eventID: fileEvent.correlationID
             )
             onEvent?(folderOpenEvent)
+        }
+    }
+
+    private func writeTTYDenial(for fileEvent: FileAuthEvent) {
+        switch ttyDenialThrottle.evaluate(process: fileEvent.processIdentity, path: fileEvent.path, at: Date()) {
+        case .write:
+            ttyNotifier.writeDenial(path: fileEvent.path, ttyPath: fileEvent.ttyPath)
+        case .suppress:
+            return
         }
     }
 
