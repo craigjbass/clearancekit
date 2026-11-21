@@ -102,7 +102,7 @@ struct clearancekitApp: App {
     @StateObject private var xpcClient = XPCClient.shared
 
     var body: some Scene {
-        Window("clearancekit", id: "main") {
+        Window("ClearanceKit", id: "main") {
             ContentView()
                 .background(WindowAccessor(onClose: {
                     hideWindow()
