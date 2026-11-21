@@ -138,8 +138,28 @@ flowchart TB
 ### Prerequisites
 
 - Xcode 26+
-- Apple Developer account with the **Endpoint Security** entitlement approved for your team ID
-- Developer ID provisioning profiles for both `uk.craigbass.clearancekit` and `uk.craigbass.clearancekit.opfilter`
+- Apple Developer account
+
+### Signing identity
+
+To build with your own Apple Developer team, create `Config.local.xcconfig` next to `Config.xcconfig` (git ignores it):
+
+```
+DEVELOPMENT_TEAM = <your team ID>
+PRODUCT_BUNDLE_PREFIX = <your bundle identifier prefix>
+```
+
+The build uses these values for the bundle identifiers, the entitlements, and the XPC and code-signing checks between the app and opfilter. The managed preferences domain stays `uk.craigbass.clearancekit`, so MDM profiles apply to every build.
+
+Debug builds use automatic signing. Xcode creates the development provisioning profiles and adds the capabilities from the entitlements files.
+
+### Release builds
+
+Release builds use manual signing with a Developer ID certificate. They require:
+
+- The **Endpoint Security** entitlement for distribution, approved by Apple for your team ID
+- A Developer ID provisioning profile named `clearancekit Developer ID` for `<bundle prefix>`, with **System Extension** and **App Groups**
+- A Developer ID provisioning profile named `clearancekit opfilter Developer ID` for `<bundle prefix>.opfilter`, with **Endpoint Security** and **App Groups**
 
 ### First run
 
@@ -149,7 +169,7 @@ flowchart TB
 
 ### Attaching the debugger
 
-Use **Debug → Attach to Process by PID or Name** and enter `uk.craigbass.clearancekit.opfilter`. Note that attaching to an ES client can cause watchdog timeouts; `ES_OSLOG_LEVEL=debug` logging is a lower-overhead alternative.
+Use **Debug → Attach to Process by PID or Name** and enter `<bundle prefix>.opfilter` (`uk.craigbass.clearancekit.opfilter` for upstream builds). Note that attaching to an ES client can cause watchdog timeouts; `ES_OSLOG_LEVEL=debug` logging is a lower-overhead alternative.
 
 ## Troubleshooting
 
