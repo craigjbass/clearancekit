@@ -19,6 +19,7 @@ import Security
 protocol EpochRatchetStore: Sendable {
     func epoch(forTable table: String) -> UInt64?
     func setEpoch(_ epoch: UInt64, forTable table: String)
+    func removeAllEpochs()
 }
 
 enum RatchetVerdict: Equatable {
@@ -36,6 +37,10 @@ enum EpochRatchet {
 
     static func setEpoch(_ epoch: UInt64, forTable table: String) {
         store.setEpoch(epoch, forTable: table)
+    }
+
+    static func removeAllEpochs() {
+        store.removeAllEpochs()
     }
 
     /// Pure decision function. A missing keychain epoch is treated as a one-time
@@ -67,6 +72,12 @@ struct InMemoryEpochRatchetStore: EpochRatchetStore {
         storage.lock.lock()
         defer { storage.lock.unlock() }
         storage.values[table] = epoch
+    }
+
+    func removeAllEpochs() {
+        storage.lock.lock()
+        defer { storage.lock.unlock() }
+        storage.values.removeAll()
     }
 }
 
@@ -142,6 +153,15 @@ struct SystemKeychainEpochRatchetStore: EpochRatchetStore {
         if addStatus != errSecSuccess {
             NSLog("EpochRatchet: SecItemAdd failed for %@ (%d)", table, addStatus)
         }
+    }
+
+    func removeAllEpochs() {
+        var query: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrService: Self.service,
+        ]
+        if let kc = Self.systemKeychain { query[kSecMatchSearchList] = [kc] as CFArray }
+        deleteEveryKeychainItem(matching: query, itemDescription: "epoch ratchet")
     }
 
     private static func makeDaemonOnlyAccess() -> SecAccess? {

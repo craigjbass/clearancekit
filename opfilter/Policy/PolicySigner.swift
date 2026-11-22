@@ -114,30 +114,41 @@ enum PolicySigner {
     /// caller has already captured everything they want to re-sign under the
     /// new key.
     static func rotateKey() {
-        var query: [CFString: Any] = [
-            kSecClass:              kSecClassKey,
-            kSecAttrApplicationTag: keyTag,
-            kSecAttrKeyType:        kSecAttrKeyTypeECSECPrimeRandom,
-            kSecAttrKeyClass:       kSecAttrKeyClassPrivate,
-        ]
-        if let kc = systemKeychain { query[kSecUseKeychain] = kc }
-
-        let status = SecItemDelete(query as CFDictionary)
-        switch status {
-        case errSecSuccess:
-            NSLog("PolicySigner: Rotated System Keychain key")
-        case errSecItemNotFound:
-            NSLog("PolicySigner: rotateKey — no existing key")
-        default:
-            NSLog("PolicySigner: SecItemDelete during rotateKey failed (%d)", status)
-        }
+        deleteSigningKeyPair()
     }
 
-    static func aclMigrationVersion() -> Int { readAclMigrationVersion() }
+    static func aclMigrationVersion() -> AclMigrationVersionLookup { readAclMigrationVersion() }
     static func currentAclVersion() -> Int { currentAclMigrationVersion }
     static func recordAclMigrationVersion() {
         for marker in legacyAclMarkers { try? FileManager.default.removeItem(at: marker) }
         writeAclMigrationVersion(currentAclMigrationVersion)
+    }
+
+    /// Deletes both halves of the signing key and the ACL migration version
+    /// counter. Used when the items belong to an opfilter build with a
+    /// different code signature: this build can never sign with that key or
+    /// read that counter, and an update keeps the old item ACL.
+    static func removeKeychainItemsOfAnotherBuild() {
+        deleteSigningKeyPair()
+
+        var versionQuery: [CFString: Any] = [
+            kSecClass:       kSecClassGenericPassword,
+            kSecAttrService: aclVersionService,
+            kSecAttrAccount: aclVersionAccount,
+        ]
+        if let kc = systemKeychain { versionQuery[kSecMatchSearchList] = [kc] as CFArray }
+        deleteEveryKeychainItem(matching: versionQuery, itemDescription: "ACL migration version")
+    }
+
+    /// Deletes the private and the public half of the signing key, including
+    /// public halves that earlier rotations left behind.
+    private static func deleteSigningKeyPair() {
+        var query: [CFString: Any] = [
+            kSecClass:              kSecClassKey,
+            kSecAttrApplicationTag: keyTag,
+        ]
+        if let kc = systemKeychain { query[kSecUseKeychain] = kc }
+        deleteEveryKeychainItem(matching: query, itemDescription: "policy signing key")
     }
 
     private static func loadKey() throws -> SecKey {
@@ -223,7 +234,7 @@ enum PolicySigner {
 
     // MARK: - ACL migration version counter
 
-    private static func readAclMigrationVersion() -> Int {
+    private static func readAclMigrationVersion() -> AclMigrationVersionLookup {
         var query: [CFString: Any] = [
             kSecClass:          kSecClassGenericPassword,
             kSecAttrService:    aclVersionService,
@@ -234,8 +245,24 @@ enum PolicySigner {
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return 0 }
-        return Int(String(data: data, encoding: .utf8) ?? "0") ?? 0
+        switch status {
+        case errSecSuccess:
+            guard let data = item as? Data, let version = Int(String(decoding: data, as: UTF8.self)) else {
+                NSLog("PolicySigner: ACL migration version item has no valid version")
+                return .notRecorded
+            }
+            return .recorded(version)
+        case errSecItemNotFound:
+            return .notRecorded
+        // The legacy System Keychain reports an ACL that does not list the
+        // running code (CSSMERR_CSP_NO_USER_INTERACTION) as one of these.
+        case errSecInteractionNotAllowed, errSecAuthFailed:
+            NSLog("PolicySigner: ACL migration version belongs to another opfilter build (%d)", status)
+            return .ownedByAnotherBuild
+        default:
+            NSLog("PolicySigner: Cannot read ACL migration version (%d)", status)
+            return .unreadable(status)
+        }
     }
 
     private static func writeAclMigrationVersion(_ version: Int) {
@@ -280,6 +307,15 @@ enum PolicySigner {
             NSLog("PolicySigner: SecItemAdd failed for ACL version counter (%d)", addStatus)
         }
     }
+}
+
+// MARK: - AclMigrationVersionLookup
+
+enum AclMigrationVersionLookup: Equatable {
+    case recorded(Int)
+    case notRecorded
+    case ownedByAnotherBuild
+    case unreadable(OSStatus)
 }
 
 // MARK: - PolicySignerError
