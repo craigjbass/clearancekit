@@ -34,6 +34,11 @@ private let mailSandboxSignatures: [ProcessSignature] = [
     apple("com.apple.syncdefaultsd"),
 ]
 
+private let mailQuickLookSignatures: [ProcessSignature] = [
+    apple("com.apple.quicklook.ThumbnailsAgent"),
+    apple("com.apple.quicklook.thumbnail.ImageExtension"),
+]
+
 let mailPreset = AppPreset(
     id: "mail-data-protection",
     appName: "Mail",
@@ -48,7 +53,7 @@ let mailPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000002")!,
             protectedPathPrefix: "/Users/*/Library/Containers/com.apple.mail",
-            allowedSignatures: mailCoreSignatures + mailSandboxSignatures
+            allowedSignatures: mailCoreSignatures + mailSandboxSignatures + mailQuickLookSignatures
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000003")!,
