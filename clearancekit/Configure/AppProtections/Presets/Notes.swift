@@ -24,6 +24,7 @@ let notesPreset = AppPreset(
                 apple("com.apple.LinkedNotesUIService"),
                 apple("com.apple.accountsd"),
                 apple("com.apple.PaperKit.extension.ui"),
+                apple("com.apple.photolibraryd"),
             ]
         ),
     ]
