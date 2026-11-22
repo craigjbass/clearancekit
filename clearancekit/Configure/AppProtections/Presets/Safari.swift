@@ -30,6 +30,7 @@ let safariPreset = AppPreset(
                 apple("com.apple.UserEventAgent"),
                 apple("com.apple.SafariNotificationAgent"),
                 apple("com.apple.Passwords"),
+                apple("com.apple.Passwords.MenuBarExtra"),
                 apple("com.apple.Safari.SafariWidgetExtension"),
             ]
         ),
@@ -38,6 +39,7 @@ let safariPreset = AppPreset(
             protectedPathPrefix: "/Users/*/Library/Containers/com.apple.Safari",
             allowedSignatures: safariSignatures + [
                 apple("com.apple.Passwords"),
+                apple("com.apple.Passwords.MenuBarExtra"),
                 apple("com.apple.quicklook.ThumbnailsAgent"),
                 apple("com.apple.quicklook.thumbnail.TextExtension"),
                 apple("com.apple.SafariServices"),
