@@ -257,24 +257,54 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
 public class SignatureIssueNotification: NSObject, NSSecureCoding {
     public static var supportsSecureCoding: Bool { true }
 
+    // Each field holds the JSON of one suspect table. A nil field means the
+    // table verified.
     @objc public let suspectRulesData: NSData?
     @objc public let suspectAllowlistData: NSData?
+    @objc public let suspectAncestorAllowlistData: NSData?
+    @objc public let suspectQuietListData: NSData?
+    @objc public let suspectJailRulesData: NSData?
+    @objc public let suspectFeatureFlagsData: NSData?
+    @objc public let suspectBundleUpdaterSignaturesData: NSData?
 
-    public init(suspectRulesData: NSData?, suspectAllowlistData: NSData?) {
+    public init(
+        suspectRulesData: NSData?,
+        suspectAllowlistData: NSData?,
+        suspectAncestorAllowlistData: NSData?,
+        suspectQuietListData: NSData?,
+        suspectJailRulesData: NSData?,
+        suspectFeatureFlagsData: NSData?,
+        suspectBundleUpdaterSignaturesData: NSData?
+    ) {
         self.suspectRulesData = suspectRulesData
         self.suspectAllowlistData = suspectAllowlistData
+        self.suspectAncestorAllowlistData = suspectAncestorAllowlistData
+        self.suspectQuietListData = suspectQuietListData
+        self.suspectJailRulesData = suspectJailRulesData
+        self.suspectFeatureFlagsData = suspectFeatureFlagsData
+        self.suspectBundleUpdaterSignaturesData = suspectBundleUpdaterSignaturesData
         super.init()
     }
 
     public required init?(coder: NSCoder) {
         self.suspectRulesData = coder.decodeObject(of: NSData.self, forKey: "suspectRulesData")
         self.suspectAllowlistData = coder.decodeObject(of: NSData.self, forKey: "suspectAllowlistData")
+        self.suspectAncestorAllowlistData = coder.decodeObject(of: NSData.self, forKey: "suspectAncestorAllowlistData")
+        self.suspectQuietListData = coder.decodeObject(of: NSData.self, forKey: "suspectQuietListData")
+        self.suspectJailRulesData = coder.decodeObject(of: NSData.self, forKey: "suspectJailRulesData")
+        self.suspectFeatureFlagsData = coder.decodeObject(of: NSData.self, forKey: "suspectFeatureFlagsData")
+        self.suspectBundleUpdaterSignaturesData = coder.decodeObject(of: NSData.self, forKey: "suspectBundleUpdaterSignaturesData")
         super.init()
     }
 
     public func encode(with coder: NSCoder) {
         coder.encode(suspectRulesData, forKey: "suspectRulesData")
         coder.encode(suspectAllowlistData, forKey: "suspectAllowlistData")
+        coder.encode(suspectAncestorAllowlistData, forKey: "suspectAncestorAllowlistData")
+        coder.encode(suspectQuietListData, forKey: "suspectQuietListData")
+        coder.encode(suspectJailRulesData, forKey: "suspectJailRulesData")
+        coder.encode(suspectFeatureFlagsData, forKey: "suspectFeatureFlagsData")
+        coder.encode(suspectBundleUpdaterSignaturesData, forKey: "suspectBundleUpdaterSignaturesData")
     }
 }
 

@@ -399,11 +399,25 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func resolveSignatureIssue(approved: Bool) {
         guard let context else { return }
-        context.policyRepository.resolveSignatureIssue(approved: approved)
+        let repository = context.policyRepository
+        repository.resolveSignatureIssue(approved: approved)
         applyPolicyToFilter()
+        applyJailRulesToFilter()
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
-        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(repository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(repository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(repository.encodedUserAncestorAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.quietListUpdated(repository.encodedUserQuietList()) }
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(repository.encodedUserJailRules()) }
+        broadcaster.broadcastToAllClients { $0.bundleUpdaterSignaturesUpdated(repository.encodedBundleUpdaterSignatures()) }
+        let mcpEnabled = repository.mcpEnabled
+        let bundleProtectionEnabled = repository.bundleProtectionEnabled
+        let advancedModeEnabled = repository.advancedModeEnabled
+        let mcpConnectionAuthenticationRequired = repository.mcpConnectionAuthenticationRequired
+        broadcaster.broadcastToAllClients { $0.mcpEnabledUpdated(mcpEnabled) }
+        broadcaster.broadcastToAllClients { $0.bundleProtectionEnabledUpdated(bundleProtectionEnabled) }
+        broadcaster.broadcastToAllClients { $0.advancedModeEnabledUpdated(advancedModeEnabled) }
+        broadcaster.broadcastToAllClients { $0.mcpConnectionAuthenticationRequiredUpdated(mcpConnectionAuthenticationRequired) }
     }
 
     // MARK: - Resync

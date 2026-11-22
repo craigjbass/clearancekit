@@ -40,7 +40,54 @@ protocol PolicyDatabaseProtocol: AnyObject {
 // MARK: - PolicyRepository
 
 final class PolicyRepository: @unchecked Sendable {
+    /// Tables whose signature failed to verify, held back until the user
+    /// approves or clears them. A nil table verified; an empty table is
+    /// suspect and has no rows, and still needs a new signature.
+    private struct SuspectTables {
+        var userRules: [FAARule]?
+        var userAllowlist: [AllowlistEntry]?
+        var userAncestorAllowlist: [AncestorAllowlistEntry]?
+        var userQuietList: [QuietListEntry]?
+        var userJailRules: [JailRule]?
+        var featureFlags: [FeatureFlag]?
+        var bundleUpdaterSignatures: [BundleUpdaterSignature]?
+
+        var isEmpty: Bool {
+            userRules == nil
+                && userAllowlist == nil
+                && userAncestorAllowlist == nil
+                && userQuietList == nil
+                && userJailRules == nil
+                && featureFlags == nil
+                && bundleUpdaterSignatures == nil
+        }
+
+        /// The content that replaces each suspect table when the user
+        /// clears the database: no rows, and protective feature flags.
+        func cleared() -> SuspectTables {
+            SuspectTables(
+                userRules: userRules.map { _ in [] },
+                userAllowlist: userAllowlist.map { _ in [] },
+                userAncestorAllowlist: userAncestorAllowlist.map { _ in [] },
+                userQuietList: userQuietList.map { _ in [] },
+                userJailRules: userJailRules.map { _ in [] },
+                featureFlags: featureFlags.map { _ in State.protectiveFeatureFlags },
+                bundleUpdaterSignatures: bundleUpdaterSignatures.map { _ in [] }
+            )
+        }
+    }
+
     private struct State {
+        /// Used while the stored feature flags are suspect: MCP server off,
+        /// bundle protection on, advanced mode off, and authentication
+        /// required for each MCP connection.
+        static let protectiveFeatureFlags = [
+            FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false),
+            FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: true),
+            FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: false),
+            FeatureFlag(id: FeatureFlagID.mcpConnectionAuthenticationRequired, name: "mcp_connection_authentication_required", enabled: true),
+        ]
+
         var managedRules: [FAARule] = []
         var userRules: [FAARule] = []
         var xprotectEntries: [AllowlistEntry] = []
@@ -52,14 +99,24 @@ final class PolicyRepository: @unchecked Sendable {
         var userQuietList: [QuietListEntry] = []
         var managedJailRules: [JailRule] = []
         var userJailRules: [JailRule] = []
-        var pendingSuspectUserRules: [FAARule]?
-        var pendingSuspectUserAllowlist: [AllowlistEntry]?
+        var pendingSuspectTables = SuspectTables()
         var featureFlags: [FeatureFlag] = []
         var mcpEnabled: Bool = false
         var bundleProtectionEnabled: Bool = true
         var advancedModeEnabled: Bool = false
         var mcpConnectionAuthenticationRequired: Bool = true
         var bundleUpdaterSignatures: [BundleUpdaterSignature] = []
+
+        mutating func adoptFeatureFlags(_ flags: [FeatureFlag]) {
+            featureFlags = flags
+            mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
+            bundleProtectionEnabled = flags.first(where: { $0.id == FeatureFlagID.bundleProtectionEnabled })?.enabled ?? true
+            advancedModeEnabled = flags.first(where: { $0.id == FeatureFlagID.advancedModeEnabled })?.enabled ?? false
+            // No migration seeds this row: inserting a row changes the signed
+            // content of an existing feature_flags table. A missing row means
+            // authentication is required, and the first save adds the row.
+            mcpConnectionAuthenticationRequired = flags.first(where: { $0.id == FeatureFlagID.mcpConnectionAuthenticationRequired })?.enabled ?? true
+        }
     }
 
     private let storage: OSAllocatedUnfairLock<State>
@@ -80,11 +137,14 @@ final class PolicyRepository: @unchecked Sendable {
         initialState.managedJailRules = managedJailRules
         initialState.xprotectEntries = xprotectEntries
 
+        // A suspect table stays inactive until the user approves it in the
+        // GUI. Ancestor allowlist entries bypass all policy rules, so they
+        // must never become active without that approval.
         switch database.loadUserRulesResult() {
         case .ok(let rules):
             initialState.userRules = rules
         case .suspect(let rules):
-            initialState.pendingSuspectUserRules = rules
+            initialState.pendingSuspectTables.userRules = rules
             logger.warning("PolicyRepository: Signature issue for user_rules — awaiting GUI resolution")
         }
 
@@ -92,7 +152,7 @@ final class PolicyRepository: @unchecked Sendable {
         case .ok(let entries):
             initialState.userAllowlist = entries
         case .suspect(let entries):
-            initialState.pendingSuspectUserAllowlist = entries
+            initialState.pendingSuspectTables.userAllowlist = entries
             logger.warning("PolicyRepository: Signature issue for user_allowlist — awaiting GUI resolution")
         }
 
@@ -100,60 +160,41 @@ final class PolicyRepository: @unchecked Sendable {
         case .ok(let entries):
             initialState.userAncestorAllowlist = entries
         case .suspect(let entries):
-            // Ancestor allowlist entries bypass all policy rules, so tampering is
-            // high impact. Silently discard and log — the user will notice that their
-            // ancestor entries are gone and can re-add them after investigating.
-            logger.warning("PolicyRepository: Signature issue for user_ancestor_allowlist — discarding \(entries.count) suspect entry/entries")
+            initialState.pendingSuspectTables.userAncestorAllowlist = entries
+            logger.warning("PolicyRepository: Signature issue for user_ancestor_allowlist — awaiting GUI resolution")
         }
 
         switch database.loadUserQuietListResult() {
         case .ok(let entries):
             initialState.userQuietList = entries
         case .suspect(let entries):
-            logger.warning("PolicyRepository: Signature issue for user_quiet_list — discarding \(entries.count) suspect entry/entries")
+            initialState.pendingSuspectTables.userQuietList = entries
+            logger.warning("PolicyRepository: Signature issue for user_quiet_list — awaiting GUI resolution")
         }
 
         switch database.loadUserJailRulesResult() {
         case .ok(let rules):
             initialState.userJailRules = rules
         case .suspect(let rules):
-            logger.warning("PolicyRepository: Signature issue for user_jail_rules — discarding \(rules.count) suspect rule(s)")
+            initialState.pendingSuspectTables.userJailRules = rules
+            logger.warning("PolicyRepository: Signature issue for user_jail_rules — awaiting GUI resolution")
         }
 
         switch database.loadFeatureFlagsResult() {
         case .ok(let flags):
-            initialState.featureFlags = flags
-            initialState.mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
-            initialState.bundleProtectionEnabled = flags.first(where: { $0.id == FeatureFlagID.bundleProtectionEnabled })?.enabled ?? true
-            initialState.advancedModeEnabled = flags.first(where: { $0.id == FeatureFlagID.advancedModeEnabled })?.enabled ?? false
-            // No migration seeds this row: inserting a row changes the signed
-            // content of an existing feature_flags table. A missing row means
-            // authentication is required, and the first save adds the row.
-            initialState.mcpConnectionAuthenticationRequired = flags.first(where: { $0.id == FeatureFlagID.mcpConnectionAuthenticationRequired })?.enabled ?? true
-        case .suspect:
-            // Signature failure on feature flags: disable MCP (safe default),
-            // keep bundle protection ON (kill-switch should default to maximum
-            // protection if the row is missing or tampered with), turn
-            // advanced mode OFF (matches first-launch default), and require
-            // authentication for each MCP connection.
-            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled, disabling advanced mode, requiring MCP connection authentication")
-            initialState.featureFlags = [
-                FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false),
-                FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: true),
-                FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: false),
-                FeatureFlag(id: FeatureFlagID.mcpConnectionAuthenticationRequired, name: "mcp_connection_authentication_required", enabled: true),
-            ]
-            initialState.mcpEnabled = false
-            initialState.bundleProtectionEnabled = true
-            initialState.advancedModeEnabled = false
-            initialState.mcpConnectionAuthenticationRequired = true
+            initialState.adoptFeatureFlags(flags)
+        case .suspect(let flags):
+            initialState.pendingSuspectTables.featureFlags = flags
+            initialState.adoptFeatureFlags(State.protectiveFeatureFlags)
+            logger.warning("PolicyRepository: Signature issue for feature_flags — using protective flags, awaiting GUI resolution")
         }
 
         switch database.loadBundleUpdaterSignaturesResult() {
         case .ok(let signatures):
             initialState.bundleUpdaterSignatures = signatures
         case .suspect(let signatures):
-            logger.warning("PolicyRepository: Signature issue for bundle_updater_signatures — discarding \(signatures.count) suspect signature(s)")
+            initialState.pendingSuspectTables.bundleUpdaterSignatures = signatures
+            logger.warning("PolicyRepository: Signature issue for bundle_updater_signatures — awaiting GUI resolution")
         }
 
         self.storage = OSAllocatedUnfairLock(initialState: initialState)
@@ -424,36 +465,55 @@ final class PolicyRepository: @unchecked Sendable {
     // MARK: - Signature issue
 
     var hasPendingSignatureIssue: Bool {
-        storage.withLock { $0.pendingSuspectUserRules != nil || $0.pendingSuspectUserAllowlist != nil }
+        storage.withLock { !$0.pendingSuspectTables.isEmpty }
     }
 
     func pendingSignatureIssueNotification() -> SignatureIssueNotification? {
-        storage.withLock { state -> SignatureIssueNotification? in
-            guard state.pendingSuspectUserRules != nil || state.pendingSuspectUserAllowlist != nil else { return nil }
-            guard let rulesData = try? JSONEncoder().encode(state.pendingSuspectUserRules ?? []),
-                  let allowlistData = try? JSONEncoder().encode(state.pendingSuspectUserAllowlist ?? []) else {
-                logger.fault("PolicyRepository: Failed to encode suspect data for signature issue notification")
-                return nil
-            }
-            return SignatureIssueNotification(
-                suspectRulesData: rulesData as NSData,
-                suspectAllowlistData: allowlistData as NSData
-            )
-        }
+        let suspect = storage.withLock { $0.pendingSuspectTables }
+        guard !suspect.isEmpty else { return nil }
+        return SignatureIssueNotification(
+            suspectRulesData: encodedSuspectTable(suspect.userRules),
+            suspectAllowlistData: encodedSuspectTable(suspect.userAllowlist),
+            suspectAncestorAllowlistData: encodedSuspectTable(suspect.userAncestorAllowlist),
+            suspectQuietListData: encodedSuspectTable(suspect.userQuietList),
+            suspectJailRulesData: encodedSuspectTable(suspect.userJailRules),
+            suspectFeatureFlagsData: encodedSuspectTable(suspect.featureFlags),
+            suspectBundleUpdaterSignaturesData: encodedSuspectTable(suspect.bundleUpdaterSignatures)
+        )
     }
 
+    /// Approve activates every suspect table and signs it with the current
+    /// key. Reject replaces every suspect table with its cleared content and
+    /// signs that. Tables that verified are not changed.
     func resolveSignatureIssue(approved: Bool) {
-        let (rules, allowlist): ([FAARule], [AllowlistEntry]) = storage.withLock { state in
-            let rules = approved ? (state.pendingSuspectUserRules ?? []) : []
-            let allowlist = approved ? (state.pendingSuspectUserAllowlist ?? []) : []
-            state.pendingSuspectUserRules = nil
-            state.pendingSuspectUserAllowlist = nil
-            state.userRules = rules
-            state.userAllowlist = allowlist
-            return (rules, allowlist)
+        let resolved = storage.withLock { state -> SuspectTables in
+            let suspect = state.pendingSuspectTables
+            state.pendingSuspectTables = SuspectTables()
+            let resolved = approved ? suspect : suspect.cleared()
+            if let rules = resolved.userRules { state.userRules = rules }
+            if let entries = resolved.userAllowlist { state.userAllowlist = entries }
+            if let entries = resolved.userAncestorAllowlist { state.userAncestorAllowlist = entries }
+            if let entries = resolved.userQuietList { state.userQuietList = entries }
+            if let rules = resolved.userJailRules { state.userJailRules = rules }
+            if let flags = resolved.featureFlags { state.adoptFeatureFlags(flags) }
+            if let signatures = resolved.bundleUpdaterSignatures { state.bundleUpdaterSignatures = signatures }
+            return resolved
         }
-        database.saveUserRules(rules)
-        database.saveUserAllowlist(allowlist)
+        if let rules = resolved.userRules { database.saveUserRules(rules) }
+        if let entries = resolved.userAllowlist { database.saveUserAllowlist(entries) }
+        if let entries = resolved.userAncestorAllowlist { database.saveUserAncestorAllowlist(entries) }
+        if let entries = resolved.userQuietList { database.saveUserQuietList(entries) }
+        if let rules = resolved.userJailRules { database.saveUserJailRules(rules) }
+        if let flags = resolved.featureFlags { database.saveFeatureFlags(flags) }
+        if let signatures = resolved.bundleUpdaterSignatures { database.saveBundleUpdaterSignatures(signatures) }
+    }
+
+    private func encodedSuspectTable<Element: Encodable>(_ table: [Element]?) -> NSData? {
+        guard let table else { return nil }
+        guard let data = try? JSONEncoder().encode(table) else {
+            fatalError("PolicyRepository: Failed to encode suspect \(Element.self) table — this is a bug")
+        }
+        return data as NSData
     }
 
     // MARK: - Encoded views for broadcasting

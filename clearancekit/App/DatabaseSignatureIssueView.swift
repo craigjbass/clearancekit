@@ -23,7 +23,7 @@ struct DatabaseSignatureIssueView: View {
         }
         .frame(width: 600, height: 480)
         .confirmationDialog(
-            "Clear all user rules and allowlist entries?",
+            "Clear all suspect data?",
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
@@ -32,7 +32,7 @@ struct DatabaseSignatureIssueView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("All user-configured rules and allowlist entries will be permanently deleted and cannot be recovered.")
+            Text("All suspect rules, allowlist entries, quiet list entries, jail rules and updater signatures will be permanently deleted and cannot be recovered. Suspect settings return to their protective defaults.")
         }
         .alert("Authentication Failed", isPresented: Binding(
             get: { authError != nil },
@@ -57,7 +57,7 @@ struct DatabaseSignatureIssueView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Database Signature Issue Detected")
                     .font(.headline)
-                Text("The stored data cannot be cryptographically verified and may have been tampered with. Review the policies below that would become active if you approve, then authenticate to sign them — or clear the database to discard all suspect data.")
+                Text("The stored data cannot be cryptographically verified and may have been tampered with. Review everything below that would become active if you approve, then authenticate to sign it — or clear the database to discard all suspect data.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -71,10 +71,10 @@ struct DatabaseSignatureIssueView: View {
 
     @ViewBuilder
     private var suspectDataList: some View {
-        if issue.suspectRules.isEmpty && issue.suspectAllowlist.isEmpty {
+        if issue.hasNoSuspectEntries {
             VStack {
                 Spacer()
-                Text("No policies or allowlist entries found in the suspect data.")
+                Text("No rules, allowlist entries or settings found in the suspect data.")
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -91,8 +91,70 @@ struct DatabaseSignatureIssueView: View {
                 if !issue.suspectAllowlist.isEmpty {
                     Section("Suspect Allowlist Entries (\(issue.suspectAllowlist.count))") {
                         ForEach(issue.suspectAllowlist) { entry in
-                            SuspectAllowlistEntryRow(entry: entry)
+                            SuspectProcessEntryRow(
+                                signingID: entry.signingID,
+                                processPath: entry.processPath,
+                                platformBinary: entry.platformBinary,
+                                teamID: entry.teamID
+                            )
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+                if !issue.suspectAncestorAllowlist.isEmpty {
+                    Section("Suspect Ancestor Allowlist Entries (\(issue.suspectAncestorAllowlist.count))") {
+                        ForEach(issue.suspectAncestorAllowlist) { entry in
+                            SuspectProcessEntryRow(
+                                signingID: entry.signingID,
+                                processPath: entry.processPath,
+                                platformBinary: entry.platformBinary,
+                                teamID: entry.teamID
+                            )
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+                if !issue.suspectQuietList.isEmpty {
+                    Section("Suspect Quiet List Entries (\(issue.suspectQuietList.count))") {
+                        ForEach(issue.suspectQuietList) { entry in
+                            SuspectProcessEntryRow(
+                                signingID: entry.signingID,
+                                processPath: entry.processPath,
+                                platformBinary: entry.platformBinary,
+                                teamID: entry.teamID
+                            )
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+                if !issue.suspectJailRules.isEmpty {
+                    Section("Suspect Jail Rules (\(issue.suspectJailRules.count))") {
+                        ForEach(issue.suspectJailRules) { rule in
+                            SuspectJailRuleRow(rule: rule)
                                 .padding(.vertical, 4)
+                        }
+                    }
+                }
+                if !issue.suspectBundleUpdaterSignatures.isEmpty {
+                    Section("Suspect Updater Signatures (\(issue.suspectBundleUpdaterSignatures.count))") {
+                        ForEach(issue.suspectBundleUpdaterSignatures) { signature in
+                            Text("\(signature.teamID):\(signature.signingID)")
+                                .font(.system(.body, design: .monospaced))
+                                .padding(.vertical, 4)
+                        }
+                    }
+                }
+                if !issue.suspectFeatureFlags.isEmpty {
+                    Section("Suspect Settings (\(issue.suspectFeatureFlags.count))") {
+                        ForEach(issue.suspectFeatureFlags, id: \.id) { flag in
+                            HStack {
+                                Text(flag.name)
+                                    .font(.system(.body, design: .monospaced))
+                                Spacer()
+                                Text(flag.enabled ? "On" : "Off")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -170,28 +232,56 @@ private struct SuspectRuleRow: View {
     }
 }
 
-// MARK: - SuspectAllowlistEntryRow
+// MARK: - SuspectJailRuleRow
 
-private struct SuspectAllowlistEntryRow: View {
-    let entry: AllowlistEntry
+private struct SuspectJailRuleRow: View {
+    let rule: JailRule
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(rule.name)
+                .fontWeight(.semibold)
+            Text(rule.jailedSignature.description)
+                .font(.system(.caption, design: .monospaced))
+            if !rule.allowedPathPrefixes.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Allowed path prefixes")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(rule.allowedPathPrefixes, id: \.self) { prefix in
+                        Text(prefix)
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - SuspectProcessEntryRow
+
+private struct SuspectProcessEntryRow: View {
+    let signingID: String
+    let processPath: String
+    let platformBinary: Bool
+    let teamID: String
 
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                let identifier = entry.signingID.isEmpty ? entry.processPath : entry.signingID
-                Text(identifier)
+                Text(signingID.isEmpty ? processPath : signingID)
                     .font(.system(.body, design: .monospaced))
-                if !entry.signingID.isEmpty && !entry.processPath.isEmpty {
-                    Text(entry.processPath)
+                if !signingID.isEmpty && !processPath.isEmpty {
+                    Text(processPath)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            if entry.platformBinary {
+            if platformBinary {
                 badge("apple")
-            } else if !entry.teamID.isEmpty {
-                badge(entry.teamID)
+            } else if !teamID.isEmpty {
+                badge(teamID)
             }
         }
     }
