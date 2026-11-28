@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSSystemExtensionUsageDescription</key>
-	<string>SYSTEM_EXTENSION_USAGE_DESCRIPTION</string>
+	<string>ClearanceKit uses this extension to monitor file access and enforce your file access policies, so that only the apps you allow can read or change protected files.</string>
 	<key>NSEndpointSecurityMachServiceName</key>
 	<string>$(PRODUCT_BUNDLE_PREFIX).opfilter</string>
 	<key>NSExtension</key>

@@ -296,7 +296,7 @@ struct SetupView: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
                 Text("1. Activate the system extension")
-                Text("2. Grant Full Disk Access to 'opfilter', which is part of clearancekit")
+                Text("2. Grant Full Disk Access to 'ClearanceKit Endpoint Security Extension'")
             }
             .font(.callout)
         }
@@ -308,7 +308,7 @@ struct SetupView: View {
         HStack {
             Text("Full Disk Access:")
                 .font(.headline)
-            Text("Required for opfilter to monitor file access")
+            Text("Required for ClearanceKit to monitor file access")
                 .foregroundStyle(.secondary)
             Spacer()
             Button("Open Privacy & Security") {
