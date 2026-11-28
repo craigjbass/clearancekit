@@ -172,6 +172,12 @@ final class XPCServer: NSObject, @unchecked Sendable {
         broadcaster.broadcastToAllClients { $0.advancedModeEnabledUpdated(enabled) }
     }
 
+    fileprivate func setMCPConnectionAuthenticationRequired(_ required: Bool) {
+        guard let context else { return }
+        context.policyRepository.setMCPConnectionAuthenticationRequired(required)
+        broadcaster.broadcastToAllClients { $0.mcpConnectionAuthenticationRequiredUpdated(required) }
+    }
+
     // MARK: - Filter application
 
     func applyPolicyToFilter() {
@@ -393,11 +399,25 @@ final class XPCServer: NSObject, @unchecked Sendable {
 
     fileprivate func resolveSignatureIssue(approved: Bool) {
         guard let context else { return }
-        context.policyRepository.resolveSignatureIssue(approved: approved)
+        let repository = context.policyRepository
+        repository.resolveSignatureIssue(approved: approved)
         applyPolicyToFilter()
+        applyJailRulesToFilter()
         applyAllowlistToFilter()
-        broadcaster.broadcastToAllClients { $0.userRulesUpdated(context.policyRepository.encodedUserRules()) }
-        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(context.policyRepository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userRulesUpdated(repository.encodedUserRules()) }
+        broadcaster.broadcastToAllClients { $0.userAllowlistUpdated(repository.encodedUserAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.userAncestorAllowlistUpdated(repository.encodedUserAncestorAllowlist()) }
+        broadcaster.broadcastToAllClients { $0.quietListUpdated(repository.encodedUserQuietList()) }
+        broadcaster.broadcastToAllClients { $0.userJailRulesUpdated(repository.encodedUserJailRules()) }
+        broadcaster.broadcastToAllClients { $0.bundleUpdaterSignaturesUpdated(repository.encodedBundleUpdaterSignatures()) }
+        let mcpEnabled = repository.mcpEnabled
+        let bundleProtectionEnabled = repository.bundleProtectionEnabled
+        let advancedModeEnabled = repository.advancedModeEnabled
+        let mcpConnectionAuthenticationRequired = repository.mcpConnectionAuthenticationRequired
+        broadcaster.broadcastToAllClients { $0.mcpEnabledUpdated(mcpEnabled) }
+        broadcaster.broadcastToAllClients { $0.bundleProtectionEnabledUpdated(bundleProtectionEnabled) }
+        broadcaster.broadcastToAllClients { $0.advancedModeEnabledUpdated(advancedModeEnabled) }
+        broadcaster.broadcastToAllClients { $0.mcpConnectionAuthenticationRequiredUpdated(mcpConnectionAuthenticationRequired) }
     }
 
     // MARK: - Resync
@@ -446,6 +466,7 @@ final class XPCServer: NSObject, @unchecked Sendable {
         proxy.mcpEnabledUpdated(context.policyRepository.mcpEnabled)
         proxy.bundleProtectionEnabledUpdated(context.policyRepository.bundleProtectionEnabled)
         proxy.advancedModeEnabledUpdated(context.policyRepository.advancedModeEnabled)
+        proxy.mcpConnectionAuthenticationRequiredUpdated(context.policyRepository.mcpConnectionAuthenticationRequired)
         proxy.bundleUpdaterSignaturesUpdated(context.policyRepository.encodedBundleUpdaterSignatures())
         proxy.serviceReady(true)
     }
@@ -867,6 +888,14 @@ private final class ConnectionHandler: NSObject, ServiceProtocol {
         guard let server else { reply(false); return }
         server.serverQueue.async {
             server.setAdvancedModeEnabled(enabled)
+            reply(true)
+        }
+    }
+
+    func setMCPConnectionAuthenticationRequired(_ required: Bool, withReply reply: @escaping (Bool) -> Void) {
+        guard let server else { reply(false); return }
+        server.serverQueue.async {
+            server.setMCPConnectionAuthenticationRequired(required)
             reply(true)
         }
     }

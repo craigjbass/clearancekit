@@ -14,4 +14,5 @@ enum FeatureFlagID {
     static let mcpServerEnabled = UUID(uuidString: "F1A90000-0001-0001-0001-000000000001")!
     static let bundleProtectionEnabled = UUID(uuidString: "F7E505BC-C1F8-480E-8679-B5E4B6EA52B4")!
     static let advancedModeEnabled = UUID(uuidString: "5E50BF67-494F-4A8F-AF3F-46F9626EA323")!
+    static let mcpConnectionAuthenticationRequired = UUID(uuidString: "6AA963AE-ECB4-4D9D-8663-1D05DA9C2F21")!
 }

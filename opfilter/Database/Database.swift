@@ -650,8 +650,31 @@ final class Database {
     /// signatures don't verify under the old key are left alone — they'll
     /// enter the existing `.suspect` flow on next load.
     private func migrateAclIfNeeded() {
-        guard PolicySigner.aclMigrationVersion() < PolicySigner.currentAclVersion() else { return }
+        switch PolicySigner.aclMigrationVersion() {
+        case .recorded(let version) where version >= PolicySigner.currentAclVersion():
+            return
+        case .recorded, .notRecorded:
+            rotateKeyKeepingVerifiableTables()
+        case .ownedByAnotherBuild:
+            takeOverKeychainItemsFromAnotherBuild()
+        case .unreadable(let status):
+            NSLog("Database: Cannot read ACL migration version (%d) — leaving the signing key unchanged", status)
+        }
+    }
 
+    /// The keychain items belong to an opfilter build with a different code
+    /// signature. Replaces them with items this build owns. The signed tables
+    /// are not re-signed: they load as suspect one time, and the user approves
+    /// them in the GUI, which signs them with the new key.
+    private func takeOverKeychainItemsFromAnotherBuild() {
+        NSLog("Database: Keychain items belong to another opfilter build — replacing them")
+        PolicySigner.removeKeychainItemsOfAnotherBuild()
+        EpochRatchet.removeAllEpochs()
+        _ = try? PolicySigner.loadOrCreateKey()
+        PolicySigner.recordAclMigrationVersion()
+    }
+
+    private func rotateKeyKeepingVerifiableTables() {
         let captured = captureAllVerifiableTableContent()
 
         PolicySigner.rotateKey()

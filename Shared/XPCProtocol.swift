@@ -257,24 +257,54 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
 public class SignatureIssueNotification: NSObject, NSSecureCoding {
     public static var supportsSecureCoding: Bool { true }
 
+    // Each field holds the JSON of one suspect table. A nil field means the
+    // table verified.
     @objc public let suspectRulesData: NSData?
     @objc public let suspectAllowlistData: NSData?
+    @objc public let suspectAncestorAllowlistData: NSData?
+    @objc public let suspectQuietListData: NSData?
+    @objc public let suspectJailRulesData: NSData?
+    @objc public let suspectFeatureFlagsData: NSData?
+    @objc public let suspectBundleUpdaterSignaturesData: NSData?
 
-    public init(suspectRulesData: NSData?, suspectAllowlistData: NSData?) {
+    public init(
+        suspectRulesData: NSData?,
+        suspectAllowlistData: NSData?,
+        suspectAncestorAllowlistData: NSData?,
+        suspectQuietListData: NSData?,
+        suspectJailRulesData: NSData?,
+        suspectFeatureFlagsData: NSData?,
+        suspectBundleUpdaterSignaturesData: NSData?
+    ) {
         self.suspectRulesData = suspectRulesData
         self.suspectAllowlistData = suspectAllowlistData
+        self.suspectAncestorAllowlistData = suspectAncestorAllowlistData
+        self.suspectQuietListData = suspectQuietListData
+        self.suspectJailRulesData = suspectJailRulesData
+        self.suspectFeatureFlagsData = suspectFeatureFlagsData
+        self.suspectBundleUpdaterSignaturesData = suspectBundleUpdaterSignaturesData
         super.init()
     }
 
     public required init?(coder: NSCoder) {
         self.suspectRulesData = coder.decodeObject(of: NSData.self, forKey: "suspectRulesData")
         self.suspectAllowlistData = coder.decodeObject(of: NSData.self, forKey: "suspectAllowlistData")
+        self.suspectAncestorAllowlistData = coder.decodeObject(of: NSData.self, forKey: "suspectAncestorAllowlistData")
+        self.suspectQuietListData = coder.decodeObject(of: NSData.self, forKey: "suspectQuietListData")
+        self.suspectJailRulesData = coder.decodeObject(of: NSData.self, forKey: "suspectJailRulesData")
+        self.suspectFeatureFlagsData = coder.decodeObject(of: NSData.self, forKey: "suspectFeatureFlagsData")
+        self.suspectBundleUpdaterSignaturesData = coder.decodeObject(of: NSData.self, forKey: "suspectBundleUpdaterSignaturesData")
         super.init()
     }
 
     public func encode(with coder: NSCoder) {
         coder.encode(suspectRulesData, forKey: "suspectRulesData")
         coder.encode(suspectAllowlistData, forKey: "suspectAllowlistData")
+        coder.encode(suspectAncestorAllowlistData, forKey: "suspectAncestorAllowlistData")
+        coder.encode(suspectQuietListData, forKey: "suspectQuietListData")
+        coder.encode(suspectJailRulesData, forKey: "suspectJailRulesData")
+        coder.encode(suspectFeatureFlagsData, forKey: "suspectFeatureFlagsData")
+        coder.encode(suspectBundleUpdaterSignaturesData, forKey: "suspectBundleUpdaterSignaturesData")
     }
 }
 
@@ -438,6 +468,12 @@ public protocol ServiceProtocol {
     // the GUI hides power-user sidebar entries. Defaults to disabled.
     func setAdvancedModeEnabled(_ enabled: Bool, withReply reply: @escaping (Bool) -> Void)
 
+    // MCP per-connection authentication toggle. Persisted in the feature_flags
+    // table with tamper-resistant signature. When off, the GUI accepts MCP
+    // connections without a Touch ID prompt. On signature failure or a missing
+    // row the flag defaults to required so the check fails closed.
+    func setMCPConnectionAuthenticationRequired(_ required: Bool, withReply reply: @escaping (Bool) -> Void)
+
     // Returns a snapshot of recent tamper attempt events.
     func fetchRecentTamperEvents(withReply reply: @escaping ([TamperAttemptEvent]) -> Void)
 
@@ -475,6 +511,10 @@ public protocol ClientProtocol {
     // Opfilter pushes the current advanced-mode feature flag on connect and
     // whenever it changes. The GUI uses this to show/hide power-user sidebar items.
     func advancedModeEnabledUpdated(_ enabled: Bool)
+    // Opfilter pushes the current MCP connection-authentication feature flag on
+    // connect and whenever it changes. The GUI MCP server reads it on each
+    // initialize to decide whether to prompt for authentication.
+    func mcpConnectionAuthenticationRequiredUpdated(_ required: Bool)
     // Opfilter calls this when it loads data that cannot be verified. The GUI
     // must present the issue to the user and call resolveSignatureIssue.
     func signatureIssueDetected(_ issue: SignatureIssueNotification)

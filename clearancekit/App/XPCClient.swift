@@ -17,6 +17,57 @@ struct PendingSignatureIssue: Identifiable, Equatable {
     let id = UUID()
     let suspectRules: [FAARule]
     let suspectAllowlist: [AllowlistEntry]
+    let suspectAncestorAllowlist: [AncestorAllowlistEntry]
+    let suspectQuietList: [QuietListEntry]
+    let suspectJailRules: [JailRule]
+    let suspectFeatureFlags: [FeatureFlag]
+    let suspectBundleUpdaterSignatures: [BundleUpdaterSignature]
+
+    var hasNoSuspectEntries: Bool {
+        suspectRules.isEmpty
+            && suspectAllowlist.isEmpty
+            && suspectAncestorAllowlist.isEmpty
+            && suspectQuietList.isEmpty
+            && suspectJailRules.isEmpty
+            && suspectFeatureFlags.isEmpty
+            && suspectBundleUpdaterSignatures.isEmpty
+    }
+
+    var suspectEntryCount: Int {
+        suspectRules.count
+            + suspectAllowlist.count
+            + suspectAncestorAllowlist.count
+            + suspectQuietList.count
+            + suspectJailRules.count
+            + suspectFeatureFlags.count
+            + suspectBundleUpdaterSignatures.count
+    }
+
+    /// Returns nil when a table does not decode, which means the GUI and
+    /// opfilter versions differ.
+    init?(notification: SignatureIssueNotification) {
+        guard let rules: [FAARule] = Self.decodedTable(notification.suspectRulesData),
+              let allowlist: [AllowlistEntry] = Self.decodedTable(notification.suspectAllowlistData),
+              let ancestorAllowlist: [AncestorAllowlistEntry] = Self.decodedTable(notification.suspectAncestorAllowlistData),
+              let quietList: [QuietListEntry] = Self.decodedTable(notification.suspectQuietListData),
+              let jailRules: [JailRule] = Self.decodedTable(notification.suspectJailRulesData),
+              let featureFlags: [FeatureFlag] = Self.decodedTable(notification.suspectFeatureFlagsData),
+              let bundleUpdaterSignatures: [BundleUpdaterSignature] = Self.decodedTable(notification.suspectBundleUpdaterSignaturesData)
+        else { return nil }
+        suspectRules = rules
+        suspectAllowlist = allowlist
+        suspectAncestorAllowlist = ancestorAllowlist
+        suspectQuietList = quietList
+        suspectJailRules = jailRules
+        suspectFeatureFlags = featureFlags
+        suspectBundleUpdaterSignatures = bundleUpdaterSignatures
+    }
+
+    /// A nil field is a table that verified, so it has no suspect entries.
+    private static func decodedTable<Element: Decodable>(_ data: NSData?) -> [Element]? {
+        guard let data else { return [] }
+        return try? JSONDecoder().decode([Element].self, from: data as Data)
+    }
 
     static func == (lhs: PendingSignatureIssue, rhs: PendingSignatureIssue) -> Bool {
         lhs.id == rhs.id
@@ -40,6 +91,7 @@ final class XPCClient: NSObject, ObservableObject {
     @Published private(set) var mcpEnabled = false
     @Published private(set) var bundleProtectionEnabled = true
     @Published private(set) var advancedModeEnabled = false
+    @Published private(set) var mcpConnectionAuthentication = MCPConnectionAuthentication.required
 
     var shouldResumeAllowEventStream: @MainActor () -> Bool = { false }
     var shouldResumeQuietEventStream: @MainActor () -> Bool = { false }
@@ -454,6 +506,15 @@ final class XPCClient: NSObject, ObservableObject {
         }
     }
 
+    func setMCPConnectionAuthentication(_ authentication: MCPConnectionAuthentication) {
+        guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
+            logger.error("XPCClient: setMCPConnectionAuthenticationRequired error: \(error.localizedDescription, privacy: .public)")
+        }) as? ServiceProtocol else { return }
+        service.setMCPConnectionAuthenticationRequired(authentication.isRequired) { success in
+            if !success { logger.error("XPCClient: setMCPConnectionAuthenticationRequired rejected by service") }
+        }
+    }
+
     func saveBundleUpdaterSignatures(_ signatures: [BundleUpdaterSignature]) {
         guard let data = try? JSONEncoder().encode(signatures) else { return }
         guard let service = connection?.remoteObjectProxyWithErrorHandler({ error in
@@ -733,37 +794,14 @@ extension XPCClient: ClientProtocol {
     }
 
     nonisolated func signatureIssueDetected(_ issue: SignatureIssueNotification) {
-        let rules: [FAARule]
-        let allowlist: [AllowlistEntry]
-
-        if let data = issue.suspectRulesData {
-            guard let decoded = try? JSONDecoder().decode([FAARule].self, from: data as Data) else {
-                logger.fault("XPCClient: Failed to decode suspect rules — version mismatch, invalidating connection")
-                Task { @MainActor in self.handleServiceVersionMismatch() }
-                return
-            }
-            rules = decoded
-        } else {
-            rules = []
+        guard let pending = PendingSignatureIssue(notification: issue) else {
+            logger.fault("XPCClient: Failed to decode suspect data — version mismatch, invalidating connection")
+            Task { @MainActor in self.handleServiceVersionMismatch() }
+            return
         }
-
-        if let data = issue.suspectAllowlistData {
-            guard let decoded = try? JSONDecoder().decode([AllowlistEntry].self, from: data as Data) else {
-                logger.fault("XPCClient: Failed to decode suspect allowlist — version mismatch, invalidating connection")
-                Task { @MainActor in self.handleServiceVersionMismatch() }
-                return
-            }
-            allowlist = decoded
-        } else {
-            allowlist = []
-        }
-
-        logger.warning("XPCClient: Signature issue received — \(rules.count) suspect rule(s), \(allowlist.count) suspect allowlist entry/entries")
+        logger.warning("XPCClient: Signature issue received — \(pending.suspectEntryCount) suspect entry/entries")
         Task { @MainActor in
-            self.pendingSignatureIssue = PendingSignatureIssue(
-                suspectRules: rules,
-                suspectAllowlist: allowlist
-            )
+            self.pendingSignatureIssue = pending
         }
     }
 
@@ -865,6 +903,12 @@ extension XPCClient: ClientProtocol {
     nonisolated func advancedModeEnabledUpdated(_ enabled: Bool) {
         Task { @MainActor in
             self.advancedModeEnabled = enabled
+        }
+    }
+
+    nonisolated func mcpConnectionAuthenticationRequiredUpdated(_ required: Bool) {
+        Task { @MainActor in
+            self.mcpConnectionAuthentication = MCPConnectionAuthentication(isRequired: required)
         }
     }
 

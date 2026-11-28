@@ -125,15 +125,15 @@ struct PolicyRepositoryTests {
         #expect(!repo.mergedAllowlist().contains { $0.id == entry.id })
     }
 
-    @Test("suspect ancestor allowlist is silently discarded")
-    func suspectAncestorAllowlistIsSilentlyDiscarded() {
+    @Test("suspect ancestor allowlist sets pending issue flag and stays inactive")
+    func suspectAncestorAllowlistSetsPendingIssue() {
         let entry = makeAncestorEntry()
         let db = FakeDatabase()
         db.userAncestorAllowlistResult = .suspect([entry])
 
         let repo = PolicyRepository(database: db)
 
-        #expect(!repo.hasPendingSignatureIssue)
+        #expect(repo.hasPendingSignatureIssue)
         #expect(repo.mergedAncestorAllowlist().isEmpty)
     }
 
@@ -308,15 +308,15 @@ struct PolicyRepositoryTests {
         #expect(repo.mergedQuietList().contains { $0.id == entry.id })
     }
 
-    @Test("suspect user quiet list is discarded without a pending issue")
-    func suspectUserQuietListIsDiscarded() {
+    @Test("suspect user quiet list sets pending issue flag and stays inactive")
+    func suspectUserQuietListSetsPendingIssue() {
         let entry = makeQuietEntry()
         let db = FakeDatabase()
         db.userQuietListResult = .suspect([entry])
 
         let repo = PolicyRepository(database: db)
 
-        #expect(!repo.hasPendingSignatureIssue)
+        #expect(repo.hasPendingSignatureIssue)
         #expect(repo.mergedQuietList().map(\.id) == baselineQuietList.map(\.id))
     }
 
@@ -475,6 +475,59 @@ struct PolicyRepositoryTests {
         #expect(!repo.hasPendingSignatureIssue)
     }
 
+    @Test("resolveSignatureIssue approved restores and signs suspect ancestor allowlist")
+    func resolveSignatureIssueApprovedRestoresAncestorAllowlist() {
+        let suspect = makeAncestorEntry()
+        let db = FakeDatabase()
+        db.userAncestorAllowlistResult = .suspect([suspect])
+        let repo = PolicyRepository(database: db)
+
+        repo.resolveSignatureIssue(approved: true)
+
+        #expect(repo.mergedAncestorAllowlist().contains { $0.id == suspect.id })
+        #expect(db.savedAncestorAllowlist.contains { $0.id == suspect.id })
+        #expect(!repo.hasPendingSignatureIssue)
+    }
+
+    @Test("resolveSignatureIssue approved restores and signs suspect feature flags")
+    func resolveSignatureIssueApprovedRestoresFeatureFlags() {
+        let suspect = makeMCPConnectionAuthenticationFlag(enabled: false)
+        let db = FakeDatabase()
+        db.featureFlagsResult = .suspect([suspect])
+        let repo = PolicyRepository(database: db)
+
+        repo.resolveSignatureIssue(approved: true)
+
+        #expect(!repo.mcpConnectionAuthenticationRequired)
+        #expect(db.savedFeatureFlags == [suspect])
+    }
+
+    @Test("resolveSignatureIssue rejected signs protective feature flags")
+    func resolveSignatureIssueRejectedSignsProtectiveFeatureFlags() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .suspect([makeMCPConnectionAuthenticationFlag(enabled: false)])
+        let repo = PolicyRepository(database: db)
+
+        repo.resolveSignatureIssue(approved: false)
+
+        #expect(repo.mcpConnectionAuthenticationRequired)
+        #expect(db.savedFeatureFlags.contains(makeMCPConnectionAuthenticationFlag(enabled: true)))
+    }
+
+    @Test("resolveSignatureIssue approved leaves verified tables unchanged")
+    func resolveSignatureIssueApprovedLeavesVerifiedTablesUnchanged() {
+        let verified = makeRule()
+        let db = FakeDatabase()
+        db.userRulesResult = .ok([verified])
+        db.userAllowlistResult = .suspect([makeEntry()])
+        let repo = PolicyRepository(database: db)
+
+        repo.resolveSignatureIssue(approved: true)
+
+        #expect(repo.mergedRules().contains { $0.id == verified.id })
+        #expect(db.savedRules.isEmpty)
+    }
+
     @Test("pendingSignatureIssueNotification returns nil when no issue pending")
     func pendingNotificationNilWhenNoIssue() {
         let repo = PolicyRepository(database: FakeDatabase())
@@ -517,4 +570,55 @@ struct PolicyRepositoryTests {
 
         #expect(decoded.contains { $0.id == managed.id })
     }
+
+    // MARK: - MCP connection authentication flag
+
+    @Test("MCP connection authentication is required when the flag row is missing")
+    func mcpConnectionAuthenticationRequiredWhenFlagRowMissing() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .ok([])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("loads MCP connection authentication flag from database on init")
+    func loadsMCPConnectionAuthenticationFlagFromDatabase() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .ok([makeMCPConnectionAuthenticationFlag(enabled: false)])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(!repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("suspect feature flags require MCP connection authentication")
+    func suspectFeatureFlagsRequireMCPConnectionAuthentication() {
+        let db = FakeDatabase()
+        db.featureFlagsResult = .suspect([makeMCPConnectionAuthenticationFlag(enabled: false)])
+
+        let repo = PolicyRepository(database: db)
+
+        #expect(repo.mcpConnectionAuthenticationRequired)
+    }
+
+    @Test("setMCPConnectionAuthenticationRequired updates state and persists the flag")
+    func setMCPConnectionAuthenticationRequiredPersists() {
+        let db = FakeDatabase()
+        let repo = PolicyRepository(database: db)
+
+        repo.setMCPConnectionAuthenticationRequired(false)
+
+        #expect(!repo.mcpConnectionAuthenticationRequired)
+        #expect(db.savedFeatureFlags.contains(makeMCPConnectionAuthenticationFlag(enabled: false)))
+    }
+}
+
+private func makeMCPConnectionAuthenticationFlag(enabled: Bool) -> FeatureFlag {
+    FeatureFlag(
+        id: FeatureFlagID.mcpConnectionAuthenticationRequired,
+        name: "mcp_connection_authentication_required",
+        enabled: enabled
+    )
 }

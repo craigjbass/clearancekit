@@ -125,6 +125,7 @@ enum MCPDispatcher {
         do {
             let sessionID = try await MCPSessionStore.shared.issueSession(
                 clientName: clientName,
+                authentication: XPCClient.shared.mcpConnectionAuthentication,
                 isStillConnected: isStillConnected
             )
             let commit: MCPSessionCommit = {
