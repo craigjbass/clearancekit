@@ -173,6 +173,9 @@ enum MCPDispatcher {
             case "update_rule":  result = try await updateRule(args: args)
             case "remove_rule":  result = try await removeRule(args: args)
             case "list_presets": result = listPresets()
+            case "list_quiet_entries": result = listQuietEntries()
+            case "add_quiet_entry":    result = try await addQuietEntry(args: args)
+            case "remove_quiet_entry": result = try await removeQuietEntry(args: args)
             default:
                 return MCPResponse(error: MCPRPCError(code: -32601, message: "Unknown tool: \(name)"), id: requestID)
             }
@@ -410,7 +413,69 @@ enum MCPDispatcher {
         return text(lines.joined(separator: "\n"))
     }
 
+    // MARK: - list_quiet_entries
+
+    @MainActor
+    private static func listQuietEntries() -> JSONValue {
+        let store = QuietListStore.shared
+        var lines = ["=== Baseline Quiet Entries (\(store.baselineEntries.count)) ==="]
+        lines.append(contentsOf: store.baselineEntries.map(formatQuietEntry))
+        lines.append("\n=== Managed Quiet Entries (\(store.managedEntries.count)) ===")
+        lines.append(contentsOf: store.managedEntries.map(formatQuietEntry))
+        lines.append("\n=== User Quiet Entries (\(store.userEntries.count)) ===")
+        lines.append(contentsOf: store.userEntries.map(formatQuietEntry))
+        return text(lines.joined(separator: "\n"))
+    }
+
+    // MARK: - add_quiet_entry
+
+    @MainActor
+    private static func addQuietEntry(args: [String: JSONValue]) async throws -> JSONValue {
+        let store = QuietListStore.shared
+        let entry = try quietListEntryForMCPAdd(
+            signature: try parseOptionalSignature(from: args["signature"]),
+            processPath: args["process_path"]?.stringValue,
+            existingEntries: store.baselineEntries + store.managedEntries + store.userEntries
+        )
+        try await store.add(entry)
+        return text("Quiet entry added:\n\(formatQuietEntry(entry))")
+    }
+
+    // MARK: - remove_quiet_entry
+
+    @MainActor
+    private static func removeQuietEntry(args: [String: JSONValue]) async throws -> JSONValue {
+        guard let idString = args["id"]?.stringValue, let id = UUID(uuidString: idString) else {
+            throw MCPToolError.missingParameter("id (UUID string)")
+        }
+        let store = QuietListStore.shared
+        guard let entry = store.userEntries.first(where: { $0.id == id }) else {
+            throw MCPToolError.notFound("No user quiet entry with id \(idString)")
+        }
+        try await store.remove(entry)
+        return text("Quiet entry removed:\n\(formatQuietEntry(entry))")
+    }
+
     // MARK: - Helpers
+
+    private static func parseOptionalSignature(from value: JSONValue?) throws -> ProcessSignature? {
+        guard let value else { return nil }
+        guard let signatureString = value.stringValue, let signature = parseSignature(signatureString) else {
+            throw MCPToolError.invalidParameter("Invalid signature \"\(value.stringValue ?? "?")\". Expected \"teamID:signingID\".")
+        }
+        return signature
+    }
+
+    private static func formatQuietEntry(_ entry: QuietListEntry) -> String {
+        let match = entry.processPath.isEmpty ? "signing ID \(entry.signingID)" : "process path \(entry.processPath)"
+        return "  [\(entry.id.uuidString)] \(match) (\(quietEntrySignerLabel(entry)))"
+    }
+
+    private static func quietEntrySignerLabel(_ entry: QuietListEntry) -> String {
+        if entry.platformBinary { return "platform binary" }
+        if entry.teamID.isEmpty { return "any signer" }
+        return "team \(entry.teamID)"
+    }
 
     private static func parseDoubleStarParentMatching(from value: JSONValue?) throws -> DoubleStarParentMatching? {
         guard let value else { return nil }
@@ -574,6 +639,26 @@ enum MCPDispatcher {
             name: "list_presets",
             description: "List all built-in app protection presets with enabled state and per-rule UUIDs.",
             params: [:]
+        ),
+        toolDef(
+            name: "list_quiet_entries",
+            description: "List all quiet list entries: baseline (built-in), managed (MDM), and user entries. Denies from a quieted process are still enforced and logged, but do not show a notification.",
+            params: [:]
+        ),
+        toolDef(
+            name: "add_quiet_entry",
+            description: "Add a user quiet list entry. Requires Touch ID. Denies from a matching process are still enforced and logged, but do not show a notification. Pass signature or process_path, not both. Wildcard signatures are refused.",
+            params: [
+                "signature":    (type: "string", description: "Signature as \"teamID:signingID\". Apple binaries: \"apple:com.apple.Foo\", which matches the signing ID on platform binaries only.", required: false),
+                "process_path": (type: "string", description: "Absolute path of the process executable. Use only for a process without a team ID.", required: false)
+            ]
+        ),
+        toolDef(
+            name: "remove_quiet_entry",
+            description: "Remove a user quiet list entry by ID. Requires Touch ID.",
+            params: [
+                "id": (type: "string", description: "UUID of the user quiet list entry to remove", required: true)
+            ]
         )
     ]}
 
