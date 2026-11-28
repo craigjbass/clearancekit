@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         XPCClient.shared.shouldResumeAllowEventStream = { NavigationState.shared.isEventsScreenActive }
         XPCClient.shared.shouldResumeQuietEventStream = { NavigationState.shared.isQuietEventStreamWanted }
         XPCClient.shared.shouldResumeMetricsStream = { NavigationState.shared.isMetricsScreenActive }
+        XPCClient.shared.connect()
 
         mcpEnabledCancellable = XPCClient.shared.$mcpEnabled
             .receive(on: mcpQueue)

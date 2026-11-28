@@ -155,7 +155,6 @@ struct ContentView: View {
         }
         .frame(minWidth: 720, minHeight: 480)
         .onAppear {
-            xpcClient.connect()
             ensureSelectionVisible()
         }
         .onChange(of: advancedMode) { _, _ in
@@ -326,11 +325,23 @@ struct SetupView: View {
         hash.trimmingCharacters(in: CharacterSet(charactersIn: "+"))
     }
 
+    private var extensionIsActiveFromConnection: Bool {
+        extensionManager.extensionStatus == .unknown && xpcClient.isConnected
+    }
+
+    private var displayedExtensionStatus: SystemExtensionManager.ExtensionStatus {
+        extensionIsActiveFromConnection ? .activated : extensionManager.extensionStatus
+    }
+
+    private var displayedExtensionMessage: String {
+        extensionIsActiveFromConnection ? "Extension activated" : extensionManager.statusMessage
+    }
+
     private var extensionStatusRow: some View {
         HStack {
             Text("Extension:")
                 .font(.headline)
-            Text(extensionManager.statusMessage)
+            Text(displayedExtensionMessage)
                 .foregroundColor(.secondary)
             if serviceIsOutOfDate {
                 Text("v\(xpcClient.serviceVersion)")
@@ -338,7 +349,7 @@ struct SetupView: View {
                     .font(.caption)
             }
             Spacer()
-            if extensionManager.extensionStatus != .activated {
+            if displayedExtensionStatus != .activated {
                 Button("Activate") { extensionManager.activateExtension() }
             } else if serviceIsOutOfDate {
                 Button("Update") { Task { await prepareExtensionAction(.update) } }
