@@ -399,7 +399,7 @@ extension FAARule {
 
 // MARK: - Policy
 
-public let clearancekitTeamID = "37KMK6XFTT"
+public let clearancekitTeamID = XPCConstants.teamID
 
 public let faaPolicy: [FAARule] = [
     // Protect the policy storage directory. Only processes signed by the
@@ -411,7 +411,7 @@ public let faaPolicy: [FAARule] = [
         id: UUID(uuidString: "5DCEA92F-C4FB-4D5D-9E56-FD36D8F330DF")!,
         protectedPathPrefix: "/Library/Application Support/clearancekit",
         source: .builtin,
-        allowedSignatures: [ProcessSignature(teamID: clearancekitTeamID, signingID: "uk.craigbass.clearancekit.opfilter")]
+        allowedSignatures: [ProcessSignature(teamID: clearancekitTeamID, signingID: XPCConstants.serviceName)]
     ),
 
     // Protect PAM configuration. Writing to /etc/pam.d outside of system

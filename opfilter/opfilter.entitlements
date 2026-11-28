@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.uk.craigbass.clearancekit</string>
+		<string>group.$(PRODUCT_BUNDLE_PREFIX)</string>
 	</array>
 </dict>
 </plist>

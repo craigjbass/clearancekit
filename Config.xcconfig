@@ -1,0 +1,12 @@
+// Signing identity for the clearancekit app and the opfilter system extension.
+//
+// To build with your own Apple Developer team, do not change this file.
+// Create Config.local.xcconfig next to it (git ignores that file) and set:
+//
+//   DEVELOPMENT_TEAM = <your team ID>
+//   PRODUCT_BUNDLE_PREFIX = <your bundle identifier prefix>
+
+DEVELOPMENT_TEAM = 37KMK6XFTT
+PRODUCT_BUNDLE_PREFIX = uk.craigbass.clearancekit
+
+#include? "Config.local.xcconfig"

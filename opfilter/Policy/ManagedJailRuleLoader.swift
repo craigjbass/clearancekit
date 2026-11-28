@@ -17,7 +17,7 @@
 import Foundation
 
 enum ManagedJailRuleLoader {
-    private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
+    private static let preferencesDomain: CFString = XPCConstants.managedPreferencesDomain as CFString
     private static let jailRulesKey: CFString = "JailRules" as CFString
 
     static func load() -> [JailRule] {

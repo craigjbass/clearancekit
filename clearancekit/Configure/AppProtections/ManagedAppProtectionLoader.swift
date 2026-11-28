@@ -24,7 +24,7 @@ import CommonCrypto
 import Foundation
 
 enum ManagedAppProtectionLoader {
-    private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
+    private static let preferencesDomain: CFString = XPCConstants.managedPreferencesDomain as CFString
     private static let appProtectionsKey: CFString = "AppProtections" as CFString
 
     /// UUID v5 namespace used when deriving stable protection IDs from an app name.

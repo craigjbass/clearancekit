@@ -71,7 +71,7 @@ struct InMemoryEpochRatchetStore: EpochRatchetStore {
 }
 
 struct SystemKeychainEpochRatchetStore: EpochRatchetStore {
-    private static let service = "uk.craigbass.clearancekit.epoch-ratchet"
+    private static let service = "\(XPCConstants.bundleIDPrefix).epoch-ratchet"
 
     private static let systemKeychain: SecKeychain? = {
         var kc: SecKeychain?

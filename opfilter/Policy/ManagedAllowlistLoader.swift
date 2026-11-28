@@ -21,7 +21,7 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "managed-config")
 
 enum ManagedAllowlistLoader {
-    private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
+    private static let preferencesDomain: CFString = XPCConstants.managedPreferencesDomain as CFString
     private static let allowlistKey: CFString = "GlobalAllowlist" as CFString
 
     static func load() -> [AllowlistEntry] {

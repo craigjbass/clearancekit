@@ -53,7 +53,7 @@ import os
 private let logger = Logger(subsystem: "uk.craigbass.clearancekit.opfilter", category: "managed-config")
 
 enum ManagedPolicyLoader {
-    private static let preferencesDomain: CFString = XPCConstants.bundleIDPrefix as CFString
+    private static let preferencesDomain: CFString = XPCConstants.managedPreferencesDomain as CFString
     private static let policyKey: CFString          = "FAAPolicy" as CFString
 
     /// Reads the managed FAAPolicy from CFPreferences.

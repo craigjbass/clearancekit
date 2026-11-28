@@ -6,11 +6,15 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.uk.craigbass.clearancekit</string>
+		<string>group.$(PRODUCT_BUNDLE_PREFIX)</string>
+	</array>
+	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
+	<array>
+		<string>uk.craigbass.clearancekit</string>
 	</array>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
-		<string>uk.craigbass.clearancekit.opfilter</string>
+		<string>$(PRODUCT_BUNDLE_PREFIX).opfilter</string>
 	</array>
 </dict>
 </plist>
