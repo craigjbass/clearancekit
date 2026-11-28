@@ -40,6 +40,16 @@ final class ESInboundAdapter {
                     guard isXProtect else { return }
                     onXProtectChanged()
                 }
+            case ES_EVENT_TYPE_NOTIFY_EXEC:
+                let record = processRecord(from: message.pointee.event.exec.target)
+                esAdapterQueue.async { interactor.handleExec(newImage: record) }
+            case ES_EVENT_TYPE_NOTIFY_FORK:
+                let child = processRecord(from: message.pointee.event.fork.child)
+                esAdapterQueue.async { interactor.handleFork(child: child) }
+            case ES_EVENT_TYPE_NOTIFY_EXIT:
+                let token = message.pointee.process.pointee.audit_token
+                let identity = ProcessIdentity(pid: pid_t(token.val.5), pidVersion: token.val.7)
+                esAdapterQueue.async { interactor.handleExit(identity: identity) }
             case ES_EVENT_TYPE_AUTH_RENAME, ES_EVENT_TYPE_AUTH_UNLINK:
                 es_retain_message(message)
                 esAdapterQueue.async {
@@ -98,6 +108,9 @@ final class ESInboundAdapter {
             ES_EVENT_TYPE_AUTH_READDIR,
             ES_EVENT_TYPE_AUTH_EXCHANGEDATA,
             ES_EVENT_TYPE_AUTH_CLONE,
+            ES_EVENT_TYPE_NOTIFY_FORK,
+            ES_EVENT_TYPE_NOTIFY_EXEC,
+            ES_EVENT_TYPE_NOTIFY_EXIT,
             ES_EVENT_TYPE_NOTIFY_WRITE,
         ]
         guard es_subscribe(client!, eventTypes, UInt32(eventTypes.count)) == ES_RETURN_SUCCESS else {

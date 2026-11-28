@@ -147,7 +147,6 @@ let jailInteractor = JailFilterInteractor(
 )
 
 let tamperResistanceAdapter = ESTamperResistanceAdapter(esAPI: LiveEndpointSecurityAPI())
-let processLifecycleAdapter = ESProcessLifecycleAdapter(esAPI: LiveEndpointSecurityAPI(), handler: faaInteractor)
 
 let adapter = ESInboundAdapter(interactor: faaInteractor, esAdapterQueue: esAdapterQueue)
 let jailAdapter = ESJailAdapter(interactor: jailInteractor, processTree: processTree, esJailAdapterQueue: esJailAdapterQueue, jailSweepQueue: jailSweepQueue, jailCascadeQueue: jailCascadeQueue)
@@ -167,7 +166,6 @@ postRespondHandler.onEvent = { event in
 
 tamperResistanceAdapter.onTamperDenied = { event in server.handleTamperEvent(event) }
 tamperResistanceAdapter.start()
-processLifecycleAdapter.start()
 
 let initialRules = server.mergedRules()
 server.startJailAdapterIfEnabled()
