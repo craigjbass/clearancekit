@@ -58,6 +58,7 @@ final class PolicyRepository: @unchecked Sendable {
         var mcpEnabled: Bool = false
         var bundleProtectionEnabled: Bool = true
         var advancedModeEnabled: Bool = false
+        var mcpConnectionAuthenticationRequired: Bool = true
         var bundleUpdaterSignatures: [BundleUpdaterSignature] = []
     }
 
@@ -125,20 +126,27 @@ final class PolicyRepository: @unchecked Sendable {
             initialState.mcpEnabled = flags.first(where: { $0.id == FeatureFlagID.mcpServerEnabled })?.enabled ?? false
             initialState.bundleProtectionEnabled = flags.first(where: { $0.id == FeatureFlagID.bundleProtectionEnabled })?.enabled ?? true
             initialState.advancedModeEnabled = flags.first(where: { $0.id == FeatureFlagID.advancedModeEnabled })?.enabled ?? false
+            // No migration seeds this row: inserting a row changes the signed
+            // content of an existing feature_flags table. A missing row means
+            // authentication is required, and the first save adds the row.
+            initialState.mcpConnectionAuthenticationRequired = flags.first(where: { $0.id == FeatureFlagID.mcpConnectionAuthenticationRequired })?.enabled ?? true
         case .suspect:
             // Signature failure on feature flags: disable MCP (safe default),
             // keep bundle protection ON (kill-switch should default to maximum
-            // protection if the row is missing or tampered with), and turn
-            // advanced mode OFF (matches first-launch default).
-            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled, disabling advanced mode")
+            // protection if the row is missing or tampered with), turn
+            // advanced mode OFF (matches first-launch default), and require
+            // authentication for each MCP connection.
+            logger.warning("PolicyRepository: Signature issue for feature_flags — disabling MCP server, leaving bundle protection enabled, disabling advanced mode, requiring MCP connection authentication")
             initialState.featureFlags = [
                 FeatureFlag(id: FeatureFlagID.mcpServerEnabled, name: "mcp_server_enabled", enabled: false),
                 FeatureFlag(id: FeatureFlagID.bundleProtectionEnabled, name: "bundle_protection_enabled", enabled: true),
                 FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: false),
+                FeatureFlag(id: FeatureFlagID.mcpConnectionAuthenticationRequired, name: "mcp_connection_authentication_required", enabled: true),
             ]
             initialState.mcpEnabled = false
             initialState.bundleProtectionEnabled = true
             initialState.advancedModeEnabled = false
+            initialState.mcpConnectionAuthenticationRequired = true
         }
 
         switch database.loadBundleUpdaterSignaturesResult() {
@@ -370,6 +378,24 @@ final class PolicyRepository: @unchecked Sendable {
                 state.featureFlags[index] = FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: enabled)
             } else {
                 state.featureFlags.append(FeatureFlag(id: FeatureFlagID.advancedModeEnabled, name: "advanced_mode_enabled", enabled: enabled))
+            }
+            return state.featureFlags
+        }
+        database.saveFeatureFlags(flags)
+    }
+
+    var mcpConnectionAuthenticationRequired: Bool {
+        storage.withLock { $0.mcpConnectionAuthenticationRequired }
+    }
+
+    func setMCPConnectionAuthenticationRequired(_ required: Bool) {
+        let flag = FeatureFlag(id: FeatureFlagID.mcpConnectionAuthenticationRequired, name: "mcp_connection_authentication_required", enabled: required)
+        let flags = storage.withLock { state -> [FeatureFlag] in
+            state.mcpConnectionAuthenticationRequired = required
+            if let index = state.featureFlags.firstIndex(where: { $0.id == FeatureFlagID.mcpConnectionAuthenticationRequired }) {
+                state.featureFlags[index] = flag
+            } else {
+                state.featureFlags.append(flag)
             }
             return state.featureFlags
         }

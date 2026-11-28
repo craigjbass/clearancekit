@@ -24,16 +24,23 @@ final class MCPSessionStore: ObservableObject {
 
     @Published private(set) var activeSessions: [MCPSession] = []
 
-    /// Prompts for authentication and returns a fresh session ID. Does NOT add the
+    /// Prompts for authentication when `authentication` is `.required` and returns
+    /// a fresh session ID. Does NOT add the
     /// session to `activeSessions` — the caller must call `commitSession` once the
     /// initialize response has been written and the client has confirmed the
     /// handshake. This avoids briefly showing a session row in the UI for a peer
     /// that has already disconnected.
     func issueSession(
         clientName: String,
+        authentication: MCPConnectionAuthentication,
         isStillConnected: @Sendable () -> Bool
     ) async throws -> UUID {
-        try await BiometricAuth.authenticate(reason: "Allow \"\(clientName)\" to connect to ClearanceKit MCP")
+        switch authentication {
+        case .required:
+            try await BiometricAuth.authenticate(reason: "Allow \"\(clientName)\" to connect to ClearanceKit MCP")
+        case .skipped:
+            break
+        }
         guard isStillConnected() else {
             throw MCPSessionError.connectionClosedDuringAuthentication
         }
@@ -82,6 +89,22 @@ final class MCPSessionStore: ObservableObject {
     /// Called when the remote end closes the connection normally.
     func connectionClosed(_ id: UUID) {
         activeSessions.removeAll { $0.id == id }
+    }
+}
+
+enum MCPConnectionAuthentication {
+    case required
+    case skipped
+
+    init(isRequired: Bool) {
+        self = isRequired ? .required : .skipped
+    }
+
+    var isRequired: Bool {
+        switch self {
+        case .required: return true
+        case .skipped:  return false
+        }
     }
 }
 
