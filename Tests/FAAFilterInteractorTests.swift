@@ -11,11 +11,16 @@ import Foundation
 private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     private(set) var insertedIdentities: [ProcessIdentity] = []
     private(set) var removedIdentities: [ProcessIdentity] = []
+    private(set) var replacedImages: [(previousImage: ProcessIdentity, newImage: ProcessIdentity)] = []
     var containsResult = false
     var ancestorsResult: [AncestorInfo] = []
 
     func insert(_ record: ProcessRecord) {
         insertedIdentities.append(record.identity)
+    }
+
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord) {
+        replacedImages.append((previousImage: previousImage, newImage: newImage.identity))
     }
 
     func remove(identity: ProcessIdentity) {
@@ -166,17 +171,28 @@ struct FAAFilterInteractorTests {
         #expect(tree.insertedIdentities == [child.identity])
     }
 
-    @Test("exec event inserts new image into process tree")
-    func execInsertsNewImage() {
+    @Test("exec event replaces the previous image with the new image in process tree")
+    func execReplacesPreviousImage() {
         let tree = FakeProcessTree()
         let queue = DispatchQueue(label: "test.process-tree")
         let interactor = makeFAAInteractor(processTree: tree, processTreeQueue: queue)
-        let newImage = record(pid: 200, parentPID: 100, path: "/usr/bin/shell")
+        let previousImage = ProcessIdentity(pid: 200, pidVersion: 1)
+        let newImage = ProcessRecord(
+            identity: ProcessIdentity(pid: 200, pidVersion: 2),
+            parentIdentity: ProcessIdentity(pid: 100, pidVersion: 2),
+            path: "/usr/bin/shell",
+            teamID: "",
+            signingID: "",
+            uid: 501,
+            gid: 20
+        )
 
-        interactor.handleExec(newImage: newImage)
+        interactor.handleExec(previousImage: previousImage, newImage: newImage)
         queue.sync {}
 
-        #expect(tree.insertedIdentities == [newImage.identity])
+        #expect(tree.replacedImages.map(\.previousImage) == [previousImage])
+        #expect(tree.replacedImages.map(\.newImage) == [newImage.identity])
+        #expect(tree.insertedIdentities.isEmpty)
     }
 
     @Test("exit event removes identity from process tree")

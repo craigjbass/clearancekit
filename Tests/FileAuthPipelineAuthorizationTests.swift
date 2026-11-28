@@ -15,6 +15,7 @@ private final class FakeAuthPipelineProcessTree: @unchecked Sendable, ProcessTre
     var recordsByIdentity: [ProcessIdentity: ProcessRecord] = [:]
 
     func insert(_ record: ProcessRecord) {}
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
 
     func contains(identity: ProcessIdentity) -> Bool { containsResult }

@@ -16,6 +16,7 @@ private final class FakePipelineProcessTree: @unchecked Sendable, ProcessTreePro
     var ancestorsByIdentity: [ProcessIdentity: [AncestorInfo]] = [:]
 
     func insert(_ record: ProcessRecord) {}
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
 
     func contains(identity: ProcessIdentity) -> Bool {

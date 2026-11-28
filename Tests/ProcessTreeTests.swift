@@ -200,3 +200,122 @@ struct ProcessTreeLifecycleTests {
         #expect(lifecycle(of: ProcessIdentity(pid: 300, pidVersion: 2), in: tree) == .running)
     }
 }
+
+@Suite("ProcessTree.replaceImage")
+struct ProcessTreeReplaceImageTests {
+
+    private let launchd = ProcessIdentity(pid: 1, pidVersion: 1)
+
+    private func record(pid: pid_t, version: UInt32, parent: ProcessIdentity, path: String) -> ProcessRecord {
+        ProcessRecord(
+            identity: ProcessIdentity(pid: pid, pidVersion: version),
+            parentIdentity: parent,
+            path: path,
+            teamID: "",
+            signingID: "",
+            uid: 501,
+            gid: 20
+        )
+    }
+
+    @Test("a child keeps the image that created it as ancestor after the parent calls exec")
+    func childKeepsCreatingImageAfterParentExec() {
+        let tree = ProcessTree()
+        let launcher = record(pid: 100, version: 1, parent: launchd, path: "/Users/user/launcher")
+        let helper = record(pid: 200, version: 1, parent: launcher.identity, path: "/Users/user/launcher")
+        let trusted = record(pid: 100, version: 2, parent: launchd, path: "/Applications/Trusted.app/Contents/MacOS/Trusted")
+        let reader = record(pid: 200, version: 2, parent: trusted.identity, path: "/Users/user/Applications/reader")
+        tree.insert(launcher)
+        tree.insert(helper)
+        tree.replaceImage(previousImage: launcher.identity, newImage: trusted)
+
+        tree.replaceImage(previousImage: helper.identity, newImage: reader)
+
+        #expect(tree.ancestors(of: reader.identity).map(\.path) == ["/Users/user/launcher"])
+    }
+
+    @Test("the new image keeps the full ancestor chain of the previous image")
+    func newImageKeepsAncestorChainOfPreviousImage() {
+        let tree = ProcessTree()
+        let grandparent = record(pid: 10, version: 1, parent: launchd, path: "/grandparent")
+        let parent = record(pid: 100, version: 1, parent: grandparent.identity, path: "/parent")
+        let child = record(pid: 200, version: 1, parent: parent.identity, path: "/child")
+        let newImage = record(pid: 200, version: 2, parent: parent.identity, path: "/new-image")
+        tree.insert(grandparent)
+        tree.insert(parent)
+        tree.insert(child)
+
+        tree.replaceImage(previousImage: child.identity, newImage: newImage)
+
+        #expect(tree.ancestors(of: newImage.identity).map(\.path) == ["/parent", "/grandparent"])
+    }
+
+    @Test("the new image record keeps the parent identity of the previous image")
+    func newImageKeepsParentIdentityOfPreviousImage() {
+        let tree = ProcessTree()
+        let parent = record(pid: 100, version: 1, parent: launchd, path: "/parent")
+        let child = record(pid: 200, version: 1, parent: parent.identity, path: "/child")
+        let newImage = record(pid: 200, version: 2, parent: ProcessIdentity(pid: 100, pidVersion: 2), path: "/new-image")
+        tree.insert(parent)
+        tree.insert(child)
+
+        tree.replaceImage(previousImage: child.identity, newImage: newImage)
+
+        #expect(tree.record(of: newImage.identity)?.parentIdentity == parent.identity)
+        #expect(tree.record(of: newImage.identity)?.path == "/new-image")
+    }
+
+    @Test("the previous image record stays available as exited during retention")
+    func previousImageStaysAvailableAsExited() {
+        let tree = ProcessTree()
+        let child = record(pid: 200, version: 1, parent: launchd, path: "/child")
+        let newImage = record(pid: 200, version: 2, parent: launchd, path: "/new-image")
+        tree.insert(child)
+
+        tree.replaceImage(previousImage: child.identity, newImage: newImage)
+
+        #expect(tree.record(of: child.identity)?.path == "/child")
+        #expect(tree.record(of: child.identity)?.lifecycle == .exited)
+        #expect(tree.record(of: newImage.identity)?.lifecycle == .running)
+    }
+
+    @Test("the previous image keeps its ancestors during retention")
+    func previousImageKeepsAncestorsDuringRetention() {
+        let tree = ProcessTree()
+        let parent = record(pid: 100, version: 1, parent: launchd, path: "/parent")
+        let child = record(pid: 200, version: 1, parent: parent.identity, path: "/child")
+        let newImage = record(pid: 200, version: 2, parent: parent.identity, path: "/new-image")
+        tree.insert(parent)
+        tree.insert(child)
+
+        tree.replaceImage(previousImage: child.identity, newImage: newImage)
+
+        #expect(tree.ancestors(of: child.identity).map(\.path) == ["/parent"])
+    }
+
+    @Test("the new image gets no ancestors when the previous image is not in the tree")
+    func newImageHasNoAncestorsWhenPreviousImageIsAbsent() {
+        let tree = ProcessTree()
+        let trusted = record(pid: 100, version: 2, parent: launchd, path: "/Applications/Trusted.app/Contents/MacOS/Trusted")
+        let reader = record(pid: 200, version: 2, parent: trusted.identity, path: "/Users/user/Applications/reader")
+        tree.insert(trusted)
+
+        tree.replaceImage(previousImage: ProcessIdentity(pid: 200, pidVersion: 1), newImage: reader)
+
+        #expect(tree.ancestors(of: reader.identity).isEmpty)
+    }
+
+    @Test("a child forked after the exec gets the new image as ancestor")
+    func childForkedAfterExecGetsNewImage() {
+        let tree = ProcessTree()
+        let launcher = record(pid: 100, version: 1, parent: launchd, path: "/launcher")
+        let trusted = record(pid: 100, version: 2, parent: launchd, path: "/Applications/Trusted.app/Contents/MacOS/Trusted")
+        let forkedChild = record(pid: 300, version: 1, parent: trusted.identity, path: "/Applications/Trusted.app/Contents/MacOS/Trusted")
+        tree.insert(launcher)
+        tree.replaceImage(previousImage: launcher.identity, newImage: trusted)
+
+        tree.insert(forkedChild)
+
+        #expect(tree.ancestors(of: forkedChild.identity).map(\.path) == ["/Applications/Trusted.app/Contents/MacOS/Trusted"])
+    }
+}

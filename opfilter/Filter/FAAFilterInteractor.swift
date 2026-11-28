@@ -69,8 +69,8 @@ final class FAAFilterInteractor: @unchecked Sendable {
         processTreeQueue.async { [self] in processTree.insert(child) }
     }
 
-    func handleExec(newImage: ProcessRecord) {
-        processTreeQueue.async { [self] in processTree.insert(newImage) }
+    func handleExec(previousImage: ProcessIdentity, newImage: ProcessRecord) {
+        processTreeQueue.async { [self] in processTree.replaceImage(previousImage: previousImage, newImage: newImage) }
     }
 
     func handleExit(identity: ProcessIdentity) {

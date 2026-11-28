@@ -41,8 +41,10 @@ final class ESInboundAdapter {
                     onXProtectChanged()
                 }
             case ES_EVENT_TYPE_NOTIFY_EXEC:
-                let record = processRecord(from: message.pointee.event.exec.target)
-                esAdapterQueue.async { interactor.handleExec(newImage: record) }
+                let previousToken = message.pointee.process.pointee.audit_token
+                let previousImage = ProcessIdentity(pid: pid_t(previousToken.val.5), pidVersion: previousToken.val.7)
+                let newImage = processRecord(from: message.pointee.event.exec.target)
+                esAdapterQueue.async { interactor.handleExec(previousImage: previousImage, newImage: newImage) }
             case ES_EVENT_TYPE_NOTIFY_FORK:
                 let child = processRecord(from: message.pointee.event.fork.child)
                 esAdapterQueue.async { interactor.handleFork(child: child) }

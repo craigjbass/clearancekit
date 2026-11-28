@@ -5,6 +5,7 @@
 
 protocol ProcessTreeProtocol: AnyObject {
     func insert(_ record: ProcessRecord)
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord)
     func remove(identity: ProcessIdentity)
     func contains(identity: ProcessIdentity) -> Bool
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo]

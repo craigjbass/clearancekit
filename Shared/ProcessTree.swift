@@ -32,6 +32,10 @@ struct ProcessRecord {
     let uid: uid_t
     let gid: gid_t
     var lifecycle: ProcessLifecycle = .running
+
+    func withParent(_ parent: ProcessIdentity) -> ProcessRecord {
+        ProcessRecord(identity: identity, parentIdentity: parent, path: path, teamID: teamID, signingID: signingID, uid: uid, gid: gid, lifecycle: lifecycle)
+    }
 }
 
 // MARK: - ProcessTree
@@ -64,10 +68,30 @@ final class ProcessTree: @unchecked Sendable {
         }
     }
 
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord) {
+        let retiredImage: ProcessIdentity? = storage.withLock { state in
+            let previousKey = Self.resolveIdentity(previousImage, state: state)
+            guard let previous = state.records[previousKey] else {
+                Self.store(newImage, ancestors: [], state: &state)
+                return nil
+            }
+            let inheritedAncestors = state.ancestorCache[previousKey] ?? []
+            state.records[previousKey]?.lifecycle = .exited
+            Self.store(newImage.withParent(previous.parentIdentity), ancestors: inheritedAncestors, state: &state)
+            return previousKey
+        }
+        guard let retiredImage else { return }
+        scheduleEviction(of: retiredImage)
+    }
+
     func remove(identity: ProcessIdentity) {
         storage.withLock { state in
             state.records[identity]?.lifecycle = .exited
         }
+        scheduleEviction(of: identity)
+    }
+
+    private func scheduleEviction(of identity: ProcessIdentity) {
         evictionQueue.asyncAfter(deadline: .now() + Self.postExitRetention) { [self] in
             storage.withLock { state in
                 state.records[identity] = nil
@@ -97,6 +121,12 @@ final class ProcessTree: @unchecked Sendable {
 
     func allRecords() -> [ProcessRecord] {
         storage.withLock { Array($0.records.values) }
+    }
+
+    private static func store(_ record: ProcessRecord, ancestors: [AncestorInfo], state: inout State) {
+        state.records[record.identity] = record
+        state.pidIndex[record.identity.pid] = record.identity
+        state.ancestorCache[record.identity] = ancestors
     }
 
     private static func lookup(_ identity: ProcessIdentity, state: State) -> ProcessRecord? {

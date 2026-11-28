@@ -12,6 +12,7 @@ private final class FakeProcessTree: @unchecked Sendable, ProcessTreeProtocol {
     var ancestorsResult: [AncestorInfo] = []
 
     func insert(_ record: ProcessRecord) {}
+    func replaceImage(previousImage: ProcessIdentity, newImage: ProcessRecord) {}
     func remove(identity: ProcessIdentity) {}
     func contains(identity: ProcessIdentity) -> Bool { false }
     func ancestors(of identity: ProcessIdentity) -> [AncestorInfo] { ancestorsResult }
