@@ -14,6 +14,13 @@ struct ProcessIdentity: Hashable {
     let pidVersion: UInt32
 }
 
+// MARK: - ProcessLifecycle
+
+@objc public enum ProcessLifecycle: Int {
+    case running
+    case exited
+}
+
 // MARK: - ProcessRecord
 
 struct ProcessRecord {
@@ -24,6 +31,7 @@ struct ProcessRecord {
     let signingID: String
     let uid: uid_t
     let gid: gid_t
+    var lifecycle: ProcessLifecycle = .running
 }
 
 // MARK: - ProcessTree
@@ -57,6 +65,9 @@ final class ProcessTree: @unchecked Sendable {
     }
 
     func remove(identity: ProcessIdentity) {
+        storage.withLock { state in
+            state.records[identity]?.lifecycle = .exited
+        }
         evictionQueue.asyncAfter(deadline: .now() + Self.postExitRetention) { [self] in
             storage.withLock { state in
                 state.records[identity] = nil

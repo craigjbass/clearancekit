@@ -205,8 +205,9 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
     @objc public let signingID: String
     @objc public let uid: UInt32
     @objc public let gid: UInt32
+    @objc public let lifecycle: ProcessLifecycle
 
-    public init(pid: Int32, pidVersion: UInt32, parentPID: Int32, parentPIDVersion: UInt32, path: String, teamID: String, signingID: String, uid: UInt32, gid: UInt32) {
+    public init(pid: Int32, pidVersion: UInt32, parentPID: Int32, parentPIDVersion: UInt32, path: String, teamID: String, signingID: String, uid: UInt32, gid: UInt32, lifecycle: ProcessLifecycle) {
         self.pid = pid
         self.pidVersion = pidVersion
         self.parentPID = parentPID
@@ -216,11 +217,13 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
         self.signingID = signingID
         self.uid = uid
         self.gid = gid
+        self.lifecycle = lifecycle
         super.init()
     }
 
     public required init?(coder: NSCoder) {
         guard let path = coder.decodeObject(of: NSString.self, forKey: "path") as String? else { return nil }
+        guard let lifecycle = ProcessLifecycle(rawValue: coder.decodeInteger(forKey: "lifecycle")) else { return nil }
         self.pid = coder.decodeInt32(forKey: "pid")
         self.pidVersion = UInt32(bitPattern: coder.decodeInt32(forKey: "pidVersion"))
         self.parentPID = coder.decodeInt32(forKey: "parentPID")
@@ -230,6 +233,7 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
         self.signingID = (coder.decodeObject(of: NSString.self, forKey: "signingID") as String?) ?? ""
         self.uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
         self.gid = UInt32(bitPattern: coder.decodeInt32(forKey: "gid"))
+        self.lifecycle = lifecycle
         super.init()
     }
 
@@ -243,6 +247,7 @@ public class RunningProcessInfo: NSObject, NSSecureCoding {
         coder.encode(signingID as NSString, forKey: "signingID")
         coder.encode(Int32(bitPattern: uid), forKey: "uid")
         coder.encode(Int32(bitPattern: gid), forKey: "gid")
+        coder.encode(lifecycle.rawValue, forKey: "lifecycle")
     }
 }
 

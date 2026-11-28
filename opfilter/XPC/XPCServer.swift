@@ -371,7 +371,8 @@ final class XPCServer: NSObject, @unchecked Sendable {
                 teamID: record.teamID,
                 signingID: record.signingID,
                 uid: record.uid,
-                gid: record.gid
+                gid: record.gid,
+                lifecycle: record.lifecycle
             )
         }
     }
