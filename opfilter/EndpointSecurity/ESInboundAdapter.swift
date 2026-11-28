@@ -154,6 +154,17 @@ final class ESInboundAdapter {
         for target in new.subtracting(old) {
             es_mute_path(client, target.path, target.kind.esMutePathType)
         }
+        deliverExecEventsForAllPaths(client: client)
+    }
+
+    // With inverted target-path muting, only muted targets generate events, and the
+    // exec target is the new executable. Muting "/" for NOTIFY_EXEC only keeps the
+    // process tree complete while file events stay limited to protected paths.
+    // Re-applied after every diff because es_unmute_path("/", prefix) from a policy
+    // change removes the mute for all event types.
+    private func deliverExecEventsForAllPaths(client: OpaquePointer) {
+        var execOnly: [es_event_type_t] = [ES_EVENT_TYPE_NOTIFY_EXEC]
+        es_mute_path_events(client, "/", ES_MUTE_PATH_TYPE_TARGET_PREFIX, &execOnly, execOnly.count)
     }
 
     private func applyMutedPrefixes(from rules: [FAARule]) {
@@ -170,6 +181,7 @@ final class ESInboundAdapter {
         // XProtect path is permanently muted so NOTIFY_WRITE, AUTH_RENAME, and AUTH_UNLINK events
         // are always delivered for it. Kept outside policyMuteTargets so policy diffs never unmute it.
         es_mute_path(client, Self.xprotectPath, ES_MUTE_PATH_TYPE_TARGET_PREFIX)
+        deliverExecEventsForAllPaths(client: client)
     }
 
     private static func isXProtectEvent(_ message: UnsafePointer<es_message_t>) -> Bool {
