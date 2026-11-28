@@ -8,7 +8,7 @@ import os
 
 // MARK: - FAAFilterInteractor
 
-final class FAAFilterInteractor: @unchecked Sendable {
+final class FAAFilterInteractor: ProcessLifecycleHandler, @unchecked Sendable {
     var onEvent: ((FolderOpenEvent) -> Void)? {
         get { postRespondHandler.onEvent }
         set { postRespondHandler.onEvent = newValue }
