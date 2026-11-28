@@ -23,6 +23,7 @@ struct PolicyView: View {
             Divider()
             ruleList
         }
+        .navigationTitle("Policy")
         .sheet(item: $editingRule) { rule in
             RuleEditView(editing: rule) { updated in
                 Task {
