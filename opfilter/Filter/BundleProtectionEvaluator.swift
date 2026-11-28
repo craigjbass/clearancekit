@@ -25,23 +25,21 @@ final class BundleProtectionEvaluator: @unchecked Sendable {
     }
 
     /// Hot-path gate: returns true when the event should be forced to the slow path.
-    func isBundleWrite(path: String, accessKind: AccessKind) -> Bool {
+    func isBundleWrite(path: String) -> Bool {
         guard enabledProvider() else { return false }
-        return accessKind == .write && BundlePath.extract(from: path) != nil
+        return BundlePath.extract(from: path) != nil
     }
 
-    /// Slow-path evaluation. Returns nil → not a bundle write or bundle is unsigned → fall through.
+    /// Slow-path evaluation of a written path. Returns nil → not a bundle write or bundle is unsigned → fall through.
     func evaluate(
         accessPath: String,
         processTeamID: String,
         processSigningID: String,
         processUID: uid_t,
-        accessKind: AccessKind,
         ancestors: [AncestorInfo]
     ) -> PolicyDecision? {
         guard enabledProvider() else { return nil }
         guard let bundlePath = BundlePath.extract(from: accessPath) else { return nil }
-        guard accessKind == .write else { return nil }
         guard let bundleSignatures = cache.signatures(forBundlePath: bundlePath) else { return nil }
 
         let updaters = updaterSignaturesProvider()

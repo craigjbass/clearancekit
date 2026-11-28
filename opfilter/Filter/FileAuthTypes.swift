@@ -79,6 +79,17 @@ extension FileAuthEvent {
         }
     }
 
+    // A clone or copyfile reads its source and writes only its destination.
+    var bundleWritePath: String? {
+        guard accessKind == .write else { return nil }
+        switch operation {
+        case .clone, .copyfile:
+            return secondaryPath
+        case .open, .rename, .unlink, .link, .create, .truncate, .readdir, .exchangedata:
+            return path
+        }
+    }
+
     private var movedEntryReach: OperationReach {
         switch movedEntryKind {
         case .directory: return .subtree

@@ -38,19 +38,13 @@ struct BundleProtectionEvaluatorTests {
     @Test("non-bundle write path returns false from isBundleWrite")
     func nonBundleWriteReturnsFalse() {
         let evaluator = makeEvaluator(cache: makeCache())
-        #expect(!evaluator.isBundleWrite(path: "/usr/bin/git", accessKind: .write))
-    }
-
-    @Test("bundle path with read access returns false from isBundleWrite")
-    func bundleReadReturnsFalse() {
-        let evaluator = makeEvaluator(cache: makeCache())
-        #expect(!evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo", accessKind: .read))
+        #expect(!evaluator.isBundleWrite(path: "/usr/bin/git"))
     }
 
     @Test("bundle write path returns true from isBundleWrite")
     func bundleWriteReturnsTrue() {
         let evaluator = makeEvaluator(cache: makeCache())
-        #expect(evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo", accessKind: .write))
+        #expect(evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo"))
     }
 
     // MARK: - evaluate (existing cases)
@@ -61,7 +55,7 @@ struct BundleProtectionEvaluatorTests {
         #expect(evaluator.evaluate(
             accessPath: "/usr/bin/git",
             processTeamID: "T", processSigningID: "s",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         ) == nil)
     }
@@ -72,21 +66,10 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app",
             processTeamID: "WRONGTEAM", processSigningID: "evil.process",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
-    }
-
-    @Test("read access to bundle returns nil")
-    func readAccessReturnsNil() {
-        let evaluator = makeEvaluator(cache: makeCache())
-        #expect(evaluator.evaluate(
-            accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
-            processTeamID: "TEAM123", processSigningID: "com.example.app",
-            processUID: 501, accessKind: .read,
-            ancestors: []
-        ) == nil)
     }
 
     @Test("unsigned bundle (cache returns nil) returns nil")
@@ -100,7 +83,7 @@ struct BundleProtectionEvaluatorTests {
         #expect(evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "ANYTEAM", processSigningID: "any.signing.id",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         ) == nil)
     }
@@ -111,7 +94,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "WRONGTEAM", processSigningID: "com.example.app",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -123,7 +106,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.updater",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == true)
@@ -135,7 +118,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "TEAM123", processSigningID: "com.example.app",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -152,7 +135,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.Sparkle",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -169,7 +152,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.OtherTool",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -183,7 +166,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: appleTeamID, processSigningID: "com.apple.DesktopServicesHelper",
-            processUID: 0, accessKind: .write,
+            processUID: 0,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -199,7 +182,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: appleTeamID, processSigningID: "com.apple.DesktopServicesHelper",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -211,7 +194,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "FAKETEAM", processSigningID: "com.apple.DesktopServicesHelper",
-            processUID: 0, accessKind: .write,
+            processUID: 0,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -225,7 +208,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: appleTeamID, processSigningID: "com.apple.MobileInstallationHelperService",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -241,7 +224,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "FAKETEAM", processSigningID: "com.apple.MobileInstallationHelperService",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -252,7 +235,7 @@ struct BundleProtectionEvaluatorTests {
     @Test("when disabled, isBundleWrite returns false even for bundle write")
     func disabledIsBundleWriteReturnsFalse() {
         let evaluator = makeEvaluator(cache: makeCache(), enabled: false)
-        #expect(!evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo", accessKind: .write))
+        #expect(!evaluator.isBundleWrite(path: "/Applications/Foo.app/Contents/MacOS/Foo"))
     }
 
     @Test("when disabled, evaluate returns nil so FAA rules still run")
@@ -261,7 +244,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "WRONGTEAM", processSigningID: "evil.process",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision == nil)
@@ -275,7 +258,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: appleTeamID, processSigningID: "com.apple.installd",
-            processUID: 0, accessKind: .write,
+            processUID: 0,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -291,7 +274,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: appleTeamID, processSigningID: "com.apple.installd",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -303,7 +286,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "FAKETEAM", processSigningID: "com.apple.installd",
-            processUID: 0, accessKind: .write,
+            processUID: 0,
             ancestors: []
         )
         #expect(decision?.isAllowed == false)
@@ -318,7 +301,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "SPARKLE", processSigningID: "org.sparkle-project.Downloader",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: []
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -337,7 +320,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [ancestor(teamID: "SPARKLE", signingID: "org.sparkle-project.Sparkle")]
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -354,7 +337,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [ancestor(teamID: "SPARKLE", signingID: "org.sparkle-project.Installer")]
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -371,7 +354,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [ancestor(teamID: "SPARKLE", signingID: "org.sparkle-project.OtherTool")]
         )
         #expect(decision?.isAllowed == false)
@@ -385,7 +368,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [ancestor(teamID: "TEAM123", signingID: "com.example.app")]
         )
         if case .allowed(_, _, _, let criterion, _) = decision {
@@ -401,7 +384,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [ancestor(teamID: "EVIL", signingID: "evil.process")]
         )
         #expect(decision?.isAllowed == false)
@@ -413,7 +396,7 @@ struct BundleProtectionEvaluatorTests {
         let decision = evaluator.evaluate(
             accessPath: "/Applications/Foo.app/Contents/MacOS/Foo",
             processTeamID: "UNSIGNED", processSigningID: "rsync",
-            processUID: 501, accessKind: .write,
+            processUID: 501,
             ancestors: [
                 ancestor(teamID: "UNRELATED", signingID: "some.shell"),
                 ancestor(teamID: "TEAM123", signingID: "com.example.app"),

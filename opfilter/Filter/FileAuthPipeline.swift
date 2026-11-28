@@ -136,7 +136,8 @@ final class FileAuthPipeline: @unchecked Sendable {
         }
 
         if let evaluator = bundleProtectionEvaluator,
-           evaluator.isBundleWrite(path: event.path, accessKind: event.accessKind) {
+           let bundleWritePath = event.bundleWritePath,
+           evaluator.isBundleWrite(path: bundleWritePath) {
             let workItem = SlowWorkItem(
                 fileEvent: event,
                 rules: rules,
@@ -315,12 +316,12 @@ final class FileAuthPipeline: @unchecked Sendable {
     }
 
     private func bundleProtectionDecision(for event: FileAuthEvent, ancestors: [AncestorInfo]) -> PolicyDecision? {
-        bundleProtectionEvaluator?.evaluate(
-            accessPath: event.path,
+        guard let bundleWritePath = event.bundleWritePath else { return nil }
+        return bundleProtectionEvaluator?.evaluate(
+            accessPath: bundleWritePath,
             processTeamID: event.teamID,
             processSigningID: event.signingID,
             processUID: event.uid,
-            accessKind: event.accessKind,
             ancestors: ancestors
         )
     }

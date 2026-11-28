@@ -77,6 +77,7 @@ private func directoryOperationEvent(
     path: String,
     secondaryPath: String?,
     movedEntryKind: MovedEntryKind,
+    accessKind: AccessKind = .write,
     processPath: String = "/tmp/poc",
     teamID: String = "",
     signingID: String = "",
@@ -85,7 +86,7 @@ private func directoryOperationEvent(
     FileAuthEvent(
         correlationID: UUID(),
         operation: operation,
-        accessKind: .write,
+        accessKind: accessKind,
         path: path,
         secondaryPath: secondaryPath,
         movedEntryKind: movedEntryKind,
@@ -709,6 +710,88 @@ struct FileAuthPipelineTests {
         #expect(authorizationRequestCount.withLock { $0 } == 0)
     }
 
+    @Test("copy out of an app bundle is not a bundle write", arguments: [FileOperation.clone, .copyfile])
+    func copyOutOfBundleIsNotBundleWrite(operation: FileOperation) {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: false)
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: false)
+        let postRespondDecision = OSAllocatedUnfairLock<PolicyDecision?>(initialState: nil)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, decision, _, _ in
+                postRespondDecision.withLock { $0 = decision }
+                postRespondCalled.signal()
+            },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(
+            operation: operation,
+            path: "/Applications/Foo.app/Contents/Resources/Template/project.xcproj",
+            secondaryPath: "/Users/develop/Untitled Project/project.xcproj",
+            movedEntryKind: .noDirectory,
+            teamID: "WRONG_TEAM",
+            signingID: "com.wrong.process"
+        ) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == true)
+        guard case .noRuleApplies = postRespondDecision.withLock({ $0 }) else {
+            Issue.record("Expected .noRuleApplies for a \(operation) out of a bundle, got \(String(describing: postRespondDecision.withLock { $0 }))")
+            return
+        }
+    }
+
+    @Test("copy into an app bundle by a process that does not sign the bundle is denied", arguments: [FileOperation.clone, .copyfile])
+    func copyIntoBundleIsDenied(operation: FileOperation) {
+        let processTree = FakePipelineProcessTree()
+        processTree.containsResult = true
+        let evaluator = makeBundleEvaluator(allowExternalUpdater: false)
+        let responded = DispatchSemaphore(value: 0)
+        let postRespondCalled = DispatchSemaphore(value: 0)
+        let allowedResult = OSAllocatedUnfairLock(initialState: true)
+
+        let pipeline = FileAuthPipeline(
+            processTree: processTree,
+            rulesProvider: { [] },
+            allowlistProvider: { [] },
+            ancestorAllowlistProvider: { [] },
+            postRespond: { _, _, _, _ in postRespondCalled.signal() },
+            bundleProtectionEvaluator: evaluator
+        )
+        pipeline.start()
+
+        pipeline.submit(directoryOperationEvent(
+            operation: operation,
+            path: "/private/tmp/payload",
+            secondaryPath: "/Applications/Foo.app/Contents/MacOS/Foo",
+            movedEntryKind: .noDirectory,
+            teamID: "WRONG_TEAM",
+            signingID: "com.wrong.process"
+        ) { allowed, _ in
+            allowedResult.withLock { $0 = allowed }
+            responded.signal()
+        })
+
+        responded.wait()
+        postRespondCalled.wait()
+
+        #expect(allowedResult.withLock { $0 } == false)
+    }
+
     @Test("directory operation on a parent of a protected path is denied", arguments: [FileOperation.rename, .clone, .copyfile])
     func directoryOperationOnParentIsDenied(operation: FileOperation) {
         let responded = DispatchSemaphore(value: 0)
@@ -1181,5 +1264,28 @@ struct FileAuthEventReachTests {
     func nonMovingOperationReachesSinglePath(operation: FileOperation) {
         let event = directoryOperationEvent(operation: operation, path: "/a", secondaryPath: "/b", movedEntryKind: .directory) { _, _ in }
         #expect(event.reach == .singlePath)
+    }
+}
+
+// MARK: - FileAuthEvent.bundleWritePath
+
+@Suite("FileAuthEvent.bundleWritePath")
+struct FileAuthEventBundleWritePathTests {
+    @Test("a copy writes its destination", arguments: [FileOperation.clone, .copyfile])
+    func copyWritesDestination(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/source", secondaryPath: "/destination", movedEntryKind: .noDirectory) { _, _ in }
+        #expect(event.bundleWritePath == "/destination")
+    }
+
+    @Test("a write that is not a copy writes its primary path", arguments: [FileOperation.open, .rename, .unlink, .link, .create, .truncate, .exchangedata])
+    func nonCopyWriteWritesPrimaryPath(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/source", secondaryPath: "/destination", movedEntryKind: .noDirectory) { _, _ in }
+        #expect(event.bundleWritePath == "/source")
+    }
+
+    @Test("a read writes no path", arguments: [FileOperation.open, .readdir])
+    func readWritesNoPath(operation: FileOperation) {
+        let event = directoryOperationEvent(operation: operation, path: "/source", secondaryPath: nil, movedEntryKind: .noDirectory, accessKind: .read) { _, _ in }
+        #expect(event.bundleWritePath == nil)
     }
 }
