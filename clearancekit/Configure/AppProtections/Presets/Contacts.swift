@@ -17,6 +17,10 @@ private let contactsCoreSignatures: [ProcessSignature] = [
     apple("com.apple.Family-Settings.extension"),
 ]
 
+private let contactsStorageManagementSignatures: [ProcessSignature] = [
+    apple("com.apple.STMExtension.Applications"),
+]
+
 let contactsPreset = AppPreset(
     id: "contacts-data-protection",
     appName: "Contacts",
@@ -26,7 +30,7 @@ let contactsPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0004-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Application Support/AddressBook",
-            allowedSignatures: contactsCoreSignatures
+            allowedSignatures: contactsCoreSignatures + contactsStorageManagementSignatures
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0004-0001-0001-000000000002")!,

@@ -34,6 +34,10 @@ private let messagesMediaSignatures: [ProcessSignature] = [
     apple("com.apple.photolibraryd"),
 ]
 
+private let messagesStorageManagementSignatures: [ProcessSignature] = [
+    apple("com.apple.StorageManagement.Service"),
+]
+
 let messagesPreset = AppPreset(
     id: "messages-data-protection",
     appName: "Messages",
@@ -43,7 +47,7 @@ let messagesPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0007-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Messages",
-            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures + messagesQuickLookSignatures + messagesMediaSignatures
+            allowedSignatures: messagesCoreSignatures + messagesSpotlightSignatures + messagesQuickLookSignatures + messagesMediaSignatures + messagesStorageManagementSignatures
         ),
     ]
 )

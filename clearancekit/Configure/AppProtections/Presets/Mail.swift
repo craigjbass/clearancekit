@@ -34,6 +34,11 @@ private let mailSandboxSignatures: [ProcessSignature] = [
     apple("com.apple.syncdefaultsd"),
 ]
 
+private let mailStorageManagementSignatures: [ProcessSignature] = [
+    apple("com.apple.StorageManagement.Service"),
+    apple("com.apple.STMExtension.Mail"),
+]
+
 let mailPreset = AppPreset(
     id: "mail-data-protection",
     appName: "Mail",
@@ -43,7 +48,7 @@ let mailPreset = AppPreset(
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000001")!,
             protectedPathPrefix: "/Users/*/Library/Mail",
-            allowedSignatures: mailCoreSignatures + mailSpotlightSignatures + mailCategorizationSignatures
+            allowedSignatures: mailCoreSignatures + mailSpotlightSignatures + mailCategorizationSignatures + mailStorageManagementSignatures
         ),
         FAARule(
             id: UUID(uuidString: "A1B2C3D4-0003-0001-0001-000000000002")!,
